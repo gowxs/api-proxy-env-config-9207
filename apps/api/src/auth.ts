@@ -30,7 +30,7 @@ export function createTokenVerifier(opts: {
   jwks?: JSONWebKeySet;
   issuer?: string;
   /** Why a token was rejected (error name/code only; never the token). */
-  onReject?: (reason: { name: string; code?: string }) => void;
+  onReject?: (reason: { name: string; code?: string; detail?: string }) => void;
 }): VerifyToken {
   const keys: JWTVerifyGetKey = opts.jwks
     ? createLocalJWKSet(opts.jwks)
@@ -48,8 +48,14 @@ export function createTokenVerifier(opts: {
         ...(typeof payload.email === 'string' ? { email: payload.email } : {}),
       };
     } catch (e) {
-      const err = e as { name?: string; code?: string };
-      opts.onReject?.({ name: err?.name ?? 'Error', ...(err?.code ? { code: err.code } : {}) });
+      const err = e as { name?: string; code?: string; message?: string };
+      // jose messages are fixed strings (e.g. "Expected 200 OK …"); they never contain the token.
+      const detail = err?.name === 'JOSEError' ? err.message?.slice(0, 120) : undefined;
+      opts.onReject?.({
+        name: err?.name ?? 'Error',
+        ...(err?.code ? { code: err.code } : {}),
+        ...(detail ? { detail } : {}),
+      });
       throw new AuthError();
     }
   };
