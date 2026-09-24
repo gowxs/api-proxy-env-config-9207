@@ -37,8 +37,17 @@ export function remoteKeySet(
           headers: { accept: 'application/json' },
           signal: AbortSignal.timeout(5_000),
         });
-        if (!res.ok) throw new Error(`key set request failed: HTTP ${res.status}`);
-        const jwks = (await res.json()) as JSONWebKeySet;
+        const body = await res.text();
+        const what = () =>
+          `HTTP ${res.status}, ${res.headers.get('content-type') ?? 'no content-type'}, ` +
+          `starts ${JSON.stringify(body.slice(0, 60))}`;
+        if (!res.ok) throw new Error(`key set request failed: ${what()}`);
+        let jwks: JSONWebKeySet;
+        try {
+          jwks = JSON.parse(body) as JSONWebKeySet;
+        } catch {
+          throw new Error(`key set response is not JSON: ${what()}`);
+        }
         if (!Array.isArray(jwks?.keys)) throw new Error('key set response has no keys');
         cached = { get: createLocalJWKSet(jwks), at: Date.now() };
         return cached.get;
@@ -94,7 +103,7 @@ export function createTokenVerifier(opts: {
       // jose and key-set messages are fixed strings; they never contain the token.
       const detail =
         err?.name === 'JOSEError' || /^key set /.test(err?.message ?? '')
-          ? err.message?.slice(0, 120)
+          ? err.message?.slice(0, 200)
           : undefined;
       opts.onReject?.({
         name: err?.name ?? 'Error',
