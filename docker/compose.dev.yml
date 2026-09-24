@@ -28,10 +28,9 @@ services:
         -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
         -Dgreenmail.auth.disabled=false -Dgreenmail.verbose
     ports:
-      - '3025:3025' # SMTP
-      - '3465:3465' # SMTPS
-      - '3143:3143' # IMAP
-      - '3993:3993' # IMAPS
+      # Host ports can be moved if something else already uses them.
+      - '${GREENMAIL_SMTP_PORT:-3025}:3025' # SMTP
+      - '${GREENMAIL_IMAP_PORT:-3143}:3143' # IMAP
 
 volumes:
   db-data:

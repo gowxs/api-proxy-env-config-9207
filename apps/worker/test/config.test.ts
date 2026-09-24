@@ -46,12 +46,20 @@ describe('api config: action links', () => {
     SUPABASE_URL: 'https://example.supabase.co',
     CREDENTIALS_PUBLIC_KEY: 'a'.repeat(43),
   };
-  it('the link secret is required in production only', () => {
+  const prod = { ...api, NODE_ENV: 'production' };
+  it('production needs the link secret and invite codes; dev login is refused', () => {
     expect(loadApiConfig(api).ACTION_LINK_SECRET).toBeUndefined();
-    expect(() => loadApiConfig({ ...api, NODE_ENV: 'production' })).toThrow(/ACTION_LINK_SECRET/);
-    expect(
-      loadApiConfig({ ...api, NODE_ENV: 'production', ACTION_LINK_SECRET: 'y'.repeat(32) })
-        .ACTION_LINK_SECRET,
-    ).toHaveLength(32);
+    expect(loadApiConfig(api).SIGNUP_INVITE_CODES).toEqual([]);
+    expect(() => loadApiConfig({ ...prod, SIGNUP_INVITE_CODES: 'A1' })).toThrow(
+      /ACTION_LINK_SECRET/,
+    );
+    expect(() => loadApiConfig({ ...prod, ACTION_LINK_SECRET: 'y'.repeat(32) })).toThrow(
+      /SIGNUP_INVITE_CODES/,
+    );
+    const ok = { ...prod, ACTION_LINK_SECRET: 'y'.repeat(32), SIGNUP_INVITE_CODES: ' A1 , B2 ' };
+    expect(loadApiConfig(ok).SIGNUP_INVITE_CODES).toEqual(['A1', 'B2']);
+    expect(() =>
+      loadApiConfig({ ...ok, DEV_LOGIN_USER_ID: 'd0e10000-0000-4000-8000-000000000001' }),
+    ).toThrow(/DEV_LOGIN_USER_ID/);
   });
 });

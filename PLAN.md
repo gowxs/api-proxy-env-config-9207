@@ -551,3 +551,15 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Same safety path as replies:** own prompt (2–4 sentences, no pressure, no offers), same JSON schema, sanitizer, claim checks, policy engine and fact-check. Auto-send tenants: sent only if everything passes; otherwise a draft for approval (owner email as for replies). A follow-up the policy would escalate is **not** sent and follow-ups for that thread stop (`policy_escalate`): nobody is waiting for it, so the owner is not bothered.
 - **While a follow-up waits for approval** the thread's clock is paused; sending it schedules the next one (or stops at the maximum). If the customer writes in the meantime, the waiting follow-up is marked `superseded` and never sent (checked again at send time).
 
+### Decisions made during step 12 (web app)
+
+- **The browser talks only to our API** (through a same-origin `/api` proxy), not to Supabase's database API. One place checks membership and RLS context; no CORS. Supabase is used in the browser for sign-in only.
+- **Signup is invite-only (Q12 default):** creating a business needs one of `SIGNUP_INVITE_CODES`; required in production. One business per account in Phase 1.
+- **Onboarding** can skip the mailbox and the knowledge base (connect later in Settings); it always ends in draft-only mode. App Password screenshots are placeholders (Q13 default).
+- **Auto-send switch:** a dialog explaining what changes plus a confirmation checkbox; the API also requires `confirmAutoSend: true` and a connected mailbox, and audits the change. Switching back needs no confirmation.
+- **Editing** a draft marks it `edited` and sends the owner's text as written (owner text is trusted). Approving an unverified suggestion closes its escalation.
+- **Files** are uploaded as base64 JSON (≤ 10 MB) instead of multipart: one fewer dependency; the server still sniffs the real file type.
+- **Reconnect:** a disconnected mailbox gets new credentials on the same connection (the password is sealed to the connection id), keeping its conversations; mail that arrived meanwhile is processed.
+- **Local stack** (`pnpm dev:stack`) with a dev-only login (refused in production) so the app can be reviewed without a Supabase project; demo data is clearly fictional.
+- **Not in step 12:** "Delete all data" (GDPR hard delete) comes with the retention/deletion step.
+

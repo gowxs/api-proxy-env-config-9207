@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending), 10 (owner email notifications) and 11 (follow-ups) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending), 10 (owner email notifications), 11 (follow-ups) and 12 (web app) done.
 
 ## Repository layout
 
@@ -28,7 +28,27 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 - Node.js ≥ 22.18 (`.nvmrc`), pnpm 10 (`corepack enable`)
 - Docker (local database, GreenMail, DB tests)
 
-## Local setup
+## Try it locally (one command)
+
+```bash
+corepack enable && pnpm install
+pnpm dev:stack            # Docker: Postgres + GreenMail; then API, worker and web
+```
+
+Open http://localhost:3000 and choose **Sign in as the demo owner**. The demo
+business has sample conversations: a draft to approve, a refund escalation, an
+unverified suggestion, an answered thread and an ignored newsletter.
+
+- From a phone on the same Wi-Fi, open `http://<computer's IP>:3000` (the address is printed at start).
+- `pnpm dev:stack --empty` starts at the onboarding wizard instead.
+- `pnpm dev:mail "Subject" "Text"` sends a customer email into the demo mailbox (`shop@demo.test`); the worker picks it up.
+  With the default fake model it ends up handed to you. `pnpm dev:stack --gemini` uses the real model (free tier; only this
+  test mailbox is processed).
+- Owner notification emails go to GreenMail (IMAP `localhost:3143`, user `owner@noctiv.local`, any password).
+- Ports taken? `GREENMAIL_SMTP_PORT=4025 GREENMAIL_IMAP_PORT=4143 pnpm dev:stack`.
+- The dev login exists only in this local setup; the API refuses it when `NODE_ENV=production`.
+
+## Local setup (manual)
 
 ```bash
 corepack enable
@@ -73,6 +93,26 @@ See [.env.example](.env.example) for the full, commented list. Current ones:
 | `PUBLIC_API_URL`, `PUBLIC_APP_URL`                 | worker, api    | base URLs used in notification links                                  |
 
 Secrets are never committed. Configuration errors name the variable but never print its value.
+
+## Web app (step 12)
+
+Next.js (App Router) + Tailwind, English, mobile first. The browser talks only to its own
+origin; `/api/*` is forwarded to the API (`API_INTERNAL_URL`). Sign-in is Supabase Auth
+(email + password or a magic link; `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The API verifies the token and membership on
+every request; the browser never reads the database directly.
+
+- **Onboarding:** business + time zone (+ invite code) → mailbox (provider, App Password
+  guide with screenshot placeholders, live test with the exact error) → knowledge (website,
+  files, notes) → summary. Every business starts in draft-only mode.
+- **Dashboard:** mailbox health, today's counts in the tenant's time zone, AI budget, open items.
+- **Inbox:** "Needs you" / all; a conversation shows messages, reasons, and drafts to approve, edit or reject. Escalations are marked done.
+- **Leads:** stage filter, stage changes (recorded), name and notes.
+- **Knowledge base:** add, re-read, delete sources; status per source.
+- **Settings:** automatic sending only after an explicit confirmation (and with a connected
+  mailbox); follow-ups, limits, signature, privacy (full text in emails), retention.
+  Mailboxes: reconnect a disconnected one with a new App Password (history is kept).
+- Links in owner emails (`/drafts/:id`, `/escalations/:id`, `/settings/mailboxes`) open the right screen.
 
 ## Owner notifications (step 10)
 
