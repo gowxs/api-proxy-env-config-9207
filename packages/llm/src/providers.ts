@@ -32,12 +32,13 @@ export class GoogleAiStudioProvider extends GeminiBackend {
       client: factory({ enterprise: false, apiKey: opts.apiKey }),
       models: opts.models,
       embeddingModel: opts.embeddingModel,
-      // Free tier: every text counts as a request (100/min, 1000/day) and there is a
-      // per-minute token limit; keep requests small, pace them, reuse vectors on retry.
+      // Free tier: every text counts as a request (100/min, 1000/day) and input tokens
+      // are limited per minute (30k); keep requests small, pace both, reuse vectors on retry.
       embedBatchSize: 40,
       embedBatchTokens: 8_000,
       embedRateLimitRetries: 6,
       embedTextsPerMinute: 80,
+      embedTokensPerMinute: 25_000,
       embedCacheSize: 20_000,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,

@@ -19,8 +19,20 @@ export class LlmError extends Error {
   /** Server-suggested wait before retrying (Google RetryInfo), if any. */
   readonly retryAfterMs: number | undefined;
 
-  constructor(provider: string, kind: LlmErrorKind, status?: number, retryAfterMs?: number) {
-    super(`${provider} request failed: ${kind}${status ? ` (HTTP ${status})` : ''}`);
+  /** Violated quota ids, e.g. "EmbedContentRequestsPerMinute…" (names only). */
+  readonly quota: string | undefined;
+
+  constructor(
+    provider: string,
+    kind: LlmErrorKind,
+    status?: number,
+    retryAfterMs?: number,
+    quota?: string,
+  ) {
+    super(
+      `${provider} request failed: ${kind}${status ? ` (HTTP ${status}${quota ? `, ${quota}` : ''})` : ''}`,
+    );
+    this.quota = quota;
     this.name = 'LlmError';
     this.kind = kind;
     this.status = status;
@@ -50,8 +62,11 @@ export function classifyError(provider: string, error: unknown): LlmError {
   const status = typeof e?.status === 'number' ? e.status : undefined;
   if (status === 429) {
     // A per-day quota does not come back in seconds, whatever retryDelay says.
-    if (isDailyQuota(error)) return new LlmError(provider, 'quota_exhausted', status);
-    return new LlmError(provider, 'rate_limited', status, retryDelayMs(error));
+    const quota = quotaIds(error);
+    if (isDailyQuota(error)) {
+      return new LlmError(provider, 'quota_exhausted', status, undefined, quota);
+    }
+    return new LlmError(provider, 'rate_limited', status, retryDelayMs(error), quota);
   }
   if (status === 401 || status === 403) return new LlmError(provider, 'auth', status);
   if (status === 404) return new LlmError(provider, 'not_found', status);
@@ -80,4 +95,11 @@ function retryDelayMs(error: unknown): number | undefined {
 function isDailyQuota(error: unknown): boolean {
   const text = error instanceof Error ? error.message : String(error);
   return /"quotaId"\s*:\s*"[^"]*PerDay/i.test(text);
+}
+
+/** The quota ids Google names in a 429 body (identifiers only). */
+function quotaIds(error: unknown): string | undefined {
+  const text = error instanceof Error ? error.message : String(error);
+  const ids = [...text.matchAll(/"quotaId"\s*:\s*"([A-Za-z0-9_-]{1,120})"/g)].map((m) => m[1]!);
+  return ids.length ? [...new Set(ids)].join(',') : undefined;
 }

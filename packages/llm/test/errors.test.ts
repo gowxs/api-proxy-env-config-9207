@@ -16,4 +16,18 @@ describe('classifyError', () => {
     expect(err.kind).toBe('unknown');
     expect((err as { cause?: unknown }).cause).toBe(original);
   });
+
+  it('names the violated quota in the message (ids only)', () => {
+    const e = Object.assign(
+      new Error(
+        '{"error":{"message":"secret text","details":[{"violations":[{"quotaId":"EmbedContentInputTokensPerMinutePerProjectPerModel-FreeTier"}]}]}}',
+      ),
+      { status: 429 },
+    );
+    const err = classifyError('p', e);
+    expect(err.kind).toBe('rate_limited');
+    expect(err.message).toBe(
+      'p request failed: rate_limited (HTTP 429, EmbedContentInputTokensPerMinutePerProjectPerModel-FreeTier)',
+    );
+  });
 });

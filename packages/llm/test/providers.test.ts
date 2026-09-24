@@ -419,6 +419,28 @@ describe('embedding requests on the free tier (found live: 100 chunks ≈ 52k to
     expect(clock.t).toBeGreaterThanOrEqual(120_000);
   });
 
+  it('paces estimated input tokens per minute as well', async () => {
+    const { factory, created } = mockClientFactory();
+    const { clock, now, sleep } = fakeClock();
+    const p = new GoogleAiStudioProvider({
+      apiKey: 'k',
+      models,
+      embeddingModel: 'gemini-embedding-001',
+      timeoutMs: 5_000,
+      clientFactory: factory,
+      sleep,
+      now,
+    });
+    // 60 chunks of ~500 tokens = 30k tokens: over the 25k/min budget, under 80 texts.
+    await p.embed(
+      Array.from({ length: 60 }, (_, i) => chunk(i)),
+      'document',
+      'test_mailbox',
+    );
+    expect(created[0]!.embedCalls.length).toBeGreaterThan(3);
+    expect(clock.t).toBeGreaterThanOrEqual(60_000);
+  });
+
   it('a retried ingest reuses vectors it already has (no quota spent twice)', async () => {
     let failOn = 3; // the third request fails, as when a quota runs out mid-site
     const { factory, created } = mockClientFactory({

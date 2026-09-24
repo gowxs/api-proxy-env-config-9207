@@ -52,6 +52,8 @@ export interface GeminiBackendOptions {
    * batch as one request (free tier: 100/min, 1000/day; found live).
    */
   embedTextsPerMinute?: number;
+  /** Estimated input tokens sent for embedding per rolling minute (free tier: 30k). */
+  embedTokensPerMinute?: number;
   /**
    * Vectors kept in memory by text hash, so a retried ingest does not pay for
    * chunks it already embedded (the free tier's daily quota ran out that way).
@@ -115,8 +117,8 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
   private readonly client: GeminiClient;
   private readonly opts: GeminiBackendOptions;
   private readonly cache: LruCache<number[]> | undefined;
-  /** Send times of recent embedding texts (one entry per text), for pacing. */
-  private sent: number[] = [];
+  /** Recent embedding requests (time, texts, estimated tokens), for pacing. */
+  private sent: { t: number; texts: number; tokens: number }[] = [];
   private pacing: Promise<void> = Promise.resolve();
 
   constructor(opts: GeminiBackendOptions) {
@@ -129,23 +131,28 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
     this.cache = opts.embedCacheSize ? new LruCache(opts.embedCacheSize) : undefined;
   }
 
-  /** Waits until `count` more texts fit in the per-minute budget, then books them. */
-  private reserveTexts(count: number): Promise<void> {
-    const limit = this.opts.embedTextsPerMinute;
-    if (!limit) return Promise.resolve();
+  /** Waits until a request of this size fits the per-minute budgets, then books it. */
+  private reserveEmbedding(texts: number, tokens: number): Promise<void> {
+    const maxTexts = this.opts.embedTextsPerMinute ?? Number.POSITIVE_INFINITY;
+    const maxTokens = this.opts.embedTokensPerMinute ?? Number.POSITIVE_INFINITY;
+    if (maxTexts === Number.POSITIVE_INFINITY && maxTokens === Number.POSITIVE_INFINITY) {
+      return Promise.resolve();
+    }
     const now = this.opts.now ?? Date.now;
     const sleep = this.opts.sleep ?? defaultSleep;
     // Serialized: concurrent jobs share the budget in order.
     const run = this.pacing.then(async () => {
       for (;;) {
         const t = now();
-        this.sent = this.sent.filter((x) => x > t - 60_000);
-        if (this.sent.length + count <= limit || this.sent.length === 0) break;
-        const freeAt = this.sent[Math.max(0, this.sent.length + count - limit - 1)]! + 60_000;
-        await sleep(Math.max(250, freeAt - t));
+        this.sent = this.sent.filter((x) => x.t > t - 60_000);
+        const usedTexts = this.sent.reduce((n, x) => n + x.texts, 0);
+        const usedTokens = this.sent.reduce((n, x) => n + x.tokens, 0);
+        const fits = usedTexts + texts <= maxTexts && usedTokens + tokens <= maxTokens;
+        if (fits || this.sent.length === 0) break;
+        // Wait for the oldest request to leave the window, then check again.
+        await sleep(Math.max(250, this.sent[0]!.t + 60_000 - t));
       }
-      const t = now();
-      for (let i = 0; i < count; i++) this.sent.push(t);
+      this.sent.push({ t: now(), texts, tokens });
     });
     this.pacing = run.catch(() => undefined);
     return run;
@@ -267,10 +274,7 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
 
     let done = 0;
     for (const batch of this.embedBatches(missing.map((i) => texts[i]!))) {
-      if (this.opts.embedTextsPerMinute && batch.length > this.opts.embedTextsPerMinute) {
-        throw new Error('embedding batch is larger than the per-minute text budget');
-      }
-      await this.reserveTexts(batch.length);
+      await this.reserveEmbedding(batch.length, estimateTokens(batch));
       const response = await this.withRetry(
         () =>
           this.client.models.embedContent({
