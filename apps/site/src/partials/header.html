@@ -1,0 +1,34 @@
+<header class="site-header night">
+  <nav class="wrap nav" aria-label="Main">
+    <a class="logo" href="/" aria-label="Noctiv, home">{{> logo-mark}}<span>Noctiv</span></a>
+    <ul class="nav-links">
+      <li><a href="/how-it-works/" {{current:how}}>How it works</a></li>
+      <li><a href="/pricing/" {{current:pricing}}>Pricing</a></li>
+      <li><a href="/contact/" {{current:contact}}>Contact</a></li>
+      <li><a href="https://app.noctiv.io/">Sign in</a></li>
+    </ul>
+    <a class="btn btn--light btn--sm" href="/pricing/">Start free trial</a>
+    <details class="menu">
+      <summary aria-label="Menu">
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 8h16M4 16h16" />
+        </svg>
+      </summary>
+      <ul class="menu-panel">
+        <li><a href="/how-it-works/">How it works</a></li>
+        <li><a href="/pricing/">Pricing</a></li>
+        <li><a href="/contact/">Contact</a></li>
+        <li><a href="https://app.noctiv.io/">Sign in</a></li>
+      </ul>
+    </details>
+  </nav>
+</header>

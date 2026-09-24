@@ -21,4 +21,25 @@ export default tseslint.config(
     files: ['**/scripts/**', '**/test/**', 'tests/**'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // Marketing site: plain browser scripts, inlined into the pages.
+    files: ['apps/site/src/scripts/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        performance: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
+        IntersectionObserver: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['apps/site/build.ts'],
+    rules: { 'no-console': 'off' },
+  },
 );

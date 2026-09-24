@@ -1,0 +1,740 @@
+/* Components. Editorial, rule-lined layouts; surfaces only where they mean something. */
+
+/* ---------- Buttons ---------- */
+.btn {
+  --btn-bg: var(--accent);
+  --btn-fg: var(--on-accent);
+  --btn-bd: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 3rem;
+  padding: 0 1.375rem;
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--btn-bd);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    transform 0.18s var(--ease);
+}
+.btn:hover {
+  --btn-bg: var(--accent-hover);
+  text-decoration: none;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn--secondary {
+  --btn-bg: transparent;
+  --btn-fg: var(--text);
+  --btn-bd: var(--line-strong);
+}
+.btn--secondary:hover {
+  --btn-bg: color-mix(in srgb, var(--text) 6%, transparent);
+  --btn-bd: var(--text-3);
+}
+.btn--light {
+  --btn-bg: #fff;
+  --btn-fg: var(--night-900);
+}
+.btn--light:hover {
+  --btn-bg: var(--morning);
+}
+.btn--sm {
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  font-size: 0.9375rem;
+}
+.btn .arrow {
+  transition: transform 0.18s var(--ease);
+}
+.btn:hover .arrow {
+  transform: translateX(3px);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: center;
+}
+
+/* ---------- Header ---------- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--night-900) 92%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--night-700) 70%, transparent);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: 3.75rem;
+}
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--night-text);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 1.3125rem;
+  letter-spacing: -0.03em;
+}
+.logo svg {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+.nav-links {
+  display: none;
+  gap: var(--s-5);
+  margin-left: auto;
+  list-style: none;
+  padding: 0;
+}
+.nav-links a {
+  color: var(--night-text-2);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.nav-links a:hover,
+.nav-links a[aria-current='page'] {
+  color: var(--night-text);
+}
+.nav .btn {
+  margin-left: auto;
+}
+.menu {
+  position: relative;
+}
+.menu > summary {
+  list-style: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--r-pill);
+  color: var(--night-text);
+  cursor: pointer;
+}
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+.menu > summary:hover {
+  background: var(--night-800);
+}
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: min(17rem, calc(100vw - 2rem));
+  padding: var(--s-2);
+  background: var(--night-800);
+  border: 1px solid var(--night-600);
+  border-radius: var(--r-md);
+  box-shadow: 0 20px 40px -12px rgb(0 0 0 / 0.5);
+  list-style: none;
+}
+.menu-panel a {
+  display: block;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--r-sm);
+  color: var(--night-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+.menu-panel a:hover {
+  background: var(--night-700);
+}
+@media (min-width: 52rem) {
+  .nav-links {
+    display: flex;
+  }
+  .nav .btn {
+    margin-left: var(--s-2);
+  }
+  .menu {
+    display: none;
+  }
+}
+
+/* ---------- The dawn line: the horizon between night and morning ---------- */
+.dawn-line {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--dawn-1) 55%, transparent) 30%,
+    var(--dawn-2) 50%,
+    color-mix(in srgb, var(--dawn-1) 55%, transparent) 70%,
+    transparent
+  );
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding-block: clamp(2.75rem, 1.5rem + 5vw, 6rem) clamp(3.5rem, 2rem + 6vw, 7rem);
+  background:
+    linear-gradient(to bottom, transparent 55%, color-mix(in srgb, #3a2a5c 40%, transparent)),
+    var(--night-900);
+}
+/* A faint warm glow sitting on the horizon; the only light in the night. */
+.hero::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: min(80rem, 180%);
+  height: 9rem;
+  transform: translateX(-50%);
+  background: radial-gradient(50% 100% at 50% 100%, rgb(242 169 126 / 0.18), transparent 70%);
+  pointer-events: none;
+}
+.hero .dawn-line {
+  position: absolute;
+  inset: auto 0 0 0;
+}
+.hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
+}
+@media (min-width: 60rem) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    align-items: center;
+  }
+}
+.hero h1 {
+  max-width: 13ch;
+}
+.hero .lead {
+  margin-top: var(--s-5);
+  max-width: 44ch;
+}
+.hero .actions {
+  margin-top: var(--s-6);
+}
+.hero .note {
+  margin-top: var(--s-5);
+  max-width: 46ch;
+  color: var(--text-3);
+  font-size: var(--fs-small);
+}
+@media (max-width: 29.99rem) {
+  .hero .actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---------- Overnight inbox demo ---------- */
+.demo {
+  --demo-radius: var(--r-lg);
+  position: relative;
+  max-width: 34rem;
+  width: 100%;
+  margin-inline: auto;
+  border-radius: var(--demo-radius);
+  background: var(--night-800);
+  border: 1px solid var(--night-600);
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.05) inset,
+    0 40px 80px -32px rgb(0 0 0 / 0.65);
+  overflow: hidden;
+}
+.demo-sky {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 0.875rem 1.125rem;
+  color: var(--night-text);
+  isolation: isolate;
+}
+.demo-sky::before,
+.demo-sky::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transition: opacity 2.2s var(--ease);
+}
+.demo-sky::before {
+  background: linear-gradient(100deg, var(--night-950), var(--night-700));
+}
+.demo-sky::after {
+  background: linear-gradient(100deg, #f7d3a8, #fbe6c8 55%, #fdf3e4);
+  opacity: 0;
+}
+.demo-day {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--night-text-2);
+  transition: color 2.2s var(--ease);
+}
+.demo-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  transition: color 2.2s var(--ease);
+}
+.demo-clock svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.demo-clock .moon,
+.demo-clock .sun {
+  transition:
+    opacity 1.2s var(--ease),
+    transform 1.2s var(--ease);
+}
+.demo-clock .moon {
+  color: var(--moon);
+}
+.demo-clock .sun {
+  position: absolute;
+  color: #c2621f;
+  opacity: 0;
+  transform: rotate(-40deg) scale(0.6);
+}
+.demo-clock .icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.demo-body {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+.msg {
+  border-radius: var(--r-md);
+  padding: 0.875rem 1rem 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+.msg-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-bottom: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.msg-meta time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.msg--in {
+  background: var(--night-900);
+  border: 1px solid var(--night-700);
+  color: var(--night-text);
+}
+.msg--in .msg-meta {
+  color: var(--night-text-2);
+}
+.msg--in .msg-meta time {
+  color: var(--night-text-3);
+}
+.msg--draft {
+  position: relative;
+  background: #f5f6fa;
+  color: #131a2e;
+  border: 1px solid #e3e6ef;
+}
+.msg--draft .msg-meta {
+  color: #3b2fd0;
+}
+.msg--draft .msg-meta time {
+  color: #4a5270;
+}
+.msg-src {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid #e3e6ef;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #4a5270;
+}
+.msg-src svg {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: 0.1rem;
+  color: #157a51;
+}
+.msg-src b {
+  color: #157a51;
+}
+/* "Noctiv is drafting…" sits on top of the draft slot, so nothing reflows. */
+.drafting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 1rem;
+  border-radius: inherit;
+  background: #f5f6fa;
+  color: #4a5270;
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+}
+.dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b2fd0;
+  opacity: 0.3;
+}
+.approval {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 0.75rem 0.875rem 0.75rem 1rem;
+  border: 1px dashed var(--night-600);
+  border-radius: var(--r-md);
+  font-size: 0.875rem;
+  color: var(--night-text-2);
+}
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: var(--r-pill);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pill--wait {
+  color: var(--night-text);
+  background: var(--night-700);
+}
+.pill--wait::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--moon);
+}
+.pill--ok {
+  color: #fff;
+  background: var(--ok-fill);
+}
+.pill--ok svg {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+.demo.is-resetting,
+.demo.is-resetting * {
+  transition: none !important;
+}
+.demo.is-resetting .demo-sky::before,
+.demo.is-resetting .demo-sky::after {
+  transition: none !important;
+}
+.approval .pill--ok {
+  position: absolute;
+  right: 0;
+}
+.approval-state {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+  min-width: 9.5rem;
+}
+.demo figcaption {
+  padding: 0 1.125rem 1rem;
+  color: var(--night-text-3);
+  font-size: 0.75rem;
+}
+
+/* Final state (no JavaScript, reduced motion, and the end of each loop). */
+.demo[data-step='done'] .demo-sky::after,
+.demo[data-step='7'] .demo-sky::after,
+.demo[data-step='8'] .demo-sky::after {
+  opacity: 1;
+}
+.demo[data-step='done'] .demo-day,
+.demo[data-step='done'] .demo-clock,
+.demo[data-step='7'] .demo-day,
+.demo[data-step='7'] .demo-clock,
+.demo[data-step='8'] .demo-day,
+.demo[data-step='8'] .demo-clock {
+  color: #3a2410;
+}
+.demo[data-step='done'] .moon,
+.demo[data-step='7'] .moon,
+.demo[data-step='8'] .moon {
+  opacity: 0;
+  transform: rotate(40deg) scale(0.6);
+}
+.demo[data-step='done'] .sun,
+.demo[data-step='7'] .sun,
+.demo[data-step='8'] .sun {
+  opacity: 1;
+  transform: none;
+}
+.demo[data-step='done'] .pill--wait,
+.demo[data-step='8'] .pill--wait {
+  opacity: 0;
+}
+
+/* Animated states, driven by demo.js through data-step (0–9). */
+@media (prefers-reduced-motion: no-preference) {
+  .demo.is-live .msg--in,
+  .demo.is-live .msg--draft,
+  .demo.is-live .approval,
+  .demo.is-live .pill--ok,
+  .demo.is-live .pill--wait,
+  .demo.is-live .drafting {
+    transition:
+      opacity 0.6s var(--ease),
+      transform 0.6s var(--ease);
+  }
+  .demo.is-live .msg--in,
+  .demo.is-live .msg--draft,
+  .demo.is-live .approval {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  .demo.is-live .pill--ok {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  .demo.is-live[data-step='1'] .msg--in,
+  .demo.is-live[data-step='2'] .msg--in,
+  .demo.is-live[data-step='3'] .msg--in,
+  .demo.is-live[data-step='4'] .msg--in,
+  .demo.is-live[data-step='5'] .msg--in,
+  .demo.is-live[data-step='6'] .msg--in,
+  .demo.is-live[data-step='7'] .msg--in,
+  .demo.is-live[data-step='8'] .msg--in,
+  .demo.is-live[data-step='2'] .msg--draft,
+  .demo.is-live[data-step='3'] .msg--draft,
+  .demo.is-live[data-step='4'] .msg--draft,
+  .demo.is-live[data-step='5'] .msg--draft,
+  .demo.is-live[data-step='6'] .msg--draft,
+  .demo.is-live[data-step='7'] .msg--draft,
+  .demo.is-live[data-step='8'] .msg--draft,
+  .demo.is-live[data-step='5'] .approval,
+  .demo.is-live[data-step='6'] .approval,
+  .demo.is-live[data-step='7'] .approval,
+  .demo.is-live[data-step='8'] .approval {
+    opacity: 1;
+    transform: none;
+  }
+  /* Step 2–3: the draft slot shows "drafting…" before the text appears. */
+  .demo.is-live[data-step='2'] .drafting {
+    opacity: 1;
+  }
+  .demo.is-live[data-step='2'] .dots i {
+    animation: dot 1s var(--ease) infinite;
+  }
+  .demo.is-live .dots i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .demo.is-live .dots i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  .demo.is-live[data-step='8'] .pill--ok {
+    opacity: 1;
+    transform: none;
+  }
+  .demo.is-live[data-step='8'] .pill--wait {
+    opacity: 0;
+  }
+  .demo.is-live[data-step='9'] .demo-body {
+    opacity: 0;
+    transition: opacity 0.8s var(--ease);
+  }
+  @keyframes dot {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+}
+
+/* ---------- Rows: rule-lined items instead of card grids ---------- */
+.rows {
+  display: grid;
+  gap: 0 var(--s-6);
+  margin-top: var(--s-7);
+}
+@media (min-width: 48rem) {
+  .rows--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .rows--2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.row {
+  padding-block: var(--s-5) var(--s-6);
+  border-top: 1px solid var(--line);
+}
+.row h3 {
+  margin-bottom: var(--s-2);
+}
+.row p {
+  color: var(--text-2);
+}
+.row .label {
+  display: block;
+  margin-bottom: var(--s-3);
+}
+
+/* ---------- Panel: the one surface (audience, price, forms) ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: clamp(1.25rem, 0.9rem + 1.6vw, 2rem);
+}
+.panel--quiet {
+  background: transparent;
+}
+
+/* ---------- Forms ---------- */
+.field {
+  display: grid;
+  gap: var(--s-2);
+}
+.field label {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+.field .hint {
+  color: var(--text-3);
+  font-size: var(--fs-small);
+}
+.input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem 0.9375rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+  transition: border-color 0.15s var(--ease);
+}
+.input:hover {
+  border-color: var(--text-3);
+}
+.input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus) 35%, transparent);
+  outline-offset: 0;
+  border-color: var(--focus);
+}
+textarea.input {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+/* ---------- Footer ---------- */
+.site-footer {
+  padding-block: var(--s-8) calc(var(--s-7) + env(safe-area-inset-bottom, 0px));
+  font-size: var(--fs-small);
+}
+.footer-grid {
+  display: grid;
+  gap: var(--s-6);
+}
+@media (min-width: 48rem) {
+  .footer-grid {
+    grid-template-columns: 1.4fr repeat(2, 1fr);
+  }
+}
+.site-footer ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.site-footer a {
+  color: var(--night-text-2);
+  text-decoration: none;
+}
+.site-footer a:hover {
+  color: var(--night-text);
+  text-decoration: underline;
+}
+.footer-base {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-7);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--night-700);
+  color: var(--night-text-3);
+}
+
+.demo figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.demo-toggle {
+  flex: none;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--night-600);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--night-text-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.demo-toggle:hover {
+  color: var(--night-text);
+  border-color: var(--night-text-3);
+}

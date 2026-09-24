@@ -1,0 +1,169 @@
+/* Page-specific layout. */
+
+/* ---------- Design system page ---------- */
+.ds-intro {
+  padding-block: var(--s-8) var(--s-7);
+}
+.ds-intro .lead {
+  margin-top: var(--s-4);
+  max-width: 52ch;
+}
+.ds-principles {
+  margin-top: var(--s-6);
+  display: grid;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  counter-reset: p;
+}
+.ds-principles li {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--s-3);
+  padding-block: var(--s-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+}
+.ds-principles li::before {
+  counter-increment: p;
+  content: counter(p, decimal-leading-zero);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.1rem;
+}
+.ds-principles b {
+  color: var(--text);
+}
+.ds-block {
+  padding-block: var(--s-7);
+  border-top: 1px solid var(--line);
+}
+.ds-block > .label {
+  display: block;
+  margin-bottom: var(--s-2);
+}
+.ds-block > h2 {
+  font-size: var(--fs-h3);
+  letter-spacing: -0.012em;
+}
+.ds-block > p {
+  margin-top: var(--s-2);
+  color: var(--text-2);
+  max-width: 60ch;
+}
+.ds-themes {
+  display: grid;
+  gap: var(--s-4);
+  margin-top: var(--s-5);
+}
+@media (min-width: 56rem) {
+  .ds-themes {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.ds-theme {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+}
+.ds-theme > .label {
+  display: block;
+  margin-bottom: var(--s-4);
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
+  gap: var(--s-3);
+}
+.swatch {
+  display: grid;
+  gap: var(--s-2);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.swatch i {
+  display: block;
+  height: 3.25rem;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+.swatch b {
+  display: block;
+  font-size: 0.8125rem;
+}
+.swatch span {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.type-row {
+  display: grid;
+  gap: var(--s-2);
+  padding-block: var(--s-4);
+  border-top: 1px solid var(--line);
+}
+.type-row:first-of-type {
+  margin-top: var(--s-4);
+}
+.type-row .label {
+  font-variant-numeric: tabular-nums;
+}
+.space-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: 0.75rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.space-row + .space-row {
+  margin-top: var(--s-2);
+}
+.space-row i {
+  display: block;
+  height: 0.75rem;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.ds-samples {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-5);
+}
+.ds-samples .actions + .actions {
+  margin-top: var(--s-3);
+}
+.ds-note {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  margin-top: var(--s-3);
+}
+.radius-demo {
+  display: flex;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  margin-top: var(--s-4);
+}
+.radius-demo div {
+  width: 4.5rem;
+  height: 3.5rem;
+  display: grid;
+  place-items: end start;
+  padding: 0.375rem 0.5rem;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 0.6875rem;
+  color: var(--text-3);
+}
+.ds-night {
+  margin-top: var(--s-5);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+  overflow: hidden;
+  position: relative;
+}
+.ds-night .dawn-line {
+  margin-top: var(--s-6);
+}

@@ -1,0 +1,184 @@
+/* Reset, type and layout primitives. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 5rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+body {
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11';
+  text-rendering: optimizeLegibility;
+}
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: var(--link);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Type scale. */
+.display,
+h1 {
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.035em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+h2,
+.h2 {
+  font-size: var(--fs-h2);
+  line-height: 1.12;
+  letter-spacing: -0.028em;
+  font-weight: 800;
+  text-wrap: balance;
+}
+h3,
+.h3 {
+  font-size: var(--fs-h3);
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  font-weight: 700;
+}
+.lead {
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+p {
+  text-wrap: pretty;
+}
+.small {
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.label {
+  font-size: var(--fs-label);
+  line-height: 1.3;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.muted {
+  color: var(--text-2);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Layout. */
+.wrap {
+  width: 100%;
+  max-width: var(--max);
+  margin-inline: auto;
+  padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px));
+}
+.section {
+  padding-block: var(--section);
+}
+.section + .section:not(.night) {
+  padding-top: 0;
+}
+.stack > * + * {
+  margin-top: var(--flow, var(--s-4));
+}
+.measure {
+  max-width: var(--measure);
+}
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip {
+  position: absolute;
+  left: var(--s-4);
+  top: -4rem;
+  z-index: 100;
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-sm);
+  font-weight: 700;
+}
+.skip:focus {
+  top: var(--s-4);
+}
+
+/* Night surfaces keep their colours in both themes. */
+.night {
+  --text: var(--night-text);
+  --text-2: var(--night-text-2);
+  --text-3: var(--night-text-3);
+  --line: var(--night-700);
+  --line-strong: var(--night-600);
+  --surface: var(--night-800);
+  --link: #c9c4ff;
+  --focus: var(--moon);
+  background: var(--night-900);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+/* A section can pin a theme (used by the design-system page). */
+[data-theme='light'] {
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+:not(:root)[data-theme] {
+  background: var(--bg);
+  color: var(--text);
+}

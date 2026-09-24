@@ -1,0 +1,102 @@
+<script type="application/json" id="page">
+  {
+    "title": "Noctiv — the e-mail assistant that works while you sleep",
+    "description": "Noctiv reads your business inbox, drafts replies from your own prices and policies, and follows up with customers who went quiet. You approve with one click.",
+    "scripts": ["demo.js"]
+  }
+</script>
+<section class="hero night" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Your inbox, answered while you sleep.</h1>
+      <p class="lead">
+        Noctiv reads every customer e-mail, drafts a reply from your own prices and policies, and
+        follows up with the ones who go quiet. You approve with one click from your phone.
+      </p>
+      <div class="actions">
+        <a class="btn" href="#pricing">Start 14-day free trial</a>
+        <a class="btn btn--secondary" href="#how">See how it works</a>
+      </div>
+      <p class="note">
+        Connects to Gmail, Google Workspace and any business mailbox in 2 minutes. No migration, no
+        new helpdesk.
+      </p>
+    </div>
+
+    <figure class="demo" data-step="done" aria-labelledby="demo-caption">
+      <div class="demo-sky" aria-hidden="true">
+        <span class="demo-day" data-day>Thursday morning</span>
+        <span class="demo-clock">
+          <span class="icon">
+            <svg class="moon" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M20.6 14.4A8.6 8.6 0 0 1 9.6 3.4a8.6 8.6 0 1 0 11 11Z" />
+            </svg>
+            <svg
+              class="sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none" />
+              <path
+                d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"
+              />
+            </svg>
+          </span>
+          <span data-clock>08:05</span>
+        </span>
+      </div>
+      <div class="demo-body">
+        <div class="msg msg--in">
+          <div class="msg-meta"><span>Sarah M. · customer</span><time>23:41</time></div>
+          Hi, is the linen throw still available in sage, and how long does delivery to Germany
+          take?
+        </div>
+        <div class="msg msg--draft">
+          <div class="msg-meta"><span>Noctiv · draft reply</span><time>23:42</time></div>
+          Hi Sarah, yes, the linen throw is in stock in sage. Delivery to Germany takes 3–5 business
+          days and costs €9.90. Would you like me to hold one for you?
+          <div class="msg-src">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.2 5.3-3.8 4.2a.8.8 0 0 1-1.2 0L4.8 9a.8.8 0 1 1 1.2-1.1l.8.9 3.2-3.5a.8.8 0 0 1 1.2 1Z"
+              />
+            </svg>
+            <span><b>Sourced:</b> Stock list, Shipping policy · no prices invented</span>
+          </div>
+          <div class="drafting" aria-hidden="true">
+            <span class="dots"><i></i><i></i><i></i></span>Noctiv is drafting a reply
+          </div>
+        </div>
+        <div class="approval">
+          <span>Sent to you for approval</span>
+          <span class="approval-state">
+            <span class="pill pill--wait" aria-hidden="true">Waiting for you</span>
+            <span class="pill pill--ok"
+              ><svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m3.5 8.5 3 3 6-6.5"
+                /></svg
+              >Approved 08:05</span
+            >
+          </span>
+        </div>
+      </div>
+      <figcaption>
+        <span id="demo-caption"
+          >Example: a customer e-mail at 23:41, a draft reply at 23:42, approved at 08:05.</span
+        >
+        <button class="demo-toggle" type="button" data-toggle hidden>Pause</button>
+      </figcaption>
+    </figure>
+  </div>
+  <hr class="dawn-line" />
+</section>
