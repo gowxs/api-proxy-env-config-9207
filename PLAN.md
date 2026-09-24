@@ -436,3 +436,15 @@ Still open (defaults apply until answered): Q6 grounding verifier (default: on f
 auto-send candidates), Q8 per-sender cap scope (default: auto-send only), Q10 system
 email provider, Q12 signup gating (default: invite codes), Q13 screenshots (default:
 placeholders), Q15 sender-only replies (default: yes).
+
+### Schema changes made during step 2 (vs. §2)
+
+- `tenants.tenant_id` is a generated copy of `id`, so every table (including `tenants`) has the same `tenant_id` column and the same two policies.
+- Added `tenants.telegram_full_text` (Q2 toggle, default false). `tenants.timezone` is `not null` and validated.
+- Child tables reference parents through **composite `(tenant_id, id)` foreign keys**. Foreign-key checks bypass RLS, so this is what stops a row in tenant A pointing at a row in tenant B.
+- `references` (a reserved word) is stored as `reference_ids text[]` in `messages` and `outbound_emails`. `messages.attachment_meta` holds attachment names/sizes only.
+- `drafts.status` gains `suggestion` (the Q16 "AI suggestion, unverified" draft) and a `body_purged_at` column for retention. `escalations` gains `category` (`hard_list` | `uncertain`) and `suggestion_draft_id`; a CHECK constraint allows a suggestion only on `uncertain` escalations.
+- `kb_allowlist` is unique per `(tenant_id, source_id, kind, value)`, so deleting one source can't remove an entry another source still provides.
+- `notifications` dedupe key is unique per tenant. `lead_events.actor_user_id` and `audit_log.actor` were added.
+- `kb_chunks.embedding` is `vector(768)` for now; it is confirmed or changed when the embedding model is pinned in step 4.
+- Dashboard users have **no** access to `telegram_link_tokens`, `kb_chunks`, `kb_allowlist`, `notifications` or `tenant_deletions`. Their only direct write is a lead's `name`/`notes`. The API role can write `credentials_ciphertext` but cannot read it back.

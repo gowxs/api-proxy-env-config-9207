@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — step 1 (scaffold) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold) and 2 (schema + RLS) done.
 
 ## Repository layout
 
@@ -74,4 +74,16 @@ Secrets are never committed. Configuration errors name the variable but never pr
 - All tenant work runs in `withTenant(sql, tenantId, fn)`, which sets
   `app.tenant_id` for that transaction only. Without it, queries see zero rows.
 - Dashboard users go through Supabase Auth + RLS (membership in `tenant_members`).
-- Details: PLAN.md §3.
+- Mailbox credentials: the dashboard and the API role cannot select
+  `credentials_ciphertext`; only the worker can.
+- Details: PLAN.md §3; schema notes in PLAN.md §11.
+
+## Tenant isolation tests
+
+`packages/db/test/tenant-isolation.db.test.ts` reads the list of tables from the
+catalog and, for every table, checks that tenant A can't see or change tenant B's
+rows as a dashboard user, as `noctiv_api` or as `noctiv_worker`, and that queries
+without tenant context return nothing. It also covers knowledge-base search
+(vector and full text), composite foreign keys, credential column privileges,
+anonymous access and the duplicate-message constraints. A new table without
+`tenant_id`, forced RLS or both policies fails the suite automatically.
