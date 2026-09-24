@@ -14,7 +14,7 @@ The founder's phone-review deployment differs from the target described below:
 - **database: Supabase Frankfurt**, unchanged: data at rest stays in the EU.
 - Both processes warn at every start while `DATA_REGION_IN_EU=false`; the worker also emails the admin.
 - Only operator-flagged test mailboxes are processed; the free AI tier refuses all other mail.
-- Owner notification emails wait in the queue until Brevo credentials are configured.
+- Owner notification emails and Supabase Auth emails go out through Brevo SMTP (sender noreply@noctiv.io).
 
 Move api + worker to an EU region before any real customer mailbox is connected.
 
