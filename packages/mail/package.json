@@ -1,0 +1,23 @@
+{
+  "name": "@noctiv/mail",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/core": "workspace:*",
+    "imapflow": "^2.0.6",
+    "mailparser": "^3.9.28",
+    "nodemailer": "^10.0.10"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^8.0.2",
+    "@noctiv/db": "workspace:*"
+  }
+}

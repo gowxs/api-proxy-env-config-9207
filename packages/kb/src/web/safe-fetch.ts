@@ -1,5 +1,6 @@
 import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import type { LookupFunction } from 'node:net';
+import { isPublicAddress } from '@noctiv/core';
 import ipaddr from 'ipaddr.js';
 import { Agent, fetch, type Dispatcher } from 'undici';
 
@@ -42,14 +43,6 @@ export interface SafeResponse {
 }
 
 export const USER_AGENT = 'NoctivBot/1.0 (+https://noctiv.io/bot)';
-
-export function isPublicAddress(address: string): boolean {
-  if (!ipaddr.isValid(address)) return false;
-  let ip = ipaddr.parse(address);
-  if (ip.kind() === 'ipv6' && (ip as ipaddr.IPv6).isIPv4MappedAddress())
-    ip = (ip as ipaddr.IPv6).toIPv4Address();
-  return ip.range() === 'unicast';
-}
 
 export function assertFetchableUrl(raw: string, allowPrivate = false): URL {
   let url: URL;

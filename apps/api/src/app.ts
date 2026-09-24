@@ -1,21 +1,82 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyBaseLogger } from 'fastify';
 import type { Logger } from '@noctiv/core';
+import { withTenant } from '@noctiv/db';
+import type { Sql } from 'postgres';
+import { ZodError } from 'zod';
+import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
+import { connectionRoutes } from './routes/connections.ts';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: AuthUser;
+  }
+}
+
+export class ForbiddenError extends Error {
+  constructor() {
+    super('forbidden');
+  }
+}
 
 export interface AppDeps {
   logger: Logger;
   /** Returns true when the database answers; used by the readiness probe. */
   checkDatabase: () => Promise<boolean>;
+  sql: Sql;
+  verifyToken: VerifyToken;
+  /** Worker's public sealing key: the API can encrypt mailbox passwords but never decrypt them. */
+  credentialsPublicKey: string;
+  connectionTestWaitMs: number;
+  requireMember: (tenantId: string, userId: string) => Promise<void>;
 }
 
-export function buildApp({ logger, checkDatabase }: AppDeps) {
-  const app = Fastify({ loggerInstance: logger });
+/** Membership check within the tenant's own RLS context. */
+export function memberCheck(sql: Sql) {
+  return async (tenantId: string, userId: string) => {
+    const rows = await withTenant(
+      sql,
+      tenantId,
+      (tx) => tx`select 1 from public.tenant_members where user_id = ${userId}`,
+    );
+    if (rows.length === 0) throw new ForbiddenError();
+  };
+}
+
+export function buildApp(
+  deps: Omit<AppDeps, 'requireMember'> & Partial<Pick<AppDeps, 'requireMember'>>,
+) {
+  const full: AppDeps = { ...deps, requireMember: deps.requireMember ?? memberCheck(deps.sql) };
+  const app = Fastify({ loggerInstance: deps.logger as FastifyBaseLogger, bodyLimit: 1024 * 1024 });
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 
   app.get('/readyz', async (_req, reply) => {
-    const dbOk = await checkDatabase().catch(() => false);
+    const dbOk = await deps.checkDatabase().catch(() => false);
     return reply.code(dbOk ? 200 : 503).send({ status: dbOk ? 'ready' : 'unavailable' });
   });
 
+  app.addHook('onRequest', async (req) => {
+    if (!req.url.startsWith('/v1/')) return;
+    const header = req.headers.authorization ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (!token) throw new AuthError();
+    req.user = await deps.verifyToken(token);
+  });
+
+  app.setErrorHandler((error, _req, reply) => {
+    if (error instanceof AuthError) return reply.code(401).send({ error: 'unauthorized' });
+    if (error instanceof ForbiddenError) return reply.code(403).send({ error: 'forbidden' });
+    if (error instanceof ZodError)
+      return reply
+        .code(400)
+        .send({ error: 'invalid request', issues: error.issues.map((i) => i.path.join('.')) });
+    reply.log.error(
+      { err: { name: (error as Error).name, message: (error as Error).message } },
+      'request failed',
+    );
+    return reply.code(500).send({ error: 'internal error' });
+  });
+
+  connectionRoutes(app, full);
   return app;
 }

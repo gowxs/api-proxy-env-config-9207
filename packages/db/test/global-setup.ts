@@ -2,13 +2,17 @@ import postgres from 'postgres';
 import {
   GenericContainer,
   Network,
+  Wait,
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers';
 import type { TestProject } from 'vitest/node';
 import { migrate } from '../src/migrate.ts';
+import { GREENMAIL_USERS } from '../src/testing.ts';
 
 export const SUPABASE_POSTGRES_IMAGE = 'supabase/postgres:17.6.1.175';
+export const GREENMAIL_IMAGE = 'greenmail/standalone:2.1.3';
+
 const RUNTIME_ROLE_PASSWORD = 'test-runtime-password';
 
 async function waitForDatabase(url: string, timeoutMs = 120_000): Promise<void> {
@@ -70,6 +74,26 @@ export default async function setup(project: TestProject) {
     await sql.end();
   }
 
+  const greenmail = await new GenericContainer(GREENMAIL_IMAGE)
+    .withEnvironment({
+      GREENMAIL_OPTS: [
+        '-Dgreenmail.setup.test.all',
+        '-Dgreenmail.hostname=0.0.0.0',
+        '-Dgreenmail.users.login=email',
+        `-Dgreenmail.users=${Object.values(GREENMAIL_USERS)
+          .map((u) => `${u.address.split('@')[0]}:${u.password}@${u.address.split('@')[1]}`)
+          .join(',')}`,
+      ].join(' '),
+    })
+    .withExposedPorts(3025, 3143)
+    .withWaitStrategy(Wait.forLogMessage(/Starting GreenMail API server/))
+    .start();
+
+  project.provide('greenmail', {
+    host: greenmail.getHost(),
+    smtpPort: greenmail.getMappedPort(3025),
+    imapPort: greenmail.getMappedPort(3143),
+  });
   project.provide('ownerDatabaseUrl', ownerUrl);
   project.provide('apiDatabaseUrl', withCredentials(ownerUrl, 'noctiv_api', RUNTIME_ROLE_PASSWORD));
   project.provide(
@@ -78,6 +102,7 @@ export default async function setup(project: TestProject) {
   );
 
   return async () => {
+    await greenmail.stop();
     await container?.stop();
     await network?.stop();
   };

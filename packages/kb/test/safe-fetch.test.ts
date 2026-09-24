@@ -1,11 +1,7 @@
 import type { lookup } from 'node:dns';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  assertFetchableUrl,
-  BlockedUrlError,
-  createSafeFetcher,
-  isPublicAddress,
-} from '../src/index.ts';
+import { isPublicAddress } from '@noctiv/core';
+import { assertFetchableUrl, BlockedUrlError, createSafeFetcher } from '../src/index.ts';
 import { serveSite } from './helpers.ts';
 
 describe('assertFetchableUrl (SSRF guard)', () => {

@@ -17,7 +17,6 @@ export {
   assertFetchableUrl,
   BlockedUrlError,
   createSafeFetcher,
-  isPublicAddress,
   USER_AGENT,
   type SafeFetch,
 } from './web/safe-fetch.ts';

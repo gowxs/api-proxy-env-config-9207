@@ -13,10 +13,19 @@ declare module 'vitest' {
     ownerDatabaseUrl: string;
     apiDatabaseUrl: string;
     workerDatabaseUrl: string;
+    /** GreenMail IMAP/SMTP test server (plaintext, local only). */
+    greenmail: { host: string; smtpPort: number; imapPort: number };
   }
 }
 
 export const EMBEDDING_DIMS = 768;
+/** Mailboxes that exist in the test GreenMail server (login = address). */
+export const GREENMAIL_USERS = {
+  shopA: { address: 'shop@nordlicht.test', password: 'app-pass-a' },
+  shopB: { address: 'info@other-shop.test', password: 'app-pass-b' },
+  customer: { address: 'anna@example-mail.test', password: 'customer-pass' },
+  customer2: { address: 'janis@example-mail.test', password: 'customer2-pass' },
+} as const;
 export const TEST_EMBEDDING_MODEL = 'test-embedding';
 
 /** Unit vector with 1 at `axis` — makes nearest-neighbour results predictable. */

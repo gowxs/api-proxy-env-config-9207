@@ -12,6 +12,9 @@
     "@noctiv/core": "workspace:*",
     "@noctiv/db": "workspace:*",
     "fastify": "^5.12.5",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@noctiv/mail": "workspace:*",
+    "jose": "^6.2.12",
+    "postgres": "^3.4.9"
   }
 }

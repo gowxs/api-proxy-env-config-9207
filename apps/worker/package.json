@@ -14,6 +14,7 @@
     "zod": "^4.6.5",
     "@noctiv/llm": "workspace:*",
     "postgres": "^3.4.9",
-    "@noctiv/kb": "workspace:*"
+    "@noctiv/kb": "workspace:*",
+    "@noctiv/mail": "workspace:*"
   }
 }
