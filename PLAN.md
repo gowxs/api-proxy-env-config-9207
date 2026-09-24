@@ -567,6 +567,16 @@ placeholders), Q15 sender-only replies (default: yes).
 
 - Founder supplied the database password, service role key and session pooler (eu-central-1). Stored in `.env` only. This build environment's network policy blocks both the pooler (5432/6543) and HTTPS to the project, so migrations, runtime-role passwords, the cloud isolation check and the real sign-in test are **pending** until the environment allows the project's hosts (or they are run from another machine). Recommendation: rotate the service role key and database password after setup, since both were shared in chat.
 
+### Cloud setup done (2026-09-24, after step 14)
+
+- **All 15 migrations applied** to the Supabase project (eu-central-1) through the Supabase connector (this environment cannot open raw Postgres connections), recorded under the same versions our runner uses, so `pnpm db:migrate` sees them as applied.
+- **Schema verified identical to local:** a fingerprint of columns, constraints, indexes, policies, RLS flags, table/column grants, function bodies and grants, triggers, migrations and role flags matches the local database in all 12 sections.
+- **Difference found:** on Supabase Cloud `postgres` is not a superuser, so a function can only `SET hnsw.*` once pgvector's library is loaded in the session. Migrations 0400/0500 now load it first (`select '[1]'::extensions.vector`); harmless locally. Runtime is unaffected (the vector argument loads the library before the function runs).
+- **Runtime roles** have strong passwords, stored only in `.env` (`CLOUD_API_DATABASE_URL`, `CLOUD_WORKER_DATABASE_URL`, session pooler). Only SCRAM hashes were sent to the database.
+- **Tenant isolation on the cloud:** 21 tables × (`noctiv_api`, `noctiv_worker`, signed-in user, `anon`), plus cross-tenant insert/update/delete and credential reads: 0 failures (run in a rolled-back transaction; nothing left behind).
+- **Auth:** email sign-in works; tokens are ES256 and pass our API's JWKS verifier. Sign-up requires email confirmation, sent by Supabase's built-in mailer, which only delivers to the project team's addresses until Brevo SMTP is configured in Supabase Auth.
+- **Supabase advisor:** one warning about `public.rls_auto_enable()`, a function Supabase creates on new projects (not ours).
+
 ### Decisions made during step 13 (operations)
 
 - **Health checks hourly:** IMAP login + NOOP and SMTP login per connected mailbox, recorded (30 days). A rejected login disconnects the mailbox (owner + admin emailed, as before). Other failures do not stop the mailbox; three failed checks in a row email the admin (once per mailbox per day).

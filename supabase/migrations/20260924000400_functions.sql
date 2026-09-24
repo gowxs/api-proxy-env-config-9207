@@ -5,6 +5,11 @@
 -- explicit tenant filter, so a caller whose tenant context differs from
 -- p_tenant_id gets nothing (defence in depth).
 -- ---------------------------------------------------------------------------
+-- Supabase Cloud: `postgres` is not a superuser, so a function may only SET
+-- hnsw.* once pgvector's library is loaded in this session (found on the
+-- first cloud deploy). Loading it is harmless everywhere.
+select '[1]'::extensions.vector;
+
 create function app.search_kb_chunks(
   p_tenant_id uuid,
   p_embedding extensions.vector(768),

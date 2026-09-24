@@ -7,6 +7,11 @@
 --    comparable, so search only matches chunks embedded with the query's model.
 
 set local search_path = public, extensions;
+-- Supabase Cloud: `postgres` is not a superuser, so a function may only SET
+-- hnsw.* once pgvector's library is loaded in this session (found on the
+-- first cloud deploy). Loading it is harmless everywhere.
+select '[1]'::extensions.vector;
+
 
 -- ---------------------------------------------------------------------------
 -- is_test_mailbox
