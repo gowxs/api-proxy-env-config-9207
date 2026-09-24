@@ -85,6 +85,25 @@ describe('remote key set (Supabase JWKS)', () => {
     expect(JSON.stringify(reasons)).not.toMatch(/eyJ/); // never the token
   });
 
+  it('accepts a gzip body sent without Content-Encoding (seen on the hosting network)', async () => {
+    const { gzipSync } = await import('node:zlib');
+    const a = await signer('key-a');
+    const gz = createServer((_req, res) => {
+      res.writeHead(200); // no content-type, no content-encoding
+      res.end(gzipSync(JSON.stringify({ keys: [a.jwk] })));
+    });
+    await new Promise<void>((r) => gz.listen(0, '127.0.0.1', r));
+    try {
+      const verify = createTokenVerifier({
+        jwksUrl: `http://127.0.0.1:${(gz.address() as AddressInfo).port}/jwks.json`,
+        issuer: ISSUER,
+      });
+      expect((await verify(await a.sign())).userId).toBe('user-1');
+    } finally {
+      await new Promise<void>((r) => gz.close(() => r()));
+    }
+  });
+
   it('a key-set endpoint that returns something else fails closed', async () => {
     served = '<html>blocked</html>';
     const a = await signer('key-a');

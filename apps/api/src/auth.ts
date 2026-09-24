@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet, type JWTVerifyGetKey } from 'jose';
 
 export interface AuthUser {
@@ -33,11 +34,12 @@ export function remoteKeySet(
   const load = () =>
     (loading ??= (async () => {
       try {
-        const res = await doFetch(url, {
-          headers: { accept: 'application/json' },
-          signal: AbortSignal.timeout(5_000),
-        });
-        const body = await res.text();
+        // No Accept header: with one, the endpoint answered with gzip bytes and no
+        // Content-Encoding from the hosting network (found on the first deploy).
+        const res = await doFetch(url, { signal: AbortSignal.timeout(5_000) });
+        const raw = Buffer.from(await res.arrayBuffer());
+        const gzipped = raw.length > 2 && raw[0] === 0x1f && raw[1] === 0x8b;
+        const body = (gzipped ? gunzipSync(raw) : raw).toString('utf8');
         const what = () =>
           `HTTP ${res.status}, ${res.headers.get('content-type') ?? 'no content-type'}, ` +
           `starts ${JSON.stringify(body.slice(0, 60))}`;
