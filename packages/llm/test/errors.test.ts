@@ -42,4 +42,37 @@ describe('classifyError', () => {
       'p request failed: rate_limited (HTTP 429, "Resource has been exhausted (e.g. check quota).")',
     );
   });
+
+  it('reads a daily quota from a body the SDK embedded as an escaped string (found live)', () => {
+    const body = JSON.stringify(
+      JSON.stringify(
+        {
+          error: {
+            code: 429,
+            message: 'You exceeded your current quota.',
+            details: [
+              {
+                violations: [{ quotaId: 'EmbedContentRequestsPerDayPerProjectPerModel-FreeTier' }],
+              },
+              { retryDelay: '31s' },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const err = classifyError('p', Object.assign(new Error(body), { status: 429 }));
+    expect(err.kind).toBe('quota_exhausted');
+    expect(err.quota).toBe('EmbedContentRequestsPerDayPerProjectPerModel-FreeTier');
+  });
+
+  it('reads the retry delay from an escaped per-minute body', () => {
+    const body = JSON.stringify(
+      JSON.stringify({ error: { details: [{ retryDelay: '31s' }] } }, null, 2),
+    );
+    const err = classifyError('p', Object.assign(new Error(body), { status: 429 }));
+    expect(err.kind).toBe('rate_limited');
+    expect(err.retryAfterMs).toBe(31_000);
+  });
 });

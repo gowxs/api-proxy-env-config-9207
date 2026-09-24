@@ -86,20 +86,20 @@ export function classifyError(provider: string, error: unknown): LlmError {
 
 /** Reads Google's RetryInfo ("retryDelay": "33s") from an error body. Only the number is kept. */
 function retryDelayMs(error: unknown): number | undefined {
-  const text = error instanceof Error ? error.message : String(error);
+  const text = errorText(error);
   const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text);
   return m ? Math.round(Number(m[1]) * 1000) : undefined;
 }
 
 /** Google names the violated quota, e.g. "GenerateRequestsPerDayPerProjectPerModel-FreeTier". */
 function isDailyQuota(error: unknown): boolean {
-  const text = error instanceof Error ? error.message : String(error);
+  const text = errorText(error);
   return /"quotaId"\s*:\s*"[^"]*PerDay/i.test(text);
 }
 
 /** The quota ids Google names in a 429 body (identifiers only). */
 function quotaIds(error: unknown): string | undefined {
-  const text = error instanceof Error ? error.message : String(error);
+  const text = errorText(error);
   const ids = [...text.matchAll(/"quotaId"\s*:\s*"([A-Za-z0-9_-]{1,120})"/g)].map((m) => m[1]!);
   return ids.length ? [...new Set(ids)].join(',') : undefined;
 }
@@ -109,11 +109,20 @@ function quotaIds(error: unknown): string | undefined {
  * exhausted"). A status text, never the request content; capped.
  */
 function providerMessage(error: unknown): string | undefined {
-  const text = error instanceof Error ? error.message : String(error);
+  const text = errorText(error);
   const m = /"message"\s*:\s*"((?:[^"\\]|\\.){1,400})/.exec(text);
   const msg = (m ? m[1]! : text)
     .replace(/\\n|\s+/g, ' ')
     .trim()
     .slice(0, 160);
   return msg ? `"${msg}"` : undefined;
+}
+
+/**
+ * The error's text with JSON escaping undone: when the SDK cannot parse the
+ * body it embeds it as a JSON string (\\"quotaId\\": …; found live).
+ */
+function errorText(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.replace(/\\+"/g, '"').replace(/\\+n/g, ' ');
 }
