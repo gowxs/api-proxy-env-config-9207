@@ -29,6 +29,8 @@ export function createTokenVerifier(opts: {
   jwksUrl?: string;
   jwks?: JSONWebKeySet;
   issuer?: string;
+  /** Why a token was rejected (error name/code only; never the token). */
+  onReject?: (reason: { name: string; code?: string }) => void;
 }): VerifyToken {
   const keys: JWTVerifyGetKey = opts.jwks
     ? createLocalJWKSet(opts.jwks)
@@ -45,7 +47,9 @@ export function createTokenVerifier(opts: {
         userId: payload.sub,
         ...(typeof payload.email === 'string' ? { email: payload.email } : {}),
       };
-    } catch {
+    } catch (e) {
+      const err = e as { name?: string; code?: string };
+      opts.onReject?.({ name: err?.name ?? 'Error', ...(err?.code ? { code: err.code } : {}) });
       throw new AuthError();
     }
   };

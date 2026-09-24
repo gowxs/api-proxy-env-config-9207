@@ -15,7 +15,11 @@ const authBase = `${config.SUPABASE_URL.replace(/\/+$/, '')}/auth/v1`;
 const supabaseVerifier = createTokenVerifier(
   config.AUTH_JWKS_JSON
     ? { jwks: JSON.parse(config.AUTH_JWKS_JSON) }
-    : { jwksUrl: `${authBase}/.well-known/jwks.json`, issuer: authBase },
+    : {
+        jwksUrl: `${authBase}/.well-known/jwks.json`,
+        issuer: authBase,
+        onReject: (reason) => logger.info({ reason }, 'access token rejected'),
+      },
 );
 const devAuth = config.DEV_LOGIN_USER_ID
   ? await createDevAuth({ id: config.DEV_LOGIN_USER_ID, email: config.DEV_LOGIN_EMAIL })
