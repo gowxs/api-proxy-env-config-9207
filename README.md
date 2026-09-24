@@ -28,6 +28,19 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 - Node.js ≥ 22.18 (`.nvmrc`), pnpm 10 (`corepack enable`)
 - Docker (local database, GreenMail, DB tests)
 
+## Test deployment (temporary, 2026-09-24)
+
+| Part            | Where                                                              | Notes                                                                       |
+| --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Web             | Netlify project `noctiv-app` → https://noctiv-app.netlify.app      | `netlify.toml`; `/api/*` is proxied to the API (`API_INTERNAL_URL`)         |
+| API             | Northflank project `noctiv`, service `api` (London, **non-EU**)    | built from this branch's `Dockerfile` (`SERVICE=api`), auto-deploys on push |
+| Worker          | Northflank project `noctiv`, service `worker` (London, **non-EU**) | same image, `SERVICE=worker`; warns and emails the admin while non-EU       |
+| Database + Auth | Supabase `bdbztonmdfnqqlonvywn` (Frankfurt)                        | migrations via the Supabase connector; runtime roles via the session pooler |
+
+Secrets live only in the hosts' environment settings and the local `.env`. Signup needs the invite
+code in `SIGNUP_INVITE_CODES` (API). Owner notification emails stay queued until Brevo SMTP is set
+(`SYSTEM_MAILER_PENDING=true`). Only operator-flagged test mailboxes are processed (free AI tier).
+
 ## Try it locally (one command)
 
 ```bash

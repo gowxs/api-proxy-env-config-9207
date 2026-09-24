@@ -592,3 +592,12 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Leads are kept** until the owner deletes them or the tenant; they are CRM records, not email content. Per-customer erasure across all messages is a follow-up.
 - `subprocessors.md` updated (Supabase without storage, Brevo chosen); `docs/data-flow.md` added.
 
+### Step 15 as changed by the founder: zero-cost temporary test deployment (2026-09-24)
+
+- **Hosts:** web on Netlify (free); api + worker on Northflank Sandbox (free, always on). Northflank's EU regions (Frankfurt, Netherlands) refuse free projects, so the founder approved London (`europe-west` = GCP `europe-west2`) as a **temporary, test-only, non-EU** exception, recorded in `subprocessors.md` and `docs/data-flow.md`. Outbound mail ports (IMAP 993, SMTP 465/587, Brevo 587) verified open from Northflank before deploying.
+- **Region guard:** production must set `DATA_REGION` and `DATA_REGION_IN_EU`; non-EU logs a warning at every start and the worker emails the admin (once the system mailer exists).
+- **One image** (`Dockerfile`, `SERVICE=api|worker`), Node 22 running the TypeScript sources; base image from the public ECR mirror of the official Node image (Docker Hub rate limits).
+- **Found while deploying:** (1) the worker's `nodemailer` was a dev dependency (tests hid it); (2) Netlify needs the Next.js plugin declared explicitly for a monorepo base directory; (3) from Northflank, the Supabase key set came back gzip-compressed without a `Content-Encoding` header when requested with `Accept: application/json`, which broke `jose`'s fetcher; the API now loads the key set itself (no Accept header, gzip-tolerant, cached, reload on key rotation, fail closed), with tests.
+- **Live check:** sign-in → `/v1/me` → wrong invite refused → business created (draft-only) → dashboard → "Delete all data" → the worker erased the business and the Supabase login. Database left empty except one erasure-proof row.
+- **Pending for real use:** Brevo SMTP (owner emails and Supabase Auth emails), an EU host for api + worker, Vertex AI (paid) for non-test mailboxes.
+
