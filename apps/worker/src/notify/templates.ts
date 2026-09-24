@@ -236,6 +236,14 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         note: 'Details: public.jobs.last_error for this job id. One alert per tenant, queue and day.',
         footer: 'Noctiv admin alert.',
       });
+    case 'test':
+      return render('Noctiv test notification', {
+        heading: 'Your Noctiv email notifications work.',
+        lines: [['Account', n.tenantName]],
+        note: 'This is a one-off test. Draft approvals and alerts will arrive the same way.',
+        buttons: [['Open dashboard', n.links.dashboard]],
+        footer: FOOTER,
+      });
     default:
       return render(`Noctiv notification (${headerText(String(n.kind), 40)})`, {
         heading: 'There is something new in your Noctiv dashboard.',

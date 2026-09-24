@@ -9,7 +9,9 @@ export type NotificationKind =
   | 'mailbox_disconnected'
   | 'send_failed'
   | 'budget_halted'
-  | 'budget_state';
+  | 'budget_state'
+  /** One-off check that the system mailer reaches the owner (queued by an operator). */
+  | 'test';
 
 export interface NotificationLinks {
   /** Signed, single-decision links (draft_ready only). */
