@@ -188,7 +188,7 @@ describe('pipeline: draft-only tenant (default)', () => {
       await owner<{ channel: string; kind: string; payload: Record<string, unknown> }[]>`
       select channel, kind, payload from public.notifications where tenant_id = ${T.tenantId} and kind = 'draft_ready'`,
     );
-    expect(n.channel).toBe('telegram_owner');
+    expect(n.channel).toBe('email_owner');
     expect(n.payload).toMatchObject({
       senderDomain: 'example-mail.test',
       subject: 'Candle price',

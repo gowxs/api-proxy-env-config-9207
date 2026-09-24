@@ -29,7 +29,7 @@ export interface OwnerNotificationPayload {
 }
 
 /**
- * What the owner's Telegram message may contain (founder decision Q2).
+ * What an owner notification may contain (founder decision Q2).
  * Privacy mode (default): sender domain, subject, 1–2 sentence summary,
  * chosen action and downgrade reasons. No draft body, no customer name —
  * those stay in the dashboard. Full-text mode adds them.

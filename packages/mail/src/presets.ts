@@ -18,6 +18,11 @@ export const PRESETS: Partial<Record<MailProvider, ProviderPreset>> = {
     smtp: { host: 'smtp.gmail.com', port: 465, security: 'tls' },
     savesSentAutomatically: true,
   },
+  yahoo: {
+    imap: { host: 'imap.mail.yahoo.com', port: 993, secure: true },
+    smtp: { host: 'smtp.mail.yahoo.com', port: 465, security: 'tls' },
+    savesSentAutomatically: false,
+  },
   hostinger: {
     imap: { host: 'imap.hostinger.com', port: 993, secure: true },
     smtp: { host: 'smtp.hostinger.com', port: 465, security: 'tls' },

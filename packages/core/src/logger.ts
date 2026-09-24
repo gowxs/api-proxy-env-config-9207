@@ -29,11 +29,7 @@ export const REDACT_PATHS: string[] = SENSITIVE_KEYS.flatMap((k) => [
   k,
   `*.${k}`,
   `*.*.${k}`,
-]).concat([
-  'req.headers.authorization',
-  'req.headers.cookie',
-  'req.headers["x-telegram-bot-api-secret-token"]',
-]);
+]).concat(['req.headers.authorization', 'req.headers.cookie']);
 
 export interface CreateLoggerOptions {
   service: string;

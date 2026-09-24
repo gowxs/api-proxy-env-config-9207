@@ -50,8 +50,8 @@ async function canSelectTenantId(role: string, table: string): Promise<boolean> 
 }
 
 describe('schema invariants', () => {
-  it('covers all 22 Phase 1 tables', () => {
-    expect(tables).toHaveLength(22);
+  it('covers all 21 Phase 1 tables', () => {
+    expect(tables).toHaveLength(21);
   });
 
   it('every table has tenant_id, forced RLS and both isolation policies', async () => {
@@ -254,7 +254,6 @@ describe('dashboard users (Supabase Auth + RLS)', () => {
 
   it('have no access at all to internal tables', async () => {
     for (const t of [
-      'telegram_link_tokens',
       'kb_chunks',
       'kb_allowlist',
       'kb_uploads',

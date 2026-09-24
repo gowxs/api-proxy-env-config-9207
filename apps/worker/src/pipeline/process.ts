@@ -63,7 +63,7 @@ interface Loaded {
   tenant: {
     name: string;
     mode: 'draft_only' | 'auto_send';
-    telegramFullText: boolean;
+    notifyFullText: boolean;
     maxPerSender24h: number;
     maxPerHour: number;
   };
@@ -89,7 +89,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       is_test_mailbox: boolean;
       tenant_name: string;
       mode: 'draft_only' | 'auto_send';
-      telegram_full_text: boolean;
+      notify_full_text: boolean;
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
       thread_status: string;
@@ -97,7 +97,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
   >`
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
-           c.is_test_mailbox, t.name as tenant_name, t.mode, t.telegram_full_text,
+           c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
            t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, th.status as thread_status
     from public.message_processing mp
     join public.messages m on m.id = mp.message_id
@@ -131,7 +131,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     tenant: {
       name: row.tenant_name,
       mode: row.mode,
-      telegramFullText: row.telegram_full_text,
+      notifyFullText: row.notify_full_text,
       maxPerSender24h: row.max_ai_replies_per_sender_24h,
       maxPerHour: row.max_replies_per_hour,
     },
@@ -511,7 +511,7 @@ async function notifyOwner(
 ) {
   const payload = {
     ...ownerNotificationPayload({
-      fullText: n.l.tenant.telegramFullText,
+      fullText: n.l.tenant.notifyFullText,
       kind: n.kind,
       senderAddress: n.l.message.from,
       senderName: n.l.message.fromName,
@@ -526,7 +526,7 @@ async function notifyOwner(
   };
   await tx`
     insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
-    values (${tenantId}, 'telegram_owner', ${n.kind}, ${dedupeKey}, ${tx.json(payload as never)})
+    values (${tenantId}, 'email_owner', ${n.kind}, ${dedupeKey}, ${tx.json(payload as never)})
     on conflict (tenant_id, dedupe_key) do nothing`;
 }
 

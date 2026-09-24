@@ -90,7 +90,7 @@ export const DISCONNECT_CODES = new Set([
 
 /**
  * Brief: on auth failure mark the connection disconnected and notify the
- * owner (Telegram + email, with a reconnect link) and the admin. One set of
+ * owner (email, with a reconnect link) and the admin. One set of
  * notifications per connection per day.
  */
 export async function markDisconnected(
@@ -108,7 +108,7 @@ export async function markDisconnected(
   if (rows.length === 0) return false;
   const payload = { connectionId, code };
   const day = utcDay(now);
-  for (const channel of ['telegram_owner', 'email_owner', 'telegram_admin'] as const) {
+  for (const channel of ['email_owner', 'email_admin'] as const) {
     await tx`
       insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
       values (${tenantId}, ${channel}, 'mailbox_disconnected', ${`disconnected:${connectionId}:${day}:${channel}`}, ${tx.json(payload)})

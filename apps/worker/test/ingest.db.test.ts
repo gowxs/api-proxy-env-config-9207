@@ -252,7 +252,7 @@ describe('IDLE listener', () => {
 });
 
 describe('disconnect flow', () => {
-  it('a wrong password disconnects the mailbox and notifies owner (Telegram + email) and admin once', async () => {
+  it('a wrong password disconnects the mailbox and notifies owner and admin by email once', async () => {
     const T2 = await seedTenant(owner, 'ingest-bad', { embeddingAxis: 41 });
     const bad = await addGreenmailConnection(owner, gm, {
       tenantId: T2.tenantId,
@@ -281,9 +281,8 @@ describe('disconnect flow', () => {
     const n = await owner<{ channel: string; kind: string }[]>`
       select channel, kind from public.notifications where tenant_id = ${T2.tenantId} and kind = 'mailbox_disconnected' order by channel`;
     expect(n).toEqual([
+      { channel: 'email_admin', kind: 'mailbox_disconnected' },
       { channel: 'email_owner', kind: 'mailbox_disconnected' },
-      { channel: 'telegram_admin', kind: 'mailbox_disconnected' },
-      { channel: 'telegram_owner', kind: 'mailbox_disconnected' },
     ]);
     const [c] = await owner<
       { last_error_code: string }[]

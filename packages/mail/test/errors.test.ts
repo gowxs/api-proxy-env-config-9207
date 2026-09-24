@@ -88,6 +88,13 @@ describe('presets', () => {
     expect(savesSentAutomatically(s)).toBe(false);
   });
 
+  it('fills Yahoo servers', () => {
+    expect(resolveSettings({ provider: 'yahoo', emailAddress: 'shop@yahoo.com' })).toMatchObject({
+      imap: { host: 'imap.mail.yahoo.com', port: 993, secure: true },
+      smtp: { host: 'smtp.mail.yahoo.com', port: 465, security: 'tls' },
+    });
+  });
+
   it('recognises Microsoft accounts as unsupported', () => {
     expect(isUnsupportedProvider('generic', 'a@hotmail.com')).toBe(true);
     expect(isUnsupportedProvider('generic', 'a@outlook.de')).toBe(true);

@@ -71,8 +71,6 @@ export async function seedTenant(
     await tx`insert into auth.users (id, email, aud, role) values (${userId}, ${email}, 'authenticated', 'authenticated')`;
     await tx`insert into public.tenants (id, name, timezone) values (${tenantId}, ${`Tenant ${label}`}, 'Europe/Riga')`;
     await tx`insert into public.tenant_members (tenant_id, user_id) values (${tenantId}, ${userId})`;
-    await tx`insert into public.telegram_link_tokens (tenant_id, token_hash, expires_at)
-             values (${tenantId}, ${Buffer.from(randomUUID())}, now() + interval '1 hour')`;
     await tx`insert into public.email_connections
                (id, tenant_id, provider, email_address, imap_host, imap_port, smtp_host, smtp_port,
                 smtp_security, username, credentials_ciphertext, credentials_key_id, status)
@@ -126,7 +124,7 @@ export async function seedTenant(
              values (${tenantId}, ${messageId}, ${threadId}, 'hard_list', 'complaint')`;
     await tx`insert into public.usage_daily (tenant_id, day, llm_calls) values (${tenantId}, current_date, 1)`;
     await tx`insert into public.notifications (tenant_id, channel, kind, dedupe_key)
-             values (${tenantId}, 'telegram_owner', 'draft', ${`draft:${draftId}`})`;
+             values (${tenantId}, 'email_owner', 'draft', ${`draft:${draftId}`})`;
     await tx`insert into public.audit_log (tenant_id, actor, action) values (${tenantId}, 'system', 'seed')`;
     await tx`insert into public.tenant_deletions (tenant_id) values (${tenantId})`;
   });

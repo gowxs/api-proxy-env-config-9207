@@ -1,6 +1,7 @@
 import type { lookup } from 'node:dns';
 
-export type MailProvider = 'gmail' | 'google_workspace' | 'hostinger' | 'outlook' | 'generic';
+export type MailProvider =
+  'gmail' | 'google_workspace' | 'yahoo' | 'hostinger' | 'outlook' | 'generic';
 
 export interface MailServerSettings {
   provider: MailProvider;

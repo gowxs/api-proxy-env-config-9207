@@ -516,3 +516,13 @@ placeholders), Q15 sender-only replies (default: yes).
 - **The mailbox is never modified:** INBOX is opened read-only, nothing is marked read.
 - **Processing is claimed** (`message_processing.status = 'processing'`), so a finished message is never processed twice even if a job is repeated.
 - **Step 9 boundary:** approved auto-send drafts get a `mail.send` job, which waits in the queue until step 9 adds sending.
+
+### Scope change after step 8 (founder, 2026-09-24): no Telegram in Phase 1
+
+- **Telegram is removed entirely.** No code, no config, no `telegram_link_tokens`, no `telegram_chat_id`. Wherever this plan says "Telegram" for the owner, read **email + dashboard**. The Q2 privacy toggle is now `tenants.notify_full_text`.
+- **Owner notifications:** drafts, escalations, disconnect alerts and budget notices are emailed to the owner's login email by the system mailer. That is Brevo in production (decision Q10 made); until its credentials exist, GreenMail is the sink. Admin alerts go to `ADMIN_EMAIL`.
+- **Approve / Reject:** signed links (HMAC, 7-day expiry) handled by the API. Opening a link shows a confirmation page; only the button (POST) acts, so mail-security scanners that pre-open links cannot approve anything. Approving twice is harmless; after a decision, further links just report it. Editing happens only in the dashboard.
+- **Privacy mode as planned:** the email carries sender domain, subject, summary, action and reasons. The draft body is included only when the tenant enables full text.
+- **Channel interface:** notifications go through a `NotificationChannel` interface (email implemented), so a chat channel can be added later.
+- **Mailbox providers:** Yahoo added (`imap.mail.yahoo.com:993`, `smtp.mail.yahoo.com:465`). The live mailbox tests (Gmail + Yahoo) happen together with the step 9 live send test, once the founder provides both mailboxes.
+- **Job queue:** own implementation confirmed (replaces pg-boss).

@@ -148,7 +148,7 @@ describe('usage metering and budget states (Q3)', () => {
     expect(await record(10, 0)).toMatchObject({ state: 'draft_forced', previous: 'draft_forced' });
     expect(await notifications()).toEqual([
       {
-        channel: 'telegram_admin',
+        channel: 'email_admin',
         kind: 'budget_state',
         dedupe_key: 'budget:2026-09-24:draft_forced:admin',
       },

@@ -58,12 +58,12 @@ async function applyTransition(
   };
   await tx`
     insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
-    values (${tenantId}, 'telegram_admin', 'budget_state', ${`budget:${day}:${status.state}:admin`}, ${tx.json(payload)})
+    values (${tenantId}, 'email_admin', 'budget_state', ${`budget:${day}:${status.state}:admin`}, ${tx.json(payload)})
     on conflict (tenant_id, dedupe_key) do nothing`;
   if (status.state === 'halted') {
     await tx`
       insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
-      values (${tenantId}, 'telegram_owner', 'budget_halted', ${`budget:${day}:halted:owner`}, ${tx.json(payload)})
+      values (${tenantId}, 'email_owner', 'budget_halted', ${`budget:${day}:halted:owner`}, ${tx.json(payload)})
       on conflict (tenant_id, dedupe_key) do nothing`;
   }
 }

@@ -32,7 +32,7 @@ const serverSchema = {
 };
 
 const testBody = z.object({
-  provider: z.enum(['gmail', 'google_workspace', 'hostinger', 'outlook', 'generic']),
+  provider: z.enum(['gmail', 'google_workspace', 'yahoo', 'hostinger', 'outlook', 'generic']),
   emailAddress: z.email().max(254),
   username: z.string().min(1).max(254).optional(),
   password: z.string().min(1).max(512),
