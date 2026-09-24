@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { kbErrorText } from '@/lib/kb-errors';
 import { Badge, Button, ErrorText, Field, inputClass, timeAgo, useAction } from './ui';
 
 export interface KbSource {
@@ -236,8 +237,13 @@ export function SourceList({
                 </button>
               </span>
             )}
-            {s.status === 'failed' && s.error && (
-              <span className="w-full pl-16 text-xs text-red-700">{s.error}</span>
+            {s.error && (s.status === 'failed' || s.status === 'pending') && (
+              <span
+                className={`w-full pl-16 text-xs ${s.status === 'failed' ? 'text-red-700' : 'text-amber-800'}`}
+              >
+                {s.status === 'pending' ? 'Will retry automatically: ' : ''}
+                {kbErrorText(s.error)}
+              </span>
             )}
           </li>
         ))}

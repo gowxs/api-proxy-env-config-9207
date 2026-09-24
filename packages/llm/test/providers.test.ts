@@ -296,3 +296,75 @@ describe('checkModels', () => {
     ]);
   });
 });
+
+describe('embedding requests on the free tier (found live: 100 chunks ≈ 52k tokens → HTTP 429)', () => {
+  const chunk = (i: number) => `chunk ${i} ` + 'x'.repeat(2_000); // ≈ 500 tokens each
+
+  it('splits a large website into token-limited requests', async () => {
+    const { factory, created } = mockClientFactory();
+    const texts = Array.from({ length: 100 }, (_, i) => chunk(i));
+    const r = await studio(factory).embed(texts, 'document', 'test_mailbox');
+    expect(r.vectors).toHaveLength(100);
+    const calls = created[0]!.embedCalls;
+    expect(calls.length).toBeGreaterThan(1);
+    for (const c of calls) {
+      const tokens = c.contents.reduce((n, t) => n + Math.ceil(t.length / 4), 0);
+      expect(tokens).toBeLessThanOrEqual(8_000);
+    }
+    expect(calls.flatMap((c) => c.contents)).toEqual(texts); // order kept
+  });
+
+  it('a single text larger than the limit still goes out alone', async () => {
+    const { factory, created } = mockClientFactory();
+    await studio(factory).embed(['y'.repeat(40_000), 'small'], 'document', 'test_mailbox');
+    expect(created[0]!.embedCalls.map((c) => c.contents.length)).toEqual([1, 1]);
+  });
+
+  it('waits out per-minute rate limits and resumes with the same request', async () => {
+    const waits: number[] = [];
+    let failures = 2;
+    const { factory, created } = mockClientFactory({
+      embed: (p) =>
+        failures-- > 0
+          ? httpError(429)
+          : { embeddings: p.contents.map(() => ({ values: new Array(768).fill(1) })) },
+    });
+    const p = new GoogleAiStudioProvider({
+      apiKey: 'k',
+      models,
+      embeddingModel: 'gemini-embedding-001',
+      timeoutMs: 5_000,
+      clientFactory: factory,
+      sleep: async (ms) => void waits.push(ms),
+    });
+    const r = await p.embed([chunk(1), chunk(2)], 'document', 'test_mailbox');
+    expect(r.vectors).toHaveLength(2);
+    expect(waits).toEqual([20_000, 40_000]);
+    expect(created[0]!.embedCalls).toHaveLength(3);
+  });
+
+  it('gives up after its rate-limit budget with a clear error kind', async () => {
+    const { factory } = mockClientFactory({ embed: () => httpError(429) });
+    await expect(
+      studio(factory).embed([chunk(1)], 'document', 'test_mailbox'),
+    ).rejects.toMatchObject({
+      kind: 'rate_limited',
+    });
+  });
+
+  it('never retries an exhausted daily quota', async () => {
+    const daily = Object.assign(
+      new Error(
+        '{"error":{"details":[{"violations":[{"quotaId":"EmbedContentRequestsPerDayPerProjectPerModel-FreeTier"}]}]}}',
+      ),
+      { status: 429 },
+    );
+    const { factory, created } = mockClientFactory({ embed: () => daily });
+    await expect(
+      studio(factory).embed([chunk(1)], 'document', 'test_mailbox'),
+    ).rejects.toMatchObject({
+      kind: 'quota_exhausted',
+    });
+    expect(created[0]!.embedCalls).toHaveLength(1);
+  });
+});

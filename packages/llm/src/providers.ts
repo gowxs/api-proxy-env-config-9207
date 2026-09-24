@@ -32,6 +32,9 @@ export class GoogleAiStudioProvider extends GeminiBackend {
       models: opts.models,
       embeddingModel: opts.embeddingModel,
       embedBatchSize: 100,
+      // Free tier: per-minute token limit; keep each request small and wait out 429s.
+      embedBatchTokens: 8_000,
+      embedRateLimitRetries: 6,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,
       maxRetries: opts.maxRetries,

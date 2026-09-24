@@ -25,7 +25,7 @@ export interface MailSendDeps {
   /**
    * An outbound email in 'sending' state younger than this may still be in
    * flight in another worker (job lease expiry); it is retried later instead
-   * of being recovered. Must stay below the job lease (300 s).
+   * of being recovered. Must stay below the job lease (900 s).
    */
   inProgressMs?: number;
 }

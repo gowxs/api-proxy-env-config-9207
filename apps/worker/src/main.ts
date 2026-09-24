@@ -40,6 +40,9 @@ if (providers.description.trainingPolicy === 'may_train_on_data') {
 
 const runner = new JobRunner({
   sql: db.sql,
+  // A crashed worker's jobs are re-claimed after this. Long enough for a website
+  // ingest that waits out free-tier rate limits (a live job must never be re-claimed).
+  leaseSeconds: 900,
   handlers: {
     [QUEUES.connectionTest]: connectionTestHandler({
       keys,

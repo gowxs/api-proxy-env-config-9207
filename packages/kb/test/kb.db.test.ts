@@ -274,6 +274,46 @@ describe('budget', () => {
   });
 });
 
+describe('embedding failures (found live: free-tier per-minute limit)', () => {
+  class RateLimitedEmbeddings extends FakeProvider {
+    override async embed(): Promise<never> {
+      throw Object.assign(new Error('google_ai_studio request failed: rate_limited (HTTP 429)'), {
+        name: 'LlmError',
+        kind: 'rate_limited',
+      });
+    }
+  }
+  const status = (id: string) =>
+    owner<
+      { status: string; error: string | null }[]
+    >`select status, error from public.kb_sources where id = ${id}`.then((r) => r[0]);
+
+  it('keeps the real cause, and shows the source as waiting while a retry is coming', async () => {
+    const T = await seedTenant(owner, 'kb-ratelimit', { embeddingAxis: 14 });
+    const id = await addSource(T, {
+      type: 'note',
+      title: 'n',
+      note_text: 'Prices and delivery times.',
+    });
+    const failing = new RateLimitedEmbeddings();
+    expect(await ingestSource(deps(failing), T.tenantId, id, { finalAttempt: false })).toEqual({
+      status: 'failed',
+      reason: 'embedding_failed',
+      retryable: true,
+      detail: 'rate_limited',
+    });
+    expect(await status(id)).toEqual({ status: 'pending', error: 'embedding_failed:rate_limited' });
+
+    // Last attempt: now it is failed, with the same cause.
+    await ingestSource(deps(failing), T.tenantId, id, { finalAttempt: true });
+    expect(await status(id)).toEqual({ status: 'failed', error: 'embedding_failed:rate_limited' });
+
+    // Once the provider works again, the same source becomes ready and the error is cleared.
+    expect(await ingestSource(deps(), T.tenantId, id)).toMatchObject({ status: 'ready' });
+    expect(await status(id)).toEqual({ status: 'ready', error: null });
+  });
+});
+
 describe('retrieval', () => {
   beforeAll(async () => {
     for (const [t, text] of [

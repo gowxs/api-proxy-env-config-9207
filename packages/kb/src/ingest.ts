@@ -42,7 +42,7 @@ export type IngestFailure =
 
 export type IngestOutcome =
   | { status: 'ready'; chunks: number; unchanged: boolean }
-  | { status: 'failed'; reason: IngestFailure; retryable: boolean };
+  | { status: 'failed'; reason: IngestFailure; retryable: boolean; detail?: string };
 
 const RETRYABLE: ReadonlySet<IngestFailure> = new Set([
   'budget_halted',
@@ -52,10 +52,13 @@ const RETRYABLE: ReadonlySet<IngestFailure> = new Set([
 
 class IngestError extends Error {
   readonly reason: IngestFailure;
+  /** Loggable cause, e.g. the provider error kind ("rate_limited"); never content. */
+  readonly detail: string | undefined;
 
-  constructor(reason: IngestFailure) {
+  constructor(reason: IngestFailure, detail?: string) {
     super(reason);
     this.reason = reason;
+    this.detail = detail;
   }
 }
 
@@ -117,15 +120,24 @@ export async function ingestSource(
   deps: IngestDeps,
   tenantId: string,
   sourceId: string,
+  opts: {
+    /** False while the job will be retried: the source then shows as waiting, not failed. */
+    finalAttempt?: boolean;
+  } = {},
 ): Promise<IngestOutcome> {
-  const fail = async (reason: IngestFailure): Promise<IngestOutcome> => {
+  const fail = async (reason: IngestFailure, detail?: string): Promise<IngestOutcome> => {
     const retryable = RETRYABLE.has(reason);
+    const willRetry = retryable && opts.finalAttempt === false;
     await withTenant(deps.sql, tenantId, async (tx) => {
-      await markSource(tx, sourceId, { status: 'failed', error: reason });
+      // The error keeps the cause ("embedding_failed:rate_limited"); the UI words it.
+      await markSource(tx, sourceId, {
+        status: willRetry ? 'pending' : 'failed',
+        error: detail ? `${reason}:${detail}` : reason,
+      });
       // A rejected file is not kept for later; retryable failures keep it for the retry.
       if (!retryable) await deleteUpload(tx, sourceId);
     });
-    return { status: 'failed', reason, retryable };
+    return { status: 'failed', reason, retryable, ...(detail ? { detail } : {}) };
   };
 
   const start = await withTenant(deps.sql, tenantId, async (tx) => {
@@ -178,7 +190,9 @@ export async function ingestSource(
       );
     } catch (e) {
       if (e instanceof TrainingDataPolicyError) throw new IngestError('free_tier_customer_data');
-      throw new IngestError('embedding_failed');
+      // Provider errors carry a coarse kind (rate_limited, quota_exhausted, auth, …).
+      const kind = (e as { kind?: unknown }).kind;
+      throw new IngestError('embedding_failed', typeof kind === 'string' ? kind : 'unknown');
     }
 
     const chunks: ChunkToStore[] = pieces.map((p, i) => ({
@@ -205,7 +219,7 @@ export async function ingestSource(
     });
     return { status: 'ready', chunks: chunks.length, unchanged: false };
   } catch (e) {
-    if (e instanceof IngestError) return fail(e.reason);
+    if (e instanceof IngestError) return fail(e.reason, e.detail);
     await fail('extraction_failed');
     throw e;
   }

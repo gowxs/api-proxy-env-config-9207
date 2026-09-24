@@ -38,6 +38,14 @@ export interface GeminiBackendOptions {
   embeddingModel: string;
   /** Inputs per embedContent request. */
   embedBatchSize: number;
+  /**
+   * Upper bound of estimated tokens per embedding request. The free tier's
+   * per-minute token limit rejects large batches outright (a 100-chunk
+   * website batch, ~52k tokens, got HTTP 429 every time; found live).
+   */
+  embedBatchTokens?: number;
+  /** Retries for an embedding request hitting a per-minute rate limit. */
+  embedRateLimitRetries?: number;
   timeoutMs: number;
   /** Retries for rate limits / 5xx / timeouts, on top of the first attempt. */
   maxRetries?: number;
@@ -86,19 +94,57 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
     assertOriginAllowed(this.name, this.trainingPolicy, origin);
   }
 
-  private async withRetry<T>(call: () => Promise<T>): Promise<T> {
-    const retries = this.opts.maxRetries ?? 2;
+  private async withRetry<T>(
+    call: () => Promise<T>,
+    policy: { retries?: number; rateLimitRetries?: number; rateLimitWaitMs?: number } = {},
+  ): Promise<T> {
+    const retries = policy.retries ?? this.opts.maxRetries ?? 2;
     const sleep = this.opts.sleep ?? defaultSleep;
+    let rateLimited = 0;
     for (let attempt = 0; ; attempt++) {
       try {
         return await call();
       } catch (e) {
         const err = classifyError(this.name, e);
+        // Per-minute limits clear within a minute: wait them out (bounded), separately
+        // from the short retry budget for outages and timeouts.
+        if (err.kind === 'rate_limited' && policy.rateLimitRetries !== undefined) {
+          if (rateLimited >= policy.rateLimitRetries) throw err;
+          const wait = Math.max(
+            err.retryAfterMs ?? 0,
+            (policy.rateLimitWaitMs ?? 20_000) * 2 ** rateLimited,
+          );
+          rateLimited++;
+          attempt--;
+          await sleep(Math.min(wait, MAX_RETRY_WAIT_MS));
+          continue;
+        }
         if (!err.retryable || attempt >= retries) throw err;
         const backoff = 1_000 * 2 ** attempt + Math.floor(Math.random() * 250);
         await sleep(Math.min(Math.max(backoff, err.retryAfterMs ?? 0), MAX_RETRY_WAIT_MS));
       }
     }
+  }
+
+  /** Batches by count and by estimated tokens (at least one text per batch). */
+  private embedBatches(texts: string[]): string[][] {
+    const maxCount = this.opts.embedBatchSize;
+    const maxTokens = this.opts.embedBatchTokens ?? Number.POSITIVE_INFINITY;
+    const batches: string[][] = [];
+    let current: string[] = [];
+    let tokens = 0;
+    for (const t of texts) {
+      const n = estimateTokens([t]);
+      if (current.length && (current.length >= maxCount || tokens + n > maxTokens)) {
+        batches.push(current);
+        current = [];
+        tokens = 0;
+      }
+      current.push(t);
+      tokens += n;
+    }
+    if (current.length) batches.push(current);
+    return batches;
   }
 
   async generate(req: GenerateRequest): Promise<GenerateResponse> {
@@ -150,18 +196,19 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
         : 'RETRIEVAL_DOCUMENT'
       : undefined;
 
-    for (let i = 0; i < texts.length; i += this.opts.embedBatchSize) {
-      const batch = texts.slice(i, i + this.opts.embedBatchSize);
-      const response = await this.withRetry(() =>
-        this.client.models.embedContent({
-          model: this.model,
-          contents: batch,
-          config: {
-            outputDimensionality: this.dimensions,
-            ...(taskType ? { taskType } : {}),
-            abortSignal: AbortSignal.timeout(this.opts.timeoutMs),
-          },
-        }),
+    for (const batch of this.embedBatches(texts)) {
+      const response = await this.withRetry(
+        () =>
+          this.client.models.embedContent({
+            model: this.model,
+            contents: batch,
+            config: {
+              outputDimensionality: this.dimensions,
+              ...(taskType ? { taskType } : {}),
+              abortSignal: AbortSignal.timeout(this.opts.timeoutMs),
+            },
+          }),
+        { rateLimitRetries: this.opts.embedRateLimitRetries ?? 3 },
       );
       const got = response.embeddings ?? [];
       if (got.length !== batch.length) {
