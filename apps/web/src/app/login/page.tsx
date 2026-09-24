@@ -58,6 +58,13 @@ function LoginForm() {
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
       <h1 className="text-2xl font-semibold text-indigo-800">Noctiv</h1>
       <p className="mb-6 text-sm text-neutral-600">Your AI employee for email.</p>
+      {params.get('deleted') && (
+        <div className="mb-6">
+          <Notice>
+            Your account and all its data are being deleted. Thank you for trying Noctiv.
+          </Notice>
+        </div>
+      )}
 
       {SUPABASE_ENABLED && (
         <form onSubmit={submit} className="space-y-4">

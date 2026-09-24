@@ -575,3 +575,10 @@ placeholders), Q15 sender-only replies (default: yes).
 - **API rate limits (in memory, one API instance):** 600 requests/min per IP; action links 30 per 10 min per IP; live mailbox tests 10 per 10 min per tenant; knowledge additions 60/h per tenant; business creation 5/h per IP. `API_TRUST_PROXY=true` behind Caddy so the real client IP is used.
 - **Action-link tokens** now require the exact signature text (base64url has unused trailing bits; found by a flaky test).
 
+### Decisions made during step 14 (GDPR)
+
+- **Retention (hourly, idempotent):** after `retention_days` the email text, subject and sender name, the model's classification/output, draft text, escalation summaries and outbound subjects are removed. Kept: Message-IDs (dedupe), addresses (threads and leads), statuses, timestamps, token counts. Delivered notifications are deleted after at most 30 days. The knowledge base is the tenant's own content and is not purged.
+- **Hard delete:** "type the business name" in Settings → API marks the tenant `deleting` (processing stops at once) → worker job deletes the tenant (every table cascades; a test counts rows in all tenant tables) and the owner logins that belong to no other tenant. Proof of erasure without personal data in `tenant_deletions`.
+- **Leads are kept** until the owner deletes them or the tenant; they are CRM records, not email content. Per-customer erasure across all messages is a follow-up.
+- `subprocessors.md` updated (Supabase without storage, Brevo chosen); `docs/data-flow.md` added.
+

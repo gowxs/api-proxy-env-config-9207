@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AppPage } from '@/components/shell';
 import {
@@ -15,6 +16,7 @@ import {
   useLoad,
 } from '@/components/ui';
 import { api } from '@/lib/api';
+import { signOut } from '@/lib/auth';
 import { useTenantId } from '@/lib/session';
 
 interface Tenant {
@@ -321,12 +323,62 @@ function SettingsForm({
   );
 }
 
+function DeleteAccount({ tenantId, name }: { tenantId: string; name: string }) {
+  const router = useRouter();
+  const [typed, setTyped] = useState('');
+  const { busy, error, run } = useAction();
+  return (
+    <Card title={<span className="text-red-800">Delete all data</span>}>
+      <p className="text-sm text-neutral-700">
+        Permanently deletes this business: conversations, drafts, leads, the knowledge base, mailbox
+        connections and your login. Nothing is kept except an anonymous record that a deletion
+        happened. This cannot be undone.
+      </p>
+      <p className="mt-2 text-sm text-neutral-700">
+        Emails already in your own mailbox are not touched.
+      </p>
+      <label className="mt-3 block text-sm">
+        Type <strong>{name}</strong> to confirm
+        <input
+          className={inputClass}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          autoComplete="off"
+        />
+      </label>
+      <ErrorText>{error}</ErrorText>
+      <Button
+        variant="danger"
+        className="mt-3"
+        disabled={busy || typed.trim() !== name.trim()}
+        onClick={() =>
+          void run(async () => {
+            await api(`/v1/tenants/${tenantId}`, {
+              method: 'DELETE',
+              body: { confirmName: typed },
+            });
+            await signOut();
+            router.replace('/login?deleted=1');
+          })
+        }
+      >
+        Delete everything
+      </Button>
+    </Card>
+  );
+}
+
 function Settings() {
   const tenantId = useTenantId();
   const { data, error, reload } = useLoad(() => api<Tenant>(`/v1/tenants/${tenantId}`), [tenantId]);
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
-  return <SettingsForm t={data} tenantId={tenantId} reload={reload} />;
+  return (
+    <div className="space-y-4">
+      <SettingsForm t={data} tenantId={tenantId} reload={reload} />
+      <DeleteAccount tenantId={tenantId} name={data.name} />
+    </div>
+  );
 }
 
 export default function SettingsPage() {

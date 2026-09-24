@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending), 10 (owner email notifications), 11 (follow-ups) and 12 (web app) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending), 10 (owner email notifications), 11 (follow-ups) 12 (web app), 13 (operations) and 14 (GDPR) done.
 
 ## Repository layout
 
@@ -131,6 +131,11 @@ is decided once; later clicks show what happened. Editing is dashboard-only. Tok
 are redacted from request logs. Notifications go through a `NotificationChannel`
 interface (email today). Delivery retries with backoff (1, 2, 4… minutes) and gives up
 after 5 attempts.
+
+## GDPR
+
+Retention purge (hourly), one-click hard delete, proof of erasure: see
+[docs/data-flow.md](docs/data-flow.md) and [subprocessors.md](subprocessors.md).
 
 ## Database access model (short version)
 

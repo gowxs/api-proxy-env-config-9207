@@ -12,6 +12,7 @@ import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { alertDeadJob } from './ops/alerts.ts';
+import { purgeExpiredContent, tenantDeleteHandler } from './ops/gdpr.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
@@ -53,6 +54,7 @@ const runner = new JobRunner({
       embeddings: providers.embeddings,
       logger,
     }),
+    [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
     [QUEUES.healthCheck]: healthCheckHandler({
       sql: db.sql,
       keys,
@@ -113,12 +115,14 @@ const refreshTimer = setInterval(
   60_000,
 );
 // Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
-// old health checks removed, and a health check per connected mailbox.
+// old health checks removed, a health check per connected mailbox, and
+// the retention purge (idempotent; content past retention_days is removed).
 const hourly = () =>
   Promise.all([
     db.sql`select * from app.housekeeping()`,
     db.sql`select * from app.hourly_maintenance()`,
     scanHealthChecks(db.sql),
+    purgeExpiredContent(db.sql),
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();

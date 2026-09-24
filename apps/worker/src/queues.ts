@@ -7,4 +7,5 @@ export const QUEUES = {
   kbIngest: 'kb.ingest',
   followup: 'followup.generate',
   healthCheck: 'connection.health',
+  tenantDelete: 'tenant.delete',
 } as const;

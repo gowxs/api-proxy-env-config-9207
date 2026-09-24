@@ -46,6 +46,30 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     };
   });
 
+  /**
+   * "Delete all data" (GDPR hard delete). The owner types the business name;
+   * the tenant stops at once and the worker erases everything.
+   */
+  app.delete('/v1/tenants/:tenantId', async (req, reply) => {
+    const { tenantId } = z.object({ tenantId: z.uuid() }).parse(req.params);
+    const { confirmName } = z
+      .object({ confirmName: z.string() })
+      .strict()
+      .parse(req.body ?? {});
+    await deps.requireMember(tenantId, req.user!.userId);
+    const [t] = await withTenant(
+      deps.sql,
+      tenantId,
+      (tx) => tx<{ name: string }[]>`select name from public.tenants`,
+    );
+    if (!t || confirmName.trim() !== t.name.trim())
+      throw new HttpError(400, 'Type the business name exactly as shown to confirm.');
+    const [r] = await deps.sql<{ ok: boolean }[]>`
+      select app.request_tenant_deletion(${tenantId}, ${req.user!.userId}) as ok`;
+    if (!r?.ok) throw new HttpError(403, 'Only an owner can delete the account.');
+    return reply.code(202).send({ status: 'deleting' });
+  });
+
   /** Onboarding step 1: the business. New accounts always start in draft-only mode. */
   app.post('/v1/tenants', async (req, reply) => {
     const user = req.user!;
