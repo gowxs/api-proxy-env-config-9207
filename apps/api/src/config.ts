@@ -31,6 +31,11 @@ export const apiEnvSchema = z
     /** Local development only: enables POST /dev/login for this (seeded) user. */
     DEV_LOGIN_USER_ID: z.uuid().optional(),
     DEV_LOGIN_EMAIL: z.email().default('owner@noctiv.local'),
+    /** true behind the Caddy reverse proxy (client IP from X-Forwarded-For). */
+    API_TRUST_PROXY: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
   })
   .refine((e) => !(e.NODE_ENV === 'production' && e.AUTH_JWKS_JSON), {
     path: ['AUTH_JWKS_JSON'],

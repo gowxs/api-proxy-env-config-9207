@@ -1,3 +1,4 @@
+import { budgetStateFor } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
 import {
   BlockedUrlError,
@@ -217,7 +218,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         today,
         open,
         budget: {
-          state: t!.budget_state,
+          // Computed from today's usage: the stored state lags until the next model call.
+          state: budgetStateFor(Number(usage?.tokens ?? 0), t!.daily_token_budget),
           dailyTokens: t!.daily_token_budget,
           usedTokens: Number(usage?.tokens ?? 0),
           llmCalls: usage?.llm_calls ?? 0,

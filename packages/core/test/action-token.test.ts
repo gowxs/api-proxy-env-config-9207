@@ -39,6 +39,13 @@ describe('action link tokens', () => {
       ok: false,
       reason: 'invalid',
     });
+    // Same bytes, different (non-canonical) text in the last character: rejected.
+    const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const twin = B64[B64.indexOf(sig!.at(-1)!) + 1]!; // differs only in the 2 unused bits
+    expect(Buffer.from(`${sig!.slice(0, -1)}${twin}`, 'base64url')).toEqual(
+      Buffer.from(sig!, 'base64url'),
+    );
+    expect(verifyActionToken(`${v}.${payload}.${sig!.slice(0, -1)}${twin}`, secret).ok).toBe(false);
     for (const junk of ['', 'v1', 'v1.a.b', 'v2.a.b', `${t}.x`, 'v1..']) {
       expect(verifyActionToken(junk, secret).ok).toBe(false);
     }

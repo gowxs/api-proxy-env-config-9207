@@ -56,8 +56,10 @@ export function verifyActionToken(token: string, secret: string, now = new Date(
     return { ok: false, reason: 'invalid' };
   }
   const data = `${parts[0]}.${parts[1]}`;
-  const given = Buffer.from(parts[2]!, 'base64url');
-  const expected = mac(secret, data);
+  // Compare the exact signature text: base64url decoding ignores unused
+  // trailing bits, so several strings would otherwise map to one signature.
+  const given = Buffer.from(parts[2]!, 'utf8');
+  const expected = Buffer.from(mac(secret, data).toString('base64url'), 'utf8');
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
     return { ok: false, reason: 'invalid' };
   }

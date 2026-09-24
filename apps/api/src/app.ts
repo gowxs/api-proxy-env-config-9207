@@ -4,6 +4,7 @@ import { withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
 import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
+import { registerRateLimits } from './rate-limit.ts';
 import { actionRoutes } from './routes/actions.ts';
 import { connectionRoutes } from './routes/connections.ts';
 import { meRoutes } from './routes/me.ts';
@@ -39,6 +40,10 @@ export interface AppDeps {
   inviteCodes?: string[];
   /** Development only: extra routes (the dev login). */
   devRoutes?: (app: FastifyInstance) => void;
+  /** Behind Caddy in production: take the client IP from X-Forwarded-For. */
+  trustProxy?: boolean;
+  /** Off only in tests that need many requests. */
+  rateLimits?: boolean;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -62,7 +67,10 @@ export function buildApp(
     bodyLimit: 1024 * 1024,
     // Signed action tokens are ~250 characters.
     routerOptions: { maxParamLength: 512 },
+    trustProxy: deps.trustProxy ?? false,
   });
+
+  if (deps.rateLimits !== false) registerRateLimits(app);
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 

@@ -6,4 +6,5 @@ export const QUEUES = {
   mailSend: 'mail.send',
   kbIngest: 'kb.ingest',
   followup: 'followup.generate',
+  healthCheck: 'connection.health',
 } as const;

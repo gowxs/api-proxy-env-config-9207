@@ -76,7 +76,9 @@ describe('action links (no database needed for invalid tokens)', () => {
     const app = buildApp({ ...base, checkDatabase: async () => true, actionSecret: secret });
     const ids = { tenantId: randomUUID(), draftId: randomUUID() };
     const good = signActionToken({ ...ids, action: 'approve' }, secret);
-    const tampered = good.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    const [v, payload, sig] = good.split('.');
+    const flipped = payload!.slice(0, 5) + (payload![5] === 'A' ? 'B' : 'A') + payload!.slice(6);
+    const tampered = `${v}.${flipped}.${sig}`;
     const bad = await app.inject({ method: 'POST', url: `/actions/${tampered}` });
     expect(bad.statusCode).toBe(404);
     expect(bad.headers['content-security-policy']).toContain("default-src 'none'");

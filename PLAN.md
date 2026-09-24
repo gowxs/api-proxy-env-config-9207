@@ -563,3 +563,15 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Local stack** (`pnpm dev:stack`) with a dev-only login (refused in production) so the app can be reviewed without a Supabase project; demo data is clearly fictional.
 - **Not in step 12:** "Delete all data" (GDPR hard delete) comes with the retention/deletion step.
 
+### Cloud project (2026-09-24)
+
+- Founder supplied the database password, service role key and session pooler (eu-central-1). Stored in `.env` only. This build environment's network policy blocks both the pooler (5432/6543) and HTTPS to the project, so migrations, runtime-role passwords, the cloud isolation check and the real sign-in test are **pending** until the environment allows the project's hosts (or they are run from another machine). Recommendation: rotate the service role key and database password after setup, since both were shared in chat.
+
+### Decisions made during step 13 (operations)
+
+- **Health checks hourly:** IMAP login + NOOP and SMTP login per connected mailbox, recorded (30 days). A rejected login disconnects the mailbox (owner + admin emailed, as before). Other failures do not stop the mailbox; three failed checks in a row email the admin (once per mailbox per day).
+- **Dead jobs** (retries used up) email the admin, at most once per tenant, queue and day. The alert names the job but carries no error text (details stay in `jobs.last_error`).
+- **Budget state** returns to `ok` hourly once a new UTC day has started (usage is per day); the dashboard computes the state from today's usage.
+- **API rate limits (in memory, one API instance):** 600 requests/min per IP; action links 30 per 10 min per IP; live mailbox tests 10 per 10 min per tenant; knowledge additions 60/h per tenant; business creation 5/h per IP. `API_TRUST_PROXY=true` behind Caddy so the real client IP is used.
+- **Action-link tokens** now require the exact signature text (base64url has unused trailing bits; found by a flaky test).
+

@@ -213,6 +213,29 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         ],
         footer: 'Noctiv admin alert.',
       });
+    case 'mailbox_unhealthy':
+      return render(`[admin] Mailbox checks failing (${n.tenantName})`, {
+        heading: 'A tenant mailbox failed its last health checks (login still accepted).',
+        lines: [
+          ['Tenant', `${n.tenantName} (${n.tenantId})`],
+          ['Connection', str(p.connectionId)],
+          ['Last error', str(p.code)],
+          ['Failed checks in a row', String(p.failedChecks ?? '?')],
+        ],
+        footer: 'Noctiv admin alert.',
+      });
+    case 'job_dead':
+      return render(`[admin] Job gave up: ${str(p.queue)} (${n.tenantName})`, {
+        heading: 'A background job used up its retries.',
+        lines: [
+          ['Tenant', `${n.tenantName} (${n.tenantId})`],
+          ['Queue', str(p.queue)],
+          ['Job', str(p.jobId)],
+          ['Error type', str(p.errorKind)],
+        ],
+        note: 'Details: public.jobs.last_error for this job id. One alert per tenant, queue and day.',
+        footer: 'Noctiv admin alert.',
+      });
     default:
       return render(`Noctiv notification (${headerText(String(n.kind), 40)})`, {
         heading: 'There is something new in your Noctiv dashboard.',

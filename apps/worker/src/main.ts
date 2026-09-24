@@ -11,6 +11,8 @@ import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { MailboxManager } from './mailbox/manager.ts';
+import { alertDeadJob } from './ops/alerts.ts';
+import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
@@ -51,6 +53,11 @@ const runner = new JobRunner({
       embeddings: providers.embeddings,
       logger,
     }),
+    [QUEUES.healthCheck]: healthCheckHandler({
+      sql: db.sql,
+      keys,
+      allowInsecure: config.MAIL_ALLOW_INSECURE,
+    }),
     [QUEUES.followup]: followupHandler({
       sql: db.sql,
       llm: providers.llm,
@@ -69,7 +76,12 @@ const runner = new JobRunner({
       logger,
     }),
   },
-  onError: (job, error, outcome) =>
+  onError: (job, error, outcome) => {
+    if (outcome === 'dead') {
+      void alertDeadJob(db.sql, job, error).catch((e: unknown) =>
+        logger.error({ err: String(e) }, 'dead-job alert failed'),
+      );
+    }
     logger.warn(
       {
         jobId: job.id,
@@ -79,7 +91,8 @@ const runner = new JobRunner({
         err: error instanceof Error ? error.message : 'error',
       },
       'job failed',
-    ),
+    );
+  },
 });
 
 const manager = new MailboxManager({
@@ -99,13 +112,16 @@ const refreshTimer = setInterval(
       .catch((e: unknown) => logger.error({ err: String(e) }, 'mailbox refresh failed')),
   60_000,
 );
-const housekeepingTimer = setInterval(
-  () =>
-    void db.sql`select * from app.housekeeping()`.catch((e: unknown) =>
-      logger.error({ err: String(e) }, 'housekeeping failed'),
-    ),
-  60 * 60_000,
-);
+// Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
+// old health checks removed, and a health check per connected mailbox.
+const hourly = () =>
+  Promise.all([
+    db.sql`select * from app.housekeeping()`,
+    db.sql`select * from app.hourly_maintenance()`,
+    scanHealthChecks(db.sql),
+  ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
+const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
+void hourly();
 
 let notifyTimer: NodeJS.Timeout | undefined;
 if (config.SYSTEM_SMTP_HOST) {

@@ -33,6 +33,7 @@ const app = buildApp({
   actionSecret: config.ACTION_LINK_SECRET,
   appUrl: config.PUBLIC_APP_URL,
   inviteCodes: config.SIGNUP_INVITE_CODES,
+  trustProxy: config.API_TRUST_PROXY,
   ...(devAuth ? { devRoutes: devAuth.routes } : {}),
 });
 
