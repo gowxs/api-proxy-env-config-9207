@@ -108,9 +108,11 @@ describe('note ingestion', () => {
       chunks: 1,
       unchanged: false,
     });
-    const [{ n }] = await owner<
-      { n: number }[]
-    >`select count(*)::int as n from public.kb_chunks where source_id = ${noteId}`;
+    const { n } = (
+      await owner<
+        { n: number }[]
+      >`select count(*)::int as n from public.kb_chunks where source_id = ${noteId}`
+    )[0]!;
     expect(n).toBe(1);
     const allow = await withTenant(worker, A.tenantId, (tx) => loadAllowlist(tx));
     expect([...allow.emails]).not.toContain('help@nordlicht.test');
@@ -212,9 +214,11 @@ describe('free-tier rule (strict, founder decision)', () => {
       retryable: false,
     });
     expect(p.embedCalls).toHaveLength(0);
-    const [{ n }] = await owner<
-      { n: number }[]
-    >`select count(*)::int as n from public.kb_chunks where source_id = ${sourceId}`;
+    const { n } = (
+      await owner<
+        { n: number }[]
+      >`select count(*)::int as n from public.kb_chunks where source_id = ${sourceId}`
+    )[0]!;
     expect(n).toBe(0);
   });
 
@@ -269,8 +273,10 @@ describe('retrieval', () => {
     expect(chunks[0]!.content).toContain('Shipping to Germany takes 5 business days');
     expect(chunks.some((c) => c.content.includes('Berlin warehouse'))).toBe(false);
     const ids = chunks.map((c) => c.id);
-    const [{ foreign }] = await owner<{ foreign: number }[]>`
-      select count(*)::int as foreign from public.kb_chunks where id = any(${ids}::uuid[]) and tenant_id <> ${A.tenantId}`;
+    const { foreign } = (
+      await owner<{ foreign: number }[]>`
+      select count(*)::int as foreign from public.kb_chunks where id = any(${ids}::uuid[]) and tenant_id <> ${A.tenantId}`
+    )[0]!;
     expect(foreign).toBe(0);
   });
 

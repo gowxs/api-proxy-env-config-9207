@@ -22,6 +22,7 @@ import {
   guardReply,
   type Classification,
   type GenerateRequest,
+  ZERO_USAGE,
 } from '@noctiv/core';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createProviders, resolveLlmConfig } from '../src/index.ts';

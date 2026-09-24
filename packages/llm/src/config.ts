@@ -122,7 +122,7 @@ export interface Providers {
 
 export function createProviders(
   config: LlmConfig,
-  deps: { clientFactory?: ClientFactory } = {},
+  deps: { clientFactory?: ClientFactory; maxRetries?: number } = {},
 ): Providers {
   const c = config.common;
   const shared = {
@@ -130,6 +130,7 @@ export function createProviders(
     embeddingModel: c.embeddingModel,
     timeoutMs: c.timeoutMs,
     clientFactory: deps.clientFactory,
+    maxRetries: deps.maxRetries,
   };
   let provider: VertexGeminiProvider | GoogleAiStudioProvider | FakeProvider;
   if (config.provider === 'vertex') {

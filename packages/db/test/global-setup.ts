@@ -16,19 +16,6 @@ export const SUPABASE_STORAGE_IMAGE = 'supabase/storage-api:v1.79.17';
 const STORAGE_JWT_SECRET = 'local-test-jwt-secret-at-least-32-characters';
 const RUNTIME_ROLE_PASSWORD = 'test-runtime-password';
 
-declare module 'vitest' {
-  export interface ProvidedContext {
-    /** Schema owner (Supabase `postgres` role) — bypasses RLS; use only for fixtures. */
-    ownerDatabaseUrl: string;
-    apiDatabaseUrl: string;
-    workerDatabaseUrl: string;
-    /** Supabase Storage REST base URL, or '' when Storage is not available. */
-    storageUrl: string;
-    /** Server-side (service_role) token for that Storage instance. */
-    storageToken: string;
-  }
-}
-
 /** HS256 JWT like the ones Supabase issues; used only against the local Storage container. */
 export function signLocalJwt(secret: string, role: string): string {
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');

@@ -49,6 +49,7 @@ pnpm dev:web            # http://localhost:3000
 
 | Command                                              | Does                                                                                                                     |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check`                                         | Everything CI runs except DB tests: format, lint, typecheck, unit tests (stops at the first failure)                     |
 | `pnpm test`                                          | Unit tests (no Docker needed)                                                                                            |
 | `pnpm test:db`                                       | Database tests incl. tenant isolation. Starts a throwaway `supabase/postgres` container, or uses `TEST_DATABASE_URL`     |
 | `pnpm lint` / `pnpm typecheck` / `pnpm format:check` | Static checks (also run in CI)                                                                                           |

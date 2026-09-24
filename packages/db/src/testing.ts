@@ -6,6 +6,20 @@
 import { randomUUID } from 'node:crypto';
 import type { Sql, TransactionSql } from 'postgres';
 
+// Values the db test global setup provides to tests (packages/db/test/global-setup.ts).
+declare module 'vitest' {
+  export interface ProvidedContext {
+    /** Schema owner (Supabase `postgres` role) — bypasses RLS; use only for fixtures. */
+    ownerDatabaseUrl: string;
+    apiDatabaseUrl: string;
+    workerDatabaseUrl: string;
+    /** Supabase Storage REST base URL, or '' when Storage is not available. */
+    storageUrl: string;
+    /** Server-side (service_role) token for that Storage instance. */
+    storageToken: string;
+  }
+}
+
 export const EMBEDDING_DIMS = 768;
 export const TEST_EMBEDDING_MODEL = 'test-embedding';
 

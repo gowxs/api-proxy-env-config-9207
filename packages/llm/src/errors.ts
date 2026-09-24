@@ -1,5 +1,12 @@
 export type LlmErrorKind =
-  'rate_limited' | 'unavailable' | 'timeout' | 'invalid_request' | 'auth' | 'not_found' | 'unknown';
+  | 'rate_limited'
+  | 'quota_exhausted'
+  | 'unavailable'
+  | 'timeout'
+  | 'invalid_request'
+  | 'auth'
+  | 'not_found'
+  | 'unknown';
 
 /**
  * Provider failure with a coarse, loggable kind. The message never contains
