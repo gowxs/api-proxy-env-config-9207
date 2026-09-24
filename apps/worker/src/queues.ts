@@ -5,4 +5,5 @@ export const QUEUES = {
   mailProcess: 'mail.process',
   mailSend: 'mail.send',
   kbIngest: 'kb.ingest',
+  followup: 'followup.generate',
 } as const;

@@ -200,6 +200,8 @@ async function planSend(
       connection_id: string;
       lead_id: string | null;
       followups_sent: number;
+      thread_status: string;
+      last_outbound_at: Date | null;
       tenant_status: string;
       mode: string;
       reply_signature: string | null;
@@ -212,7 +214,7 @@ async function planSend(
     }[]
   >`
     select d.id, d.status, d.kind, d.to_address, d.subject, d.body, d.decided_by, d.thread_id, d.source_message_id,
-           th.connection_id, th.lead_id, th.followups_sent,
+           th.connection_id, th.lead_id, th.followups_sent, th.status as thread_status, th.last_outbound_at,
            t.status as tenant_status, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
            t.followup_after_days, t.followup_max, t.max_replies_per_hour, t.max_ai_replies_per_sender_24h
     from public.drafts d
@@ -258,6 +260,16 @@ async function planSend(
   } else {
     if (d.status !== 'approved') return { done: { skipped: `draft_${d.status}` } };
     if (d.tenant_status !== 'active') return { done: { skipped: 'tenant_inactive' } };
+    if (d.kind === 'followup') {
+      // A follow-up is only sent while the customer still has not answered.
+      const answered = await tx`
+        select 1 from public.messages where thread_id = ${d.thread_id} and direction = 'inbound'
+          and received_at > ${d.last_outbound_at ?? new Date(0)} limit 1`;
+      if (d.thread_status !== 'awaiting_customer' || answered.length) {
+        await tx`update public.drafts set status = 'superseded' where id = ${d.id}`;
+        return { done: { skipped: 'followup_superseded' } };
+      }
+    }
     outbound = { id: '', status: 'sending', messageId: '', sentVia: 'owner_approval' };
     outbound.sentVia = d.decided_by === 'auto' ? 'auto' : 'owner_approval';
   }

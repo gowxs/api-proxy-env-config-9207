@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending) and 10 (owner email notifications) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending), 10 (owner email notifications) and 11 (follow-ups) done.
 
 ## Repository layout
 
@@ -226,6 +226,10 @@ To ingest one source by hand (until step 7 adds the job queue):
    follow-up time (Mon–Fri, 09:00–17:00 tenant time), and the lead moves to `sent`.
    If a worker crashed mid-send, the retry looks for the Message-ID in Sent; if that
    proves nothing, it never resends and the owner is told instead.
+5. **Follow up (worker, every 15 min).** Threads where the customer has not answered
+   get up to `followup_max` short check-ins, N business days apart, sent only
+   Mon–Fri 09:00–17:00 tenant time. They pass the same checks as replies; anything
+   doubtful becomes a draft or stops the follow-ups. A customer reply stops them.
 
 Run a real mailbox check in development with `MAIL_ALLOW_INSECURE=false`; GreenMail needs `true`.
 Hand-picked real-model pipeline run: `LIVE_PIPELINE=1 pnpm test:live apps/worker` (free-tier quota applies).

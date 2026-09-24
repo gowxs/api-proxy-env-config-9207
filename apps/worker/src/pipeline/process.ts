@@ -158,6 +158,9 @@ async function trackLead(
              values (${tenantId}, ${leadId}, 'received', 'system', 'first message')`;
   }
   await tx`update public.threads set lead_id = coalesce(lead_id, ${leadId}) where id = ${l.message.threadId}`;
+  // The customer wrote again: a follow-up still waiting to go out is obsolete.
+  await tx`update public.drafts set status = 'superseded'
+           where thread_id = ${l.message.threadId} and kind = 'followup' and status in ('pending_approval', 'approved')`;
   if (l.thread.status === 'awaiting_customer') {
     await tx`update public.threads set status = 'customer_replied', next_followup_at = null, followup_stop_reason = 'customer_replied'
              where id = ${l.message.threadId}`;

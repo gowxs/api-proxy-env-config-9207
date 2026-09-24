@@ -3,7 +3,9 @@ import { createDb, JobRunner } from '@noctiv/db';
 import { createSafeFetcher } from '@noctiv/kb';
 import { createProviders, resolveLlmConfig } from '@noctiv/llm';
 import { loadSealingKeys, loadWorkerConfig } from './config.ts';
+import { scanFollowups } from './followups/followup.ts';
 import { connectionTestHandler } from './jobs/connection-test.ts';
+import { followupHandler } from './jobs/followup.ts';
 import { kbIngestHandler } from './jobs/kb-ingest.ts';
 import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
@@ -44,6 +46,12 @@ const runner = new JobRunner({
       allowInsecure: config.MAIL_ALLOW_INSECURE,
     }),
     [QUEUES.mailProcess]: mailProcessHandler({
+      sql: db.sql,
+      llm: providers.llm,
+      embeddings: providers.embeddings,
+      logger,
+    }),
+    [QUEUES.followup]: followupHandler({
       sql: db.sql,
       llm: providers.llm,
       embeddings: providers.embeddings,
@@ -144,12 +152,21 @@ if (config.SYSTEM_SMTP_HOST) {
 } else {
   logger.warn('SYSTEM_SMTP_HOST not set: owner notifications stay queued');
 }
+// PLAN.md §4.7: follow-ups.scan every 15 minutes.
+const followupTimer = setInterval(
+  () =>
+    void scanFollowups(db.sql).catch((e: unknown) =>
+      logger.error({ err: String(e) }, 'follow-up scan failed'),
+    ),
+  15 * 60_000,
+);
 logger.info({ mailboxes: manager.active.length }, 'worker started');
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, 'shutting down');
   clearInterval(refreshTimer);
   clearInterval(housekeepingTimer);
+  clearInterval(followupTimer);
   if (notifyTimer) clearInterval(notifyTimer);
   await manager.stopAll();
   await runner.stop();

@@ -544,3 +544,10 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Recipients:** owner = the Supabase login email(s) of the tenant's owners (read through a SECURITY DEFINER function returning only emails). Admin = `ADMIN_EMAIL`. Production config refuses to start without the mailer, the link secret and `ADMIN_EMAIL`.
 - **Loop safety:** notification emails carry `Auto-Submitted: auto-generated`. If the owner's login is also a connected mailbox, the loop filter skips them (tested).
 
+### Decisions made during step 11 (follow-ups)
+
+- **Scan:** every 15 minutes the worker finds due threads (SECURITY DEFINER function, identifiers only) and queues one `followup.generate` job per thread (singleton). Each job re-checks inside the tenant's RLS context: still waiting for the customer, due, under the tenant's maximum, no customer message since our last reply, lead not converted/escalated, mailbox connected, no follow-up draft already waiting.
+- **Business window (Q7):** outside Mon–Fri 09:00–17:00 tenant time the job only moves `next_followup_at` to the next window start; no model call.
+- **Same safety path as replies:** own prompt (2–4 sentences, no pressure, no offers), same JSON schema, sanitizer, claim checks, policy engine and fact-check. Auto-send tenants: sent only if everything passes; otherwise a draft for approval (owner email as for replies). A follow-up the policy would escalate is **not** sent and follow-ups for that thread stop (`policy_escalate`): nobody is waiting for it, so the owner is not bothered.
+- **While a follow-up waits for approval** the thread's clock is paused; sending it schedules the next one (or stops at the maximum). If the customer writes in the meantime, the waiting follow-up is marked `superseded` and never sent (checked again at send time).
+
