@@ -5,27 +5,21 @@ import { FakeProvider } from '@noctiv/llm';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import {
+  createFileSource,
   createSafeFetcher,
   ingestSource,
-  kbObjectPath,
   loadAllowlist,
-  MemoryBlobStore,
   retrieveKnowledge,
-  SupabaseStorageBlobStore,
-  type BlobStore,
 } from '../src/index.ts';
 import { makePdf, serveSite } from './helpers.ts';
 
 const owner = postgres(inject('ownerDatabaseUrl'), { max: 2, onnotice: () => {} });
 const worker = postgres(inject('workerDatabaseUrl'), { max: 2, onnotice: () => {} });
-const storageUrl = inject('storageUrl');
-const storageToken = inject('storageToken');
 
 const provider = new FakeProvider();
 const fetcher = createSafeFetcher({ allowPrivateNetworks: true });
-const deps = (blobs: BlobStore = new MemoryBlobStore(), embeddings = provider) => ({
+const deps = (embeddings = provider) => ({
   sql: worker,
-  blobs,
   embeddings,
   fetcher,
   crawl: { delayMs: 0 },
@@ -119,54 +113,81 @@ describe('note ingestion', () => {
   });
 });
 
-describe('file ingestion through Supabase Storage', () => {
-  it.skipIf(!storageUrl)('reads an uploaded PDF from the private bucket', async () => {
-    const blobs = new SupabaseStorageBlobStore({ baseUrl: storageUrl, token: storageToken });
-    await blobs.ensureBucket();
-    const sourceId = randomUUID();
-    const path = kbObjectPath(A.tenantId, sourceId, 'prices.pdf');
-    await blobs.put(
-      A.tenantId,
-      path,
-      await makePdf(['Price list', 'Gift set of three candles: 65 EUR']),
-      'application/pdf',
+describe('file ingestion (originals are not kept)', () => {
+  it('extracts text from a staged upload and deletes the upload', async () => {
+    const sourceId = await withTenant(worker, A.tenantId, async (tx) =>
+      createFileSource(tx, {
+        tenantId: A.tenantId,
+        fileName: 'Preisliste 2026.pdf',
+        bytes: await makePdf(['Price list', 'Gift set of three candles: 65 EUR']),
+      }),
     );
-    await owner`insert into public.kb_sources ${owner({
-      id: sourceId,
-      tenant_id: A.tenantId,
-      type: 'file',
-      title: 'prices.pdf',
-      storage_path: path,
-      mime_type: 'application/pdf',
-    } as never)}`;
-    expect(await ingestSource(deps(blobs), A.tenantId, sourceId)).toMatchObject({
+    const [job] = await owner<{ queue: string; payload: { sourceId: string } }[]>`
+      select queue, payload from public.jobs where tenant_id = ${A.tenantId} and payload->>'sourceId' = ${sourceId}`;
+    expect(job).toEqual({ queue: 'kb.ingest', payload: { sourceId } });
+
+    expect(await ingestSource(deps(), A.tenantId, sourceId)).toMatchObject({
       status: 'ready',
       unchanged: false,
     });
-    const [c] = await owner<
-      { content: string }[]
-    >`select content from public.kb_chunks where source_id = ${sourceId}`;
+    const c = (
+      await owner<
+        { content: string }[]
+      >`select content from public.kb_chunks where source_id = ${sourceId}`
+    )[0];
     expect(c?.content).toContain('65 EUR');
+    const left = (
+      await owner<
+        { n: number }[]
+      >`select count(*)::int as n from public.kb_uploads where source_id = ${sourceId}`
+    )[0]!;
+    expect(left.n).toBe(0);
+    const [src] = await owner<
+      { title: string }[]
+    >`select title from public.kb_sources where id = ${sourceId}`;
+    expect(src?.title).toBe('Preisliste_2026.pdf');
   });
 
-  it('marks the source failed (retryable) when the file is missing', async () => {
-    const sourceId = await addSource(A, {
-      type: 'file',
-      title: 'x.pdf',
-      storage_path: `${A.tenantId}/${randomUUID()}/x.pdf`,
-    });
+  it('rejects an unreadable file and does not keep it', async () => {
+    const sourceId = await withTenant(worker, A.tenantId, (tx) =>
+      createFileSource(tx, {
+        tenantId: A.tenantId,
+        fileName: 'broken.pdf',
+        bytes: new TextEncoder().encode('%PDF-1.7 garbage'),
+      }),
+    );
     expect(await ingestSource(deps(), A.tenantId, sourceId)).toEqual({
       status: 'failed',
-      reason: 'storage_failed',
-      retryable: true,
+      reason: 'extraction_failed',
+      retryable: false,
     });
-    expect(await sourceRow(sourceId)).toMatchObject({ status: 'failed', error: 'storage_failed' });
+    const left = (
+      await owner<
+        { n: number }[]
+      >`select count(*)::int as n from public.kb_uploads where source_id = ${sourceId}`
+    )[0]!;
+    expect(left.n).toBe(0);
   });
 
-  it('the database refuses a storage path outside the tenant folder', async () => {
+  it('refuses disallowed file types before anything is stored', async () => {
     await expect(
-      addSource(A, { type: 'file', title: 'x', storage_path: `${B.tenantId}/x/y.pdf` }),
-    ).rejects.toMatchObject({ code: '23514' });
+      withTenant(worker, A.tenantId, (tx) =>
+        createFileSource(tx, {
+          tenantId: A.tenantId,
+          fileName: 'x.png',
+          bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0]),
+        }),
+      ),
+    ).rejects.toThrow(/unsupported_type/);
+  });
+
+  it('a file source whose upload is gone fails without retrying', async () => {
+    const sourceId = await addSource(A, { type: 'file', title: 'x.pdf' });
+    expect(await ingestSource(deps(), A.tenantId, sourceId)).toEqual({
+      status: 'failed',
+      reason: 'upload_missing',
+      retryable: false,
+    });
   });
 });
 
@@ -208,7 +229,7 @@ describe('free-tier rule (strict, founder decision)', () => {
       title: 'n',
       note_text: 'Candles cost 24 EUR.',
     });
-    expect(await ingestSource(deps(new MemoryBlobStore(), p), B.tenantId, sourceId)).toEqual({
+    expect(await ingestSource(deps(p), B.tenantId, sourceId)).toEqual({
       status: 'failed',
       reason: 'free_tier_customer_data',
       retryable: false,
@@ -231,7 +252,7 @@ describe('free-tier rule (strict, founder decision)', () => {
       title: 'n',
       note_text: 'Candles cost 24 EUR.',
     });
-    expect(await ingestSource(deps(new MemoryBlobStore(), p), T.tenantId, sourceId)).toMatchObject({
+    expect(await ingestSource(deps(p), T.tenantId, sourceId)).toMatchObject({
       status: 'ready',
     });
     expect(p.embedCalls[0]!.origin).toBe('test_mailbox');

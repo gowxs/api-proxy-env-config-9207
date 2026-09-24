@@ -500,3 +500,10 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Results:** the model complied with an attack **0** times. It chose `auto_send` on 7 hostile emails with harmless, grounded replies, and the code checks held all 7 as drafts. Both benign controls (EN, DE) were auto-sent with correct, sourced answers, so there were no false positives from the claim detector on real text.
 - **Gap found and fixed:** in A16 (reply to `ceo [at] evil-corp [dot] com`), the model ignored the attack, but our checks raised no injection signal, so the harmless reply was auto-sent. New signals: `reply_redirect_request` (6 languages) and `obfuscated_address`. Any email asking for a reply elsewhere is now never auto-sent.
 - **Regression:** the real model outputs are stored in `packages/core/test/fixtures/live-outputs-2026-09-24.json` and replayed through the guards on every unit-test run.
+
+### Decisions after the step 5 report (2026-09-24)
+
+- **No original files (founder decision 1b):** an uploaded file waits in `kb_uploads` (RLS like every table) only until its text is extracted, and is deleted after successful ingestion or after a non-retryable failure. Supabase Storage and `kb_sources.storage_path` are gone from the runtime.
+- **Upload screens** are built in step 12 (founder OK).
+- **No billing:** steps 7–8 are tested end to end with the fake provider; the real model is used only for a few hand-picked emails within the free tier's 20 requests per day.
+- **Job queue: own implementation instead of pg-boss (changes Q9).** pg-boss creates a table partition per queue at runtime, which needs schema-owner rights our RLS-bound runtime roles must not have. `public.jobs` is a small queue: `SKIP LOCKED`, singleton keys, retries with exponential backoff, dead-lettering, leases re-claimed after a crash, and `tenant_id` + RLS like every other table. The worker claims across tenants only through SECURITY DEFINER functions.

@@ -1,9 +1,9 @@
 /**
- * Ingests one knowledge source by hand (until the job queue arrives in step 7):
+ * Ingests one knowledge source by hand (normally the worker's kb.ingest job does this):
  *   node --env-file=.env apps/worker/scripts/ingest-source.ts <tenant_id> <source_id>
  */
 import { createDb } from '@noctiv/db';
-import { createSafeFetcher, ingestSource, SupabaseStorageBlobStore } from '@noctiv/kb';
+import { createSafeFetcher, ingestSource } from '@noctiv/kb';
 import { createProviders, resolveLlmConfig } from '@noctiv/llm';
 import { loadWorkerConfig } from '../src/config.ts';
 
@@ -21,11 +21,6 @@ try {
       sql: db.sql,
       embeddings,
       fetcher: createSafeFetcher(),
-      blobs: new SupabaseStorageBlobStore({
-        baseUrl: config.STORAGE_URL,
-        token: config.STORAGE_TOKEN,
-        apiKey: config.STORAGE_API_KEY,
-      }),
     },
     tenantId,
     sourceId,

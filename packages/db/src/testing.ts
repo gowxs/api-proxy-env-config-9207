@@ -13,10 +13,6 @@ declare module 'vitest' {
     ownerDatabaseUrl: string;
     apiDatabaseUrl: string;
     workerDatabaseUrl: string;
-    /** Supabase Storage REST base URL, or '' when Storage is not available. */
-    storageUrl: string;
-    /** Server-side (service_role) token for that Storage instance. */
-    storageToken: string;
   }
 }
 
@@ -90,6 +86,13 @@ export async function seedTenant(
         TEST_EMBEDDING_MODEL,
       ],
     );
+    const uploadSourceId = randomUUID();
+    await tx`insert into public.kb_sources (id, tenant_id, type, title, mime_type, status)
+             values (${uploadSourceId}, ${tenantId}, 'file', ${`upload-${label}.txt`}, 'text/plain', 'pending')`;
+    await tx`insert into public.kb_uploads (source_id, tenant_id, bytes, mime_type)
+             values (${uploadSourceId}, ${tenantId}, ${Buffer.from(`Private upload ${label}`)}, 'text/plain')`;
+    await tx`insert into public.jobs (tenant_id, queue, payload)
+             values (${tenantId}, 'test.seed', ${tx.json({ label })})`;
     await tx`insert into public.kb_allowlist (tenant_id, source_id, kind, value)
              values (${tenantId}, ${sourceId}, 'domain', ${`${label}.example.test`})`;
     await tx`insert into public.leads (id, tenant_id, email, name) values (${leadId}, ${tenantId}, ${customer}, ${`Customer ${label}`})`;

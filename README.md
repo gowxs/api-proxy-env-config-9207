@@ -8,17 +8,17 @@ and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build or
 
 ## Repository layout
 
-| Path                  | What                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
-| `apps/api`            | Fastify HTTP API (wizard, approvals, Telegram webhook)                                            |
-| `apps/worker`         | IMAP listeners, job consumers, crons — the only process that can decrypt mailbox credentials      |
-| `apps/web`            | Next.js + Tailwind dashboard                                                                      |
-| `packages/core`       | Pure domain logic, env loading, redacting logger                                                  |
-| `packages/llm`        | Gemini providers (AI Studio free tier for tests, Vertex AI EU for production), fake provider      |
-| `packages/kb`         | Knowledge base: file/website/note ingestion, Storage adapter, SSRF-safe crawler, hybrid retrieval |
-| `packages/db`         | Postgres client, migration runner, `withTenant` helper                                            |
-| `supabase/migrations` | SQL schema — source of truth (Supabase CLI compatible)                                            |
-| `docker/`             | Local services (Supabase Postgres, GreenMail)                                                     |
+| Path                  | What                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `apps/api`            | Fastify HTTP API (wizard, approvals, Telegram webhook)                                       |
+| `apps/worker`         | IMAP listeners, job consumers, crons — the only process that can decrypt mailbox credentials |
+| `apps/web`            | Next.js + Tailwind dashboard                                                                 |
+| `packages/core`       | Pure domain logic, env loading, redacting logger                                             |
+| `packages/llm`        | Gemini providers (AI Studio free tier for tests, Vertex AI EU for production), fake provider |
+| `packages/kb`         | Knowledge base: file/website/note ingestion, SSRF-safe crawler, hybrid retrieval             |
+| `packages/db`         | Postgres client, migration runner, `withTenant` helper                                       |
+| `supabase/migrations` | SQL schema — source of truth (Supabase CLI compatible)                                       |
+| `docker/`             | Local services (Supabase Postgres, GreenMail)                                                |
 
 TypeScript runs directly on Node 22 (native type stripping) — there is no build step
 for `api`, `worker` or the packages. Only `web` is built (`next build`).
@@ -34,7 +34,7 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 corepack enable
 pnpm install
 cp .env.example .env
-pnpm services:up        # Supabase Postgres :54322, Supabase Storage :54324, GreenMail :3025/:3143
+pnpm services:up        # Supabase Postgres :54322, GreenMail :3025/:3143
 pnpm db:migrate         # applies supabase/migrations as the schema owner
 # give the runtime roles a local password (matches .env.example):
 psql postgres://postgres:postgres@localhost:54322/postgres \
@@ -154,11 +154,11 @@ To check a configured provider live (models served, embedding size, JSON output)
 
 ## Knowledge base (`packages/kb`)
 
-| Source                         | How it is read                                                                                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| File (PDF, DOCX, TXT; ≤ 10 MB) | Type detected from the bytes, not the name. Stored in the private `kb-files` bucket at `<tenant_id>/<source_id>/<file>`. Text extracted with `unpdf` / `mammoth`. |
-| Website                        | Same-site crawl: robots.txt respected, ≤ 50 pages, depth ≤ 3, 1 request/s, HTML only. Scripts, navigation, forms and CSS-hidden text are dropped.                 |
-| Note                           | Text stored on the source row (`kb_sources.note_text`).                                                                                                           |
+| Source                         | How it is read                                                                                                                                                                      |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File (PDF, DOCX, TXT; ≤ 10 MB) | Type detected from the bytes, not the name. The upload waits in `kb_uploads` until its text is extracted, then it is **deleted**. Original files are never kept (founder decision). |
+| Website                        | Same-site crawl: robots.txt respected, ≤ 50 pages, depth ≤ 3, 1 request/s, HTML only. Scripts, navigation, forms and CSS-hidden text are dropped.                                   |
+| Note                           | Text stored on the source row (`kb_sources.note_text`).                                                                                                                             |
 
 Then:
 
@@ -181,8 +181,3 @@ is processed only if **all** its mailboxes are test mailboxes.
 
 To ingest one source by hand (until step 7 adds the job queue):
 `node --env-file=.env apps/worker/scripts/ingest-source.ts <tenant_id> <source_id>`.
-
-**Storage credential (open decision).** Locally, Storage takes a service token
-signed with the container's own secret (`packages/kb/scripts/local-storage-token.ts`).
-Hosted Supabase reserves the storage admin role, so a Storage-only database role
-isn't possible there. The production credential is still to be decided (see PLAN.md §11).

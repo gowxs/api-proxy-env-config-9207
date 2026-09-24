@@ -12,19 +12,19 @@ import { currentBudget, recordUsage, withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
 import { detectKbFile, extractFileText } from './extract/files.ts';
 import {
+  deleteUpload,
   getSource,
+  getUpload,
   markSource,
   replaceSourceContent,
   tenantMailboxFlags,
   type ChunkToStore,
 } from './repo.ts';
-import type { BlobStore } from './storage/blob-store.ts';
 import { crawlSite, type CrawlOptions } from './web/crawl.ts';
 import type { SafeFetch } from './web/safe-fetch.ts';
 
 export interface IngestDeps {
   sql: Sql;
-  blobs: BlobStore;
   embeddings: EmbeddingProvider;
   fetcher: SafeFetch;
   crawl?: CrawlOptions;
@@ -37,7 +37,7 @@ export type IngestFailure =
   | 'no_text'
   | 'extraction_failed'
   | 'fetch_failed'
-  | 'storage_failed'
+  | 'upload_missing'
   | 'embedding_failed';
 
 export type IngestOutcome =
@@ -47,7 +47,6 @@ export type IngestOutcome =
 const RETRYABLE: ReadonlySet<IngestFailure> = new Set([
   'budget_halted',
   'fetch_failed',
-  'storage_failed',
   'embedding_failed',
 ]);
 
@@ -73,12 +72,8 @@ async function collectText(
     };
   }
   if (source.type === 'file') {
-    let bytes: Uint8Array;
-    try {
-      bytes = await deps.blobs.get(tenantId, source.storage_path ?? '');
-    } catch {
-      throw new IngestError('storage_failed');
-    }
+    const bytes = await withTenant(deps.sql, tenantId, (tx) => getUpload(tx, source.id));
+    if (!bytes) throw new IngestError('upload_missing');
     try {
       const text = await extractFileText(detectKbFile(bytes), bytes);
       return {
@@ -124,10 +119,13 @@ export async function ingestSource(
   sourceId: string,
 ): Promise<IngestOutcome> {
   const fail = async (reason: IngestFailure): Promise<IngestOutcome> => {
-    await withTenant(deps.sql, tenantId, (tx) =>
-      markSource(tx, sourceId, { status: 'failed', error: reason }),
-    );
-    return { status: 'failed', reason, retryable: RETRYABLE.has(reason) };
+    const retryable = RETRYABLE.has(reason);
+    await withTenant(deps.sql, tenantId, async (tx) => {
+      await markSource(tx, sourceId, { status: 'failed', error: reason });
+      // A rejected file is not kept for later; retryable failures keep it for the retry.
+      if (!retryable) await deleteUpload(tx, sourceId);
+    });
+    return { status: 'failed', reason, retryable };
   };
 
   const start = await withTenant(deps.sql, tenantId, async (tx) => {
@@ -159,7 +157,10 @@ export async function ingestSource(
       start.source.embedding_model === deps.embeddings.model &&
       start.source.status !== 'failed'
     ) {
-      await withTenant(deps.sql, tenantId, (tx) => markSource(tx, sourceId, { status: 'ready' }));
+      await withTenant(deps.sql, tenantId, async (tx) => {
+        await markSource(tx, sourceId, { status: 'ready' });
+        await deleteUpload(tx, sourceId);
+      });
       return { status: 'ready', chunks: -1, unchanged: true };
     }
 
@@ -200,6 +201,7 @@ export async function ingestSource(
         pagesFetched: pages,
       });
       await recordUsage(tx, { tenantId, embedTokens: embedded.usage.inputTokens });
+      await deleteUpload(tx, sourceId);
     });
     return { status: 'ready', chunks: chunks.length, unchanged: false };
   } catch (e) {

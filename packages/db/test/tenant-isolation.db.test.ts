@@ -50,8 +50,8 @@ async function canSelectTenantId(role: string, table: string): Promise<boolean> 
 }
 
 describe('schema invariants', () => {
-  it('covers all 20 Phase 1 tables', () => {
-    expect(tables).toHaveLength(20);
+  it('covers all 22 Phase 1 tables', () => {
+    expect(tables).toHaveLength(22);
   });
 
   it('every table has tenant_id, forced RLS and both isolation policies', async () => {
@@ -257,6 +257,8 @@ describe('dashboard users (Supabase Auth + RLS)', () => {
       'telegram_link_tokens',
       'kb_chunks',
       'kb_allowlist',
+      'kb_uploads',
+      'jobs',
       'notifications',
       'tenant_deletions',
     ]) {
@@ -375,6 +377,7 @@ describe('knowledge-base search', () => {
       'select * from app.search_kb_chunks_fts(gen_random_uuid(), $$x$$, 1)',
       'select * from app.list_active_tenants()',
       'select * from app.list_mail_connections()',
+      "select * from app.claim_jobs(array['test.seed'], 1, 30)",
     ];
     for (const q of calls) {
       await expect(withTenant(api, A.tenantId, (tx) => tx.unsafe(q))).rejects.toMatchObject({

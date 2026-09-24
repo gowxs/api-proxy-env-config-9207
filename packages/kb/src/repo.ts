@@ -7,7 +7,6 @@ export interface KbSourceRow {
   type: 'website' | 'file' | 'note';
   title: string;
   url: string | null;
-  storage_path: string | null;
   mime_type: string | null;
   note_text: string | null;
   content_hash: string | null;
@@ -22,9 +21,25 @@ export async function getSource(
   sourceId: string,
 ): Promise<KbSourceRow | undefined> {
   const [row] = await tx<KbSourceRow[]>`
-    select id, tenant_id, type, title, url, storage_path, mime_type, note_text, content_hash, embedding_model, status
+    select id, tenant_id, type, title, url, mime_type, note_text, content_hash, embedding_model, status
     from public.kb_sources where id = ${sourceId}`;
   return row;
+}
+
+/** The staged upload of a file source, if it has not been ingested (and deleted) yet. */
+export async function getUpload(
+  tx: TransactionSql,
+  sourceId: string,
+): Promise<Uint8Array | undefined> {
+  const [row] = await tx<
+    { bytes: Buffer }[]
+  >`select bytes from public.kb_uploads where source_id = ${sourceId}`;
+  return row ? new Uint8Array(row.bytes) : undefined;
+}
+
+/** Originals are never kept (founder decision): drop the bytes once read or rejected. */
+export async function deleteUpload(tx: TransactionSql, sourceId: string): Promise<void> {
+  await tx`delete from public.kb_uploads where source_id = ${sourceId}`;
 }
 
 export async function tenantMailboxFlags(

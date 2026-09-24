@@ -9,21 +9,9 @@ export {
 } from './extract/files.ts';
 export { extractHtml, type ExtractedPage } from './extract/html.ts';
 export { ingestSource, type IngestDeps, type IngestFailure, type IngestOutcome } from './ingest.ts';
-export { getSource, loadAllowlist, type RetrievedChunk } from './repo.ts';
+export { deleteUpload, getSource, getUpload, loadAllowlist, type RetrievedChunk } from './repo.ts';
+export { createFileSource, createNoteSource, createWebsiteSource } from './sources.ts';
 export { buildFtsQuery, retrieveKnowledge } from './retrieve.ts';
-export {
-  assertTenantPath,
-  KB_BUCKET,
-  kbObjectPath,
-  MemoryBlobStore,
-  TenantPathError,
-  type BlobStore,
-} from './storage/blob-store.ts';
-export {
-  StorageError,
-  SupabaseStorageBlobStore,
-  type SupabaseStorageOptions,
-} from './storage/supabase-storage.ts';
 export { crawlSite, type CrawlOptions, type CrawledPage, type CrawlResult } from './web/crawl.ts';
 export {
   assertFetchableUrl,
