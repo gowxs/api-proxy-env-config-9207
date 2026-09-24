@@ -4,20 +4,21 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic) and 4 (LLM providers) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers) and 5 (knowledge base) done.
 
 ## Repository layout
 
-| Path                  | What                                                                                         |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| `apps/api`            | Fastify HTTP API (wizard, approvals, Telegram webhook)                                       |
-| `apps/worker`         | IMAP listeners, job consumers, crons — the only process that can decrypt mailbox credentials |
-| `apps/web`            | Next.js + Tailwind dashboard                                                                 |
-| `packages/core`       | Pure domain logic, env loading, redacting logger                                             |
-| `packages/llm`        | Gemini providers (AI Studio free tier for tests, Vertex AI EU for production), fake provider |
-| `packages/db`         | Postgres client, migration runner, `withTenant` helper                                       |
-| `supabase/migrations` | SQL schema — source of truth (Supabase CLI compatible)                                       |
-| `docker/`             | Local services (Supabase Postgres, GreenMail)                                                |
+| Path                  | What                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| `apps/api`            | Fastify HTTP API (wizard, approvals, Telegram webhook)                                            |
+| `apps/worker`         | IMAP listeners, job consumers, crons — the only process that can decrypt mailbox credentials      |
+| `apps/web`            | Next.js + Tailwind dashboard                                                                      |
+| `packages/core`       | Pure domain logic, env loading, redacting logger                                                  |
+| `packages/llm`        | Gemini providers (AI Studio free tier for tests, Vertex AI EU for production), fake provider      |
+| `packages/kb`         | Knowledge base: file/website/note ingestion, Storage adapter, SSRF-safe crawler, hybrid retrieval |
+| `packages/db`         | Postgres client, migration runner, `withTenant` helper                                            |
+| `supabase/migrations` | SQL schema — source of truth (Supabase CLI compatible)                                            |
+| `docker/`             | Local services (Supabase Postgres, GreenMail)                                                     |
 
 TypeScript runs directly on Node 22 (native type stripping) — there is no build step
 for `api`, `worker` or the packages. Only `web` is built (`next build`).
@@ -33,7 +34,7 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 corepack enable
 pnpm install
 cp .env.example .env
-pnpm services:up        # Supabase Postgres on :54322, GreenMail on :3025/:3143
+pnpm services:up        # Supabase Postgres :54322, Supabase Storage :54324, GreenMail :3025/:3143
 pnpm db:migrate         # applies supabase/migrations as the schema owner
 # give the runtime roles a local password (matches .env.example):
 psql postgres://postgres:postgres@localhost:54322/postgres \
@@ -146,3 +147,38 @@ The API, the worker and tenants can't set or change it; a trigger blocks them.
 
 To check a configured provider live (models served, embedding size, JSON output), run
 `pnpm --filter @noctiv/llm check-models`.
+
+## Knowledge base (`packages/kb`)
+
+| Source                         | How it is read                                                                                                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File (PDF, DOCX, TXT; ≤ 10 MB) | Type detected from the bytes, not the name. Stored in the private `kb-files` bucket at `<tenant_id>/<source_id>/<file>`. Text extracted with `unpdf` / `mammoth`. |
+| Website                        | Same-site crawl: robots.txt respected, ≤ 50 pages, depth ≤ 3, 1 request/s, HTML only. Scripts, navigation, forms and CSS-hidden text are dropped.                 |
+| Note                           | Text stored on the source row (`kb_sources.note_text`).                                                                                                           |
+
+Then:
+
+1. **Chunking.** About 500 tokens per chunk with overlap. Heading paths are repeated in each chunk.
+2. **Embedding.** 768 dimensions, with the model recorded per chunk.
+3. **Allowlist.** Links and addresses found in the knowledge base become the reply allowlist.
+4. **Replace.** A source's old chunks are swapped for the new ones in one transaction. Unchanged content isn't re-embedded.
+
+Retrieval combines vector search with keyword search (Reciprocal Rank Fusion).
+Both are scoped to the tenant and to the current embedding model.
+
+**Crawler network safety (SSRF).** Tenants choose the website URL, so the crawler must not become a way into our own network:
+
+- only http/https on default ports, with no credentials in the URL;
+- every connection's resolved IP must be public (checked at connect time, so DNS rebinding doesn't help);
+- redirects are re-checked, and response size and time are capped.
+
+**Free tier:** with a provider that may train on data, a tenant's knowledge base
+is processed only if **all** its mailboxes are test mailboxes.
+
+To ingest one source by hand (until step 7 adds the job queue):
+`node --env-file=.env apps/worker/scripts/ingest-source.ts <tenant_id> <source_id>`.
+
+**Storage credential (open decision).** Locally, Storage takes a service token
+signed with the container's own secret (`packages/kb/scripts/local-storage-token.ts`).
+Hosted Supabase reserves the storage admin role, so a Storage-only database role
+isn't possible there. The production credential is still to be decided (see PLAN.md §11).

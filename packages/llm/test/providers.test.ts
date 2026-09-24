@@ -174,6 +174,25 @@ describe('generate (shared Gemini mapping)', () => {
     expect(created[0]!.generateCalls).toHaveLength(1);
   });
 
+  it("waits as long as Google's RetryInfo asks (capped at 60 s)", async () => {
+    const waits: number[] = [];
+    const body = (s: string) =>
+      Object.assign(new Error(`{"error":{"details":[{"retryDelay":"${s}"}]}}`), { status: 429 });
+    const { factory } = mockClientFactory({
+      generate: (_p, i) => (i === 0 ? body('33s') : i === 1 ? body('600s') : okResponse('{}')),
+    });
+    const p = new GoogleAiStudioProvider({
+      apiKey: 'k',
+      models,
+      embeddingModel: 'gemini-embedding-001',
+      timeoutMs: 5_000,
+      clientFactory: factory,
+      sleep: async (ms) => void waits.push(ms),
+    });
+    await p.generate(request());
+    expect(waits).toEqual([33_000, 60_000]);
+  });
+
   it('gives up after the retry budget', async () => {
     const { factory, created } = mockClientFactory({ generate: () => httpError(429) });
     await expect(studio(factory).generate(request())).rejects.toMatchObject({

@@ -44,6 +44,9 @@ export interface GeminiBackendOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+/** Never wait longer than this for one retry, whatever the server suggests. */
+const MAX_RETRY_WAIT_MS = 60_000;
+
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function l2normalize(v: number[]): number[] {
@@ -92,7 +95,8 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
       } catch (e) {
         const err = classifyError(this.name, e);
         if (!err.retryable || attempt >= retries) throw err;
-        await sleep(1_000 * 2 ** attempt + Math.floor(Math.random() * 250));
+        const backoff = 1_000 * 2 ** attempt + Math.floor(Math.random() * 250);
+        await sleep(Math.min(Math.max(backoff, err.retryAfterMs ?? 0), MAX_RETRY_WAIT_MS));
       }
     }
   }

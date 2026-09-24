@@ -474,3 +474,21 @@ placeholders), Q15 sender-only replies (default: yes).
   - At 100 % the admin gets an alert; at 150 % the admin and the owner are notified. Alerts are queued in `notifications`, deduplicated per day.
   - Embedding tokens count toward the budget. They are estimated at 4 characters per token because the API does not report them.
   - Cost in EUR is not computed yet; prices could not be confirmed.
+
+### Decisions made during step 5 (knowledge base)
+
+- **Live model check (founder request):** `gemini-3.5-flash-lite`, `gemini-3.8-flash` and `gemini-embedding-001` all respond on the Developer API, and embeddings come back at 768 dimensions. They are the newest stable Flash-Lite and Flash in the live model list, so no replacements are needed.
+- **Knowledge-base free-tier rule stays strict (founder decision):** processed only if every mailbox of the tenant is a test mailbox, checked before any embedding call.
+- **Storage:**
+  - Private bucket `kb-files`, path `<tenant_id>/<source_id>/<file>`. The database CHECK constraint and the storage adapter both enforce the tenant prefix.
+  - Local development and tests run the real Supabase Storage service (`supabase/storage-api`) against our Postgres.
+  - Hosted Supabase reserves `supabase_storage_admin`, so a least-privilege Storage-only role is not possible. **Production credential still open**; options are in the step 5 report.
+- **Notes** are stored as text on `kb_sources.note_text` (no file). **Website** sources record `pages_fetched`, and each chunk stores its page URL. The crawled pages' own URLs are allowlisted for replies.
+- **Crawler SSRF protection:**
+  - DNS is resolved, and the address checked, at connect time;
+  - private, loopback, link-local and metadata ranges are blocked;
+  - redirects are re-validated;
+  - size and time limits apply.
+- **Hidden website text** (display:none, font-size 0, etc.) is dropped during extraction, so a compromised site can't plant instructions for the model.
+- **Ingestion failures** are recorded on the source (`status = failed`, `error` = reason code, never content). Missing files, fetch errors, embedding errors and budget stops are retryable. The job queue that retries them arrives in step 7; until then there is a manual ingest script.
+- **Upload API endpoints** (multipart upload, website URL, notes) need dashboard authentication, so they are built with the onboarding UI in step 12. Step 5 delivers the ingestion and retrieval library, Storage adapter, schema and tests.

@@ -22,3 +22,5 @@ export * from './policy/decide.ts';
 export * from './policy/budget.ts';
 export * from './guard/guard-reply.ts';
 export * from './crypto/sealed-box.ts';
+export * from './kb/chunk.ts';
+export * from './kb/rank-fusion.ts';

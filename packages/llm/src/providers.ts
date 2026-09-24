@@ -12,6 +12,7 @@ interface CommonOptions {
   timeoutMs: number;
   clientFactory?: ClientFactory;
   sleep?: (ms: number) => Promise<void>;
+  maxRetries?: number;
 }
 
 /**
@@ -33,6 +34,7 @@ export class GoogleAiStudioProvider extends GeminiBackend {
       embedBatchSize: 100,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,
+      maxRetries: opts.maxRetries,
     });
   }
 }
@@ -98,6 +100,7 @@ export class VertexGeminiProvider extends GeminiBackend {
       embedBatchSize: 1,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,
+      maxRetries: opts.maxRetries,
     });
     this.location = opts.location;
   }
