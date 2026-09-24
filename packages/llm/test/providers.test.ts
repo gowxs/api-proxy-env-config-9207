@@ -11,15 +11,30 @@ import { httpError, mockClientFactory, okResponse } from './mock-client.ts';
 
 const models = { fast: 'gemini-3.5-flash-lite', quality: 'gemini-3.8-flash' };
 const noSleep = async () => {};
-const studio = (factory: ClientFactory, embeddingModel = 'gemini-embedding-001') =>
-  new GoogleAiStudioProvider({
+/** A clock that only moves when the provider sleeps. */
+const fakeClock = () => {
+  const c = { t: 0, waits: [] as number[] };
+  return {
+    clock: c,
+    now: () => c.t,
+    sleep: async (ms: number) => {
+      c.waits.push(ms);
+      c.t += ms;
+    },
+  };
+};
+const studio = (factory: ClientFactory, embeddingModel = 'gemini-embedding-001') => {
+  const { now, sleep } = fakeClock();
+  return new GoogleAiStudioProvider({
     apiKey: 'test-key',
     models,
     embeddingModel,
     timeoutMs: 5_000,
     clientFactory: factory,
-    sleep: noSleep,
+    sleep,
+    now,
   });
+};
 const vertex = (factory: ClientFactory, location = 'europe-west4') =>
   new VertexGeminiProvider({
     projectId: 'noctiv-prod',
@@ -244,14 +259,16 @@ describe('embed', () => {
     expect(created[0]!.embedCalls[0]!.config).not.toHaveProperty('taskType');
   });
 
-  it('batches: 100 inputs per request on the Developer API, 1 on Vertex', async () => {
+  it('batches: 40 inputs per request on the Developer API, 1 on Vertex', async () => {
     const a = mockClientFactory();
     await studio(a.factory).embed(
       Array.from({ length: 250 }, (_, i) => `t${i}`),
       'document',
       'test_fixture',
     );
-    expect(a.created[0]!.embedCalls.map((c) => c.contents.length)).toEqual([100, 100, 50]);
+    expect(a.created[0]!.embedCalls.map((c) => c.contents.length)).toEqual([
+      40, 40, 40, 40, 40, 40, 10,
+    ]);
     const b = mockClientFactory();
     await vertex(b.factory).embed(['a', 'b', 'c'], 'document', 'customer_data');
     expect(b.created[0]!.embedCalls.map((c) => c.contents.length)).toEqual([1, 1, 1]);
@@ -366,5 +383,61 @@ describe('embedding requests on the free tier (found live: 100 chunks ≈ 52k to
       kind: 'quota_exhausted',
     });
     expect(created[0]!.embedCalls).toHaveLength(1);
+  });
+
+  it('paces texts under the per-minute request budget (each text counts as a request)', async () => {
+    const { factory, created } = mockClientFactory();
+    const { clock, now, sleep } = fakeClock();
+    const sentAt: number[] = [];
+    const p = new GoogleAiStudioProvider({
+      apiKey: 'k',
+      models,
+      embeddingModel: 'gemini-embedding-001',
+      timeoutMs: 5_000,
+      clientFactory: (o) => {
+        const c = factory(o);
+        const embed = c.models.embedContent.bind(c.models);
+        c.models.embedContent = (params) => {
+          sentAt.push(clock.t);
+          return embed(params);
+        };
+        return c;
+      },
+      sleep,
+      now,
+    });
+    const texts = Array.from({ length: 200 }, (_, i) => `t${i}`);
+    expect((await p.embed(texts, 'document', 'test_fixture')).vectors).toHaveLength(200);
+    const sizes = created[0]!.embedCalls.map((c) => c.contents.length);
+    // Never more than 80 texts within any 60 s window.
+    for (let i = 0; i < sentAt.length; i++) {
+      const inWindow = sentAt
+        .map((t, j) => (t > sentAt[i]! - 60_000 && t <= sentAt[i]! ? sizes[j]! : 0))
+        .reduce((a, b) => a + b, 0);
+      expect(inWindow).toBeLessThanOrEqual(80);
+    }
+    expect(clock.t).toBeGreaterThanOrEqual(120_000);
+  });
+
+  it('a retried ingest reuses vectors it already has (no quota spent twice)', async () => {
+    let failOn = 3; // the third request fails, as when a quota runs out mid-site
+    const { factory, created } = mockClientFactory({
+      embed: (p) =>
+        --failOn === 0
+          ? httpError(400)
+          : { embeddings: p.contents.map(() => ({ values: new Array(768).fill(1) })) },
+    });
+    const p = studio(factory);
+    const texts = Array.from({ length: 100 }, (_, i) => `t${i}`);
+    await expect(p.embed(texts, 'document', 'test_fixture')).rejects.toBeInstanceOf(LlmError);
+    const before = created[0]!.embedCalls.flatMap((c) => c.contents).length;
+    const r = await p.embed(texts, 'document', 'test_fixture');
+    expect(r.vectors).toHaveLength(100);
+    const second = created[0]!.embedCalls.flatMap((c) => c.contents).slice(before);
+    expect(second).toEqual(texts.slice(80)); // only what the first try did not get
+    expect(r.usage.inputTokens).toBe(20);
+    // A different task type is a different vector.
+    await p.embed(['t0'], 'query', 'test_fixture');
+    expect(created[0]!.embedCalls.at(-1)!.contents).toEqual(['t0']);
   });
 });

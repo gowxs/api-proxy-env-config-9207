@@ -12,6 +12,7 @@ interface CommonOptions {
   timeoutMs: number;
   clientFactory?: ClientFactory;
   sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
   maxRetries?: number;
 }
 
@@ -31,12 +32,16 @@ export class GoogleAiStudioProvider extends GeminiBackend {
       client: factory({ enterprise: false, apiKey: opts.apiKey }),
       models: opts.models,
       embeddingModel: opts.embeddingModel,
-      embedBatchSize: 100,
-      // Free tier: per-minute token limit; keep each request small and wait out 429s.
+      // Free tier: every text counts as a request (100/min, 1000/day) and there is a
+      // per-minute token limit; keep requests small, pace them, reuse vectors on retry.
+      embedBatchSize: 40,
       embedBatchTokens: 8_000,
       embedRateLimitRetries: 6,
+      embedTextsPerMinute: 80,
+      embedCacheSize: 20_000,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,
+      now: opts.now,
       maxRetries: opts.maxRetries,
     });
   }
@@ -103,6 +108,7 @@ export class VertexGeminiProvider extends GeminiBackend {
       embedBatchSize: 1,
       timeoutMs: opts.timeoutMs,
       sleep: opts.sleep,
+      now: opts.now,
       maxRetries: opts.maxRetries,
     });
     this.location = opts.location;
