@@ -5,6 +5,7 @@ export * from './text/normalize.ts';
 export * from './mail/addresses.ts';
 export * from './mail/loop-filter.ts';
 export * from './mail/reply-headers.ts';
+export * from './mail/quoted.ts';
 export * from './safety/links.ts';
 export * from './safety/allowlist.ts';
 export * from './safety/sanitize-reply.ts';
