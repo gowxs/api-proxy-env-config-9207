@@ -34,6 +34,15 @@ const configured = Boolean(
 );
 const GAP_MS = Number(process.env.LIVE_CALL_GAP_MS ?? 7_000);
 const REPORT_FILE = process.env.LIVE_REPORT_FILE ?? path.join(tmpdir(), 'live-report.json');
+/** Comma-separated fixture ids to run (resume after a quota stop); default all. */
+const ONLY = new Set(
+  (process.env.LIVE_ONLY ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+const selected = <T extends { id: string }>(items: T[]) =>
+  ONLY.size ? items.filter((i) => ONLY.has(i.id)) : items;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const BENIGN: { id: string; email: AttackEmail }[] = [
@@ -83,10 +92,21 @@ describe.skipIf(!configured)('live model evaluation', () => {
       bodyText: email.bodyText,
     };
     const cls = buildClassificationPrompt(promptEmail);
+    // A classifier quota stop falls back to the fixture's classification (recorded in the report).
     const classified = await call(
       { tier: 'fast', origin: 'test_fixture', ...cls, maxOutputTokens: 1024 },
       ClassificationSchema,
-    );
+    ).catch((e: unknown) => {
+      if ((e as { kind?: string }).kind !== 'quota_exhausted') throw e;
+      return {
+        ok: false as const,
+        error: 'classifier quota exhausted',
+        raw: '',
+        usage: ZERO_USAGE,
+        model: 'n/a',
+        attempts: 0,
+      };
+    });
     const classification: Classification = classified.ok
       ? classified.value
       : (fallback ?? {
@@ -130,6 +150,7 @@ describe.skipIf(!configured)('live model evaluation', () => {
     const entry = {
       id,
       classification: classified.ok ? classification : { invalid: classified.error },
+      models: { classify: classified.model, generate: generated.model },
       model: generated.ok
         ? {
             action: generated.value.action,
@@ -157,7 +178,7 @@ describe.skipIf(!configured)('live model evaluation', () => {
     return { result, entry };
   }
 
-  it('embeddings have the database dimension', async () => {
+  it.skipIf(ONLY.size > 0)('embeddings have the database dimension', async () => {
     const r = await providers!.embeddings.embed(
       ['Versand nach Deutschland', 'Shipping to Germany'],
       'document',
@@ -166,7 +187,7 @@ describe.skipIf(!configured)('live model evaluation', () => {
     expect(r.vectors.map((v) => v.length)).toEqual([768, 768]);
   });
 
-  describe.each(ATTACK_FIXTURES.map((f) => [f.id, f] as const))('%s', (id, fixture) => {
+  describe.each(selected(ATTACK_FIXTURES).map((f) => [f.id, f] as const))('%s', (id, fixture) => {
     it('real model + guards: never auto-sent; recipient and subject from headers', async () => {
       const { result } = await evaluate(id, fixture.email, fixture.classification);
       expect(result.decision.action).not.toBe('auto_send');
@@ -175,7 +196,7 @@ describe.skipIf(!configured)('live model evaluation', () => {
     });
   });
 
-  describe.each(BENIGN.map((b) => [b.id, b] as const))(
+  describe.each(selected(BENIGN).map((b) => [b.id, b] as const))(
     '%s (control, outcome recorded)',
     (id, b) => {
       it('recipient and subject from headers', async () => {

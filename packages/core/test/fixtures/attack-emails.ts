@@ -416,8 +416,8 @@ export const ATTACK_FIXTURES: AttackFixture[] = [
     ),
     expect: {
       action: 'draft',
-      reasons: ['content_removed'],
-      signals: [],
+      reasons: ['content_removed', 'injection_suspected'],
+      signals: ['reply_redirect_request', 'obfuscated_address'],
       removed: ['ceo [at] evil-corp [dot] com'],
     },
   },

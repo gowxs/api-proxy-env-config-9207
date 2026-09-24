@@ -28,7 +28,11 @@ export function classifyError(provider: string, error: unknown): LlmError {
   if (e?.name === 'AbortError' || e?.name === 'TimeoutError')
     return new LlmError(provider, 'timeout');
   const status = typeof e?.status === 'number' ? e.status : undefined;
-  if (status === 429) return new LlmError(provider, 'rate_limited', status, retryDelayMs(error));
+  if (status === 429) {
+    // A per-day quota does not come back in seconds, whatever retryDelay says.
+    if (isDailyQuota(error)) return new LlmError(provider, 'quota_exhausted', status);
+    return new LlmError(provider, 'rate_limited', status, retryDelayMs(error));
+  }
   if (status === 401 || status === 403) return new LlmError(provider, 'auth', status);
   if (status === 404) return new LlmError(provider, 'not_found', status);
   if (status !== undefined && status >= 500) return new LlmError(provider, 'unavailable', status);
@@ -45,4 +49,10 @@ function retryDelayMs(error: unknown): number | undefined {
   const text = error instanceof Error ? error.message : String(error);
   const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(text);
   return m ? Math.round(Number(m[1]) * 1000) : undefined;
+}
+
+/** Google names the violated quota, e.g. "GenerateRequestsPerDayPerProjectPerModel-FreeTier". */
+function isDailyQuota(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return /"quotaId"\s*:\s*"[^"]*PerDay/i.test(text);
 }

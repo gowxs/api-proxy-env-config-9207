@@ -145,6 +145,9 @@ update public.email_connections set is_test_mailbox = true where email_address =
 
 The API, the worker and tenants can't set or change it; a trigger blocks them.
 
+**Free-tier limits:** 20 generate requests per day per model, and frequent 503s. `pnpm test:live`
+spaces calls (`LIVE_CALL_GAP_MS`) and can resume from chosen cases (`LIVE_ONLY=A15-…,A19-…`).
+
 To check a configured provider live (models served, embedding size, JSON output), run
 `pnpm --filter @noctiv/llm check-models`.
 

@@ -193,6 +193,21 @@ describe('generate (shared Gemini mapping)', () => {
     expect(waits).toEqual([33_000, 60_000]);
   });
 
+  it('does not retry an exhausted daily quota', async () => {
+    const daily = Object.assign(
+      new Error(
+        '{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},{"retryDelay":"24s"}]}}',
+      ),
+      { status: 429 },
+    );
+    const { factory, created } = mockClientFactory({ generate: () => daily });
+    await expect(studio(factory).generate(request())).rejects.toMatchObject({
+      kind: 'quota_exhausted',
+      retryable: false,
+    });
+    expect(created[0]!.generateCalls).toHaveLength(1);
+  });
+
   it('gives up after the retry budget', async () => {
     const { factory, created } = mockClientFactory({ generate: () => httpError(429) });
     await expect(studio(factory).generate(request())).rejects.toMatchObject({

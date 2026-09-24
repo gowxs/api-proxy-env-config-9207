@@ -9,7 +9,9 @@ export type InjectionSignal =
   | 'hidden_html_text'
   | 'invisible_characters'
   | 'encoded_payload'
-  | 'ai_addressed';
+  | 'ai_addressed'
+  | 'reply_redirect_request'
+  | 'obfuscated_address';
 
 export interface InjectionCheck {
   suspected: boolean;
@@ -55,6 +57,24 @@ const AI_ADDRESSED_RE = wordRegex(
   '(?:dear|hey|hi|attention|note\\s+(?:to|for))\\s+(?:the\\s+|our\\s+|your\\s+)?(?:ai|assistant|bot|chatbot|language\\s+model|llm|gpt|gemini|claude|noctiv)|(?:ai|assistant|bot|model)\\s+(?:note|instruction)s?',
   'iu',
 );
+// "Reply to my other address", "send the answer to …" (EN/DE/NL/FR/ES/LV).
+const REPLY_REDIRECT_RE = wordRegex(
+  [
+    '(?:reply|respond|write|answer|send\\s+(?:it|the\\s+(?:reply|answer|response)|your\\s+(?:reply|answer)))\\s+(?:back\\s+)?(?:to|at)\\s+(?:me\\s+at\\s+)?(?:my\\s+)?(?:other|private|personal|new|different|second|alternative)?\\s*(?:address|e-?mail|inbox)',
+    '(?:use|write\\s+to)\\s+(?:this|my\\s+(?:other|private|personal|new))\\s+(?:address|e-?mail)',
+    '(?:reply|respond|answer)\\s+(?:to|at)\\s+[\\p{L}\\p{N}._%+-]+\\s*(?:@|[[({]\\s*at\\s*[\\])}])\\s*[\\p{L}\\p{N}-]+',
+    '(?:antworte\\p{L}*|schreib\\p{L}*)\\s+(?:sie\\s+)?(?:bitte\\s+)?(?:an\\s+)?(?:meine\\s+)?(?:andere|private|neue)\\s+(?:adresse|e-?mail)',
+    '(?:antwoord|stuur)\\s+(?:naar|aan)\\s+(?:mijn\\s+)?(?:andere|privé|nieuwe)\\s+(?:adres|e-?mail)',
+    '(?:répond\\p{L}*|écri\\p{L}*)\\s+(?:à|a)\\s+(?:mon\\s+)?(?:autre\\s+)?(?:adresse|e-?mail)(?:\\s+(?:privée|personnelle))?',
+    '(?:respond\\p{L}*|contest\\p{L}*|escrib\\p{L}*)\\s+(?:a\\s+)?(?:mi\\s+)?(?:otro|otra|nueva|nuevo)?\\s*(?:correo|dirección|e-?mail)(?:\\s+(?:privado|personal|privada))?',
+    '(?:atbild\\p{L}*|rakst\\p{L}*)\\s+uz\\s+(?:manu\\s+)?(?:citu|privāto|jauno)\\s+(?:adresi|e-?pastu)',
+  ].join('|'),
+  'iu',
+);
+// "name [at] domain [dot] com": customers do not write their own address like this.
+const OBFUSCATED_ADDRESS_RE =
+  /[\p{L}\p{N}._%+-]+\s*(?:[[({]\s*(?:at|ät)\s*[\])}])\s*[\p{L}\p{N}-]+(?:\s*[[({]\s*(?:dot|punkt|punt|point|punto)\s*[\])}]\s*[\p{L}\p{N}-]+)+/iu;
+
 // Long unbroken base64/hex blobs have no place in a customer enquiry.
 const ENCODED_RE = /(?:[A-Za-z0-9+/]{120,}={0,2})|(?:[0-9a-f]{160,})/;
 const HIDDEN_HTML_RE =
@@ -82,6 +102,8 @@ export function detectInjection(input: {
   if (EXFIL_RE.test(text)) signals.add('exfiltration_request');
   if (CC_RE.test(text)) signals.add('cc_request');
   if (AI_ADDRESSED_RE.test(text)) signals.add('ai_addressed');
+  if (REPLY_REDIRECT_RE.test(text)) signals.add('reply_redirect_request');
+  if (OBFUSCATED_ADDRESS_RE.test(text)) signals.add('obfuscated_address');
   if (ENCODED_RE.test(raw)) signals.add('encoded_payload');
   if (hasInvisible(raw) || (input.html && hasInvisible(input.html)))
     signals.add('invisible_characters');
