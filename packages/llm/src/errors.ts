@@ -29,6 +29,19 @@ export class LlmError extends Error {
   }
 }
 
+const NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+
 export function classifyError(provider: string, error: unknown): LlmError {
   if (error instanceof LlmError) return error;
   const e = error as { status?: unknown; name?: unknown; code?: unknown };
@@ -45,10 +58,15 @@ export function classifyError(provider: string, error: unknown): LlmError {
   if (status !== undefined && status >= 500) return new LlmError(provider, 'unavailable', status);
   if (status !== undefined && status >= 400)
     return new LlmError(provider, 'invalid_request', status);
-  if (e?.code === 'ECONNRESET' || e?.code === 'ETIMEDOUT' || e?.code === 'ENOTFOUND') {
+  // Node fetch reports network failures as TypeError("fetch failed") with the code on `cause`.
+  const code = e?.code ?? (e as { cause?: { code?: unknown } })?.cause?.code;
+  if (typeof code === 'string' && NETWORK_CODES.has(code)) {
     return new LlmError(provider, 'unavailable');
   }
-  return new LlmError(provider, 'unknown', status);
+  const unknown = new LlmError(provider, 'unknown', status);
+  // Kept for diagnostics (logs only): the original error's name and message.
+  (unknown as { cause?: unknown }).cause = error;
+  return unknown;
 }
 
 /** Reads Google's RetryInfo ("retryDelay": "33s") from an error body. Only the number is kept. */

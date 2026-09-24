@@ -42,7 +42,14 @@ export type IngestFailure =
 
 export type IngestOutcome =
   | { status: 'ready'; chunks: number; unchanged: boolean }
-  | { status: 'failed'; reason: IngestFailure; retryable: boolean; detail?: string };
+  | {
+      status: 'failed';
+      reason: IngestFailure;
+      retryable: boolean;
+      detail?: string;
+      /** For the worker log only (error name, HTTP status, code); not stored on the source. */
+      diagnostic?: string;
+    };
 
 const RETRYABLE: ReadonlySet<IngestFailure> = new Set([
   'budget_halted',
@@ -54,11 +61,13 @@ class IngestError extends Error {
   readonly reason: IngestFailure;
   /** Loggable cause, e.g. the provider error kind ("rate_limited"); never content. */
   readonly detail: string | undefined;
+  readonly diagnostic: string | undefined;
 
-  constructor(reason: IngestFailure, detail?: string) {
+  constructor(reason: IngestFailure, detail?: string, diagnostic?: string) {
     super(reason);
     this.reason = reason;
     this.detail = detail;
+    this.diagnostic = diagnostic;
   }
 }
 
@@ -125,7 +134,11 @@ export async function ingestSource(
     finalAttempt?: boolean;
   } = {},
 ): Promise<IngestOutcome> {
-  const fail = async (reason: IngestFailure, detail?: string): Promise<IngestOutcome> => {
+  const fail = async (
+    reason: IngestFailure,
+    detail?: string,
+    diagnostic?: string,
+  ): Promise<IngestOutcome> => {
     const retryable = RETRYABLE.has(reason);
     const willRetry = retryable && opts.finalAttempt === false;
     await withTenant(deps.sql, tenantId, async (tx) => {
@@ -137,7 +150,13 @@ export async function ingestSource(
       // A rejected file is not kept for later; retryable failures keep it for the retry.
       if (!retryable) await deleteUpload(tx, sourceId);
     });
-    return { status: 'failed', reason, retryable, ...(detail ? { detail } : {}) };
+    return {
+      status: 'failed',
+      reason,
+      retryable,
+      ...(detail ? { detail } : {}),
+      ...(diagnostic ? { diagnostic } : {}),
+    };
   };
 
   const start = await withTenant(deps.sql, tenantId, async (tx) => {
@@ -192,7 +211,11 @@ export async function ingestSource(
       if (e instanceof TrainingDataPolicyError) throw new IngestError('free_tier_customer_data');
       // Provider errors carry a coarse kind (rate_limited, quota_exhausted, auth, …).
       const kind = (e as { kind?: unknown }).kind;
-      throw new IngestError('embedding_failed', typeof kind === 'string' ? kind : 'unknown');
+      throw new IngestError(
+        'embedding_failed',
+        typeof kind === 'string' ? kind : 'unknown',
+        describeError(e),
+      );
     }
 
     const chunks: ChunkToStore[] = pieces.map((p, i) => ({
@@ -219,7 +242,7 @@ export async function ingestSource(
     });
     return { status: 'ready', chunks: chunks.length, unchanged: false };
   } catch (e) {
-    if (e instanceof IngestError) return fail(e.reason, e.detail);
+    if (e instanceof IngestError) return fail(e.reason, e.detail, e.diagnostic);
     await fail('extraction_failed');
     throw e;
   }
@@ -229,4 +252,27 @@ function dedupe(entries: AllowlistEntry[]): AllowlistEntry[] {
   const seen = new Map<string, AllowlistEntry>();
   for (const e of entries) seen.set(`${e.kind}:${e.value}`, e);
   return [...seen.values()];
+}
+
+/**
+ * Error name, HTTP status, network code and a short message, for the worker
+ * log. Provider messages are status texts, never the embedded content.
+ */
+export function describeError(e: unknown): string {
+  const err = e as {
+    name?: unknown;
+    status?: unknown;
+    code?: unknown;
+    message?: unknown;
+    cause?: { name?: unknown; code?: unknown; message?: unknown };
+  };
+  const parts = [typeof err?.name === 'string' ? err.name : typeof e];
+  if (typeof err?.status === 'number') parts.push(`HTTP ${err.status}`);
+  const code = err?.code ?? err?.cause?.code;
+  if (typeof code === 'string') parts.push(code);
+  const msg = typeof err?.message === 'string' ? err.message : '';
+  const causeName = typeof err?.cause?.name === 'string' ? `${err.cause.name}: ` : '';
+  const cause =
+    typeof err?.cause?.message === 'string' ? ` (cause: ${causeName}${err.cause.message})` : '';
+  return `${parts.join(' ')}: ${(msg + cause).replace(/\s+/g, ' ').slice(0, 240)}`;
 }

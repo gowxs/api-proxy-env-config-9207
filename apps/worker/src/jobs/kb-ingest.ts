@@ -15,7 +15,8 @@ export function kbIngestHandler(deps: IngestDeps) {
     });
     if (outcome.status === 'failed' && outcome.retryable) {
       const cause = outcome.detail ? `${outcome.reason}:${outcome.detail}` : outcome.reason;
-      throw new JobError(`ingest failed: ${cause}`, {
+      const why = outcome.diagnostic ? ` [${outcome.diagnostic}]` : '';
+      throw new JobError(`ingest failed: ${cause}${why}`, {
         retryable: true,
         retryInSeconds: ingestRetryDelaySeconds(outcome),
       });
