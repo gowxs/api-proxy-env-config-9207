@@ -64,7 +64,11 @@ describe('GoogleAiStudioProvider (free tier)', () => {
   it('is configured for the Developer API with an API key, explicitly not Vertex', () => {
     const { factory, created } = mockClientFactory();
     const p = studio(factory);
-    expect(created[0]!.options).toEqual({ enterprise: false, apiKey: 'test-key' });
+    expect(created[0]!.options).toEqual({
+      enterprise: false,
+      apiKey: 'test-key',
+      httpOptions: { headers: { 'Accept-Encoding': 'identity' } },
+    });
     expect(p.trainingPolicy).toBe('may_train_on_data');
   });
 
@@ -99,6 +103,7 @@ describe('VertexGeminiProvider (paid, EU)', () => {
         keyFilename: '/secrets/sa.json',
         scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       },
+      httpOptions: { headers: { 'Accept-Encoding': 'identity' } },
     });
     expect(created[0]!.options).not.toHaveProperty('apiKey');
     expect(p.trainingPolicy).toBe('no_training');
@@ -461,5 +466,16 @@ describe('embedding requests on the free tier (found live: 100 chunks ≈ 52k to
     // A different task type is a different vector.
     await p.embed(['t0'], 'query', 'test_fixture');
     expect(created[0]!.embedCalls.at(-1)!.contents).toEqual(['t0']);
+  });
+
+  it('asks for uncompressed responses (gzip bodies without Content-Encoding, found live)', () => {
+    const seen: unknown[] = [];
+    const spy: ClientFactory = (o) => {
+      seen.push(o.httpOptions?.headers);
+      return mockClientFactory().factory(o);
+    };
+    studio(spy);
+    vertex(spy);
+    expect(seen).toEqual([{ 'Accept-Encoding': 'identity' }, { 'Accept-Encoding': 'identity' }]);
   });
 });

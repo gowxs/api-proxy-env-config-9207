@@ -6,6 +6,13 @@ export type ClientFactory = (options: GoogleGenAIOptions) => GeminiClient;
 
 const defaultClientFactory: ClientFactory = (options) => new GoogleGenAI(options);
 
+/**
+ * Uncompressed responses. On the hosting network Google's error bodies came
+ * back gzipped without Content-Encoding (found live), so the SDK could not
+ * read the quota or retry delay and a daily quota looked like a per-minute one.
+ */
+const httpOptions = { headers: { 'Accept-Encoding': 'identity' } };
+
 interface CommonOptions {
   models: Record<ModelTier, string>;
   embeddingModel: string;
@@ -29,7 +36,7 @@ export class GoogleAiStudioProvider extends GeminiBackend {
       name: 'google_ai_studio',
       trainingPolicy: 'may_train_on_data',
       // enterprise: false is explicit so GOOGLE_GENAI_USE_* env vars cannot switch backends.
-      client: factory({ enterprise: false, apiKey: opts.apiKey }),
+      client: factory({ enterprise: false, apiKey: opts.apiKey, httpOptions }),
       models: opts.models,
       embeddingModel: opts.embeddingModel,
       // Free tier: every text counts as a request (100/min, 1000/day) and input tokens
@@ -95,6 +102,7 @@ export class VertexGeminiProvider extends GeminiBackend {
       trainingPolicy: 'no_training',
       client: factory({
         enterprise: true,
+        httpOptions,
         project: opts.projectId,
         // Explicit: without it the SDK defaults to the non-regional "global" endpoint.
         location: opts.location,
