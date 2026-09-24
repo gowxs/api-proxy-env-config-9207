@@ -61,6 +61,13 @@ export const GenerationSchema = z.strictObject({
 });
 export type Generation = z.infer<typeof GenerationSchema>;
 
+/** Grounding verifier output (PLAN.md Q6): runs only on auto-send candidates. */
+export const VerifierSchema = z.strictObject({
+  supported: z.boolean(),
+  unsupported_claims: z.array(z.string().max(300)).max(20),
+});
+export type Verification = z.infer<typeof VerifierSchema>;
+
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Accepts a raw model string or an already-parsed object. Never throws. */
