@@ -1,7 +1,7 @@
 # Noctiv — Phase 1 Plan (AI Email & Sales Assistant)
 
-Status: **DRAFT, awaiting founder approval.** Nothing below is built yet.
-Section 9 lists the open questions that block specific build steps.
+Status: **APPROVED 2026-09-24.** Founder decisions on the open questions are recorded
+in §11 and take precedence over anything earlier in this document.
 
 ---
 
@@ -89,7 +89,7 @@ Conventions: every table has `tenant_id uuid not null` (FK → `tenants.id` `on 
 | id | uuid PK | = tenant_id |
 | name | text | business name |
 | website_url | text null | |
-| timezone | text | default `Europe/Riga`? (Q) — used for follow-up send windows |
+| timezone | text not null | IANA zone, **no default** — required in the onboarding wizard; used for follow-up send windows |
 | mode | enum `draft_only`\|`auto_send` | **default `draft_only`** |
 | budget_state | enum `ok`\|`draft_forced`\|`halted` | set by budget enforcer, reset daily |
 | daily_token_budget | int | default from env |
@@ -411,3 +411,28 @@ CI: GitHub Actions — lint, typecheck, unit, DB/integration (Supabase CLI + Gre
 - Emails sent from the tenant's own mailbox (From = connected address), signature appended by code.
 - `converted` stage is manual only.
 - Supabase Auth, Postgres, Storage in Frankfurt; VPS in Hetzner Falkenstein/Nuremberg; all app logs stay on the VPS (no external log service in Phase 1).
+
+---
+
+## 11. Founder decisions (2026-09-24)
+
+| # | Decision |
+|---|---|
+| Q1 | Hybrid encryption with a worker-only private key (§3.3) — approved with the plan. |
+| Q2 | **Telegram privacy mode is the default**: message contains sender *domain* only, subject, a 1–2 sentence summary, chosen action and downgrade reasons, plus buttons. No draft body, no customer name. Full text only in the dashboard. Per-tenant toggle `telegram_full_text` (default false) enables full text, with a warning in settings. Telegram is listed in `subprocessors.md` either way. |
+| Q3 | Budget: 100 % → draft-only + admin alert; 150 % → halt LLM calls for the day + owner notice (as proposed). |
+| Q4 | Outlook not supported in Phase 1; detected and explained in the wizard (as proposed). |
+| Q5 | Vertex AI region **`europe-west4`**. Verify which Gemini and embedding models are actually served there before pinning; report the choice. Credentials provided at step 4. |
+| Q7 | Follow-ups count **business days (Mon–Fri)** and are sent only inside **09:00–17:00 tenant local time**; if the due time falls outside the window, send at the next window start. |
+| Q9 | pg-boss approved. |
+| Q11 | Admin alerts via env vars (Telegram chat id + email); no admin UI in Phase 1. |
+| Q14 | Claim-detector lexicons for **EN, DE, NL, FR, ES, LV**. Any other/unknown language ⇒ never auto-send. |
+| Q16 | Hard-list escalations (complaint, refund, legal, discount, angry, urgent) get **no draft**. Escalations caused by low confidence / missing or invalid sources / invalid JSON **do** include the generated draft, marked **"AI suggestion, unverified"**. |
+| — | `tenants.timezone`: no default, required in onboarding. |
+| — | Steps 6 and 7: after GreenMail tests pass, live tests on one real Gmail and one real Hostinger mailbox (provided by founder) before moving on. |
+| — | Checkpoints: stop and report after step 2, after step 8 (first end-to-end with fake LLM), and after step 10. |
+
+Still open (defaults apply until answered): Q6 grounding verifier (default: on for
+auto-send candidates), Q8 per-sender cap scope (default: auto-send only), Q10 system
+email provider, Q12 signup gating (default: invite codes), Q13 screenshots (default:
+placeholders), Q15 sender-only replies (default: yes).

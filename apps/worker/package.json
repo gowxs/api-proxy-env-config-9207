@@ -1,0 +1,16 @@
+{
+  "name": "@noctiv/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/core": "workspace:*",
+    "@noctiv/db": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

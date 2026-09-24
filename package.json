@@ -1,0 +1,37 @@
+{
+  "name": "noctiv",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @noctiv/api dev",
+    "dev:worker": "pnpm --filter @noctiv/worker dev",
+    "dev:web": "pnpm --filter @noctiv/web dev",
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run --project unit",
+    "test:db": "vitest run --project db",
+    "test:all": "vitest run",
+    "db:up": "docker compose -f docker/compose.dev.yml up -d db",
+    "db:down": "docker compose -f docker/compose.dev.yml down",
+    "db:migrate": "node --env-file-if-exists=.env packages/db/scripts/migrate.ts",
+    "services:up": "docker compose -f docker/compose.dev.yml up -d",
+    "services:down": "docker compose -f docker/compose.dev.yml down -v"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.19.0",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "testcontainers": "^12.1.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.1"
+  }
+}
