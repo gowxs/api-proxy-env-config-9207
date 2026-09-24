@@ -1,2 +1,20 @@
 export { EnvError, loadEnv } from './env.ts';
 export { createLogger, REDACT_PATHS, type Logger } from './logger.ts';
+
+export * from './text/normalize.ts';
+export * from './mail/addresses.ts';
+export * from './mail/loop-filter.ts';
+export * from './mail/reply-headers.ts';
+export * from './safety/links.ts';
+export * from './safety/allowlist.ts';
+export * from './safety/sanitize-reply.ts';
+export * from './safety/injection.ts';
+export * from './claims/numbers.ts';
+export * from './claims/lexicon.ts';
+export * from './claims/detect.ts';
+export * from './llm/schemas.ts';
+export * from './llm/types.ts';
+export * from './prompt/build.ts';
+export * from './policy/decide.ts';
+export * from './guard/guard-reply.ts';
+export * from './crypto/sealed-box.ts';

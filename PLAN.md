@@ -448,3 +448,12 @@ placeholders), Q15 sender-only replies (default: yes).
 - `notifications` dedupe key is unique per tenant. `lead_events.actor_user_id` and `audit_log.actor` were added.
 - `kb_chunks.embedding` is `vector(768)` for now; it is confirmed or changed when the embedding model is pinned in step 4.
 - Dashboard users have **no** access to `telegram_link_tokens`, `kb_chunks`, `kb_allowlist`, `notifications` or `tenant_deletions`. Their only direct write is a lead's `name`/`notes`. The API role can write `credentials_ciphertext` but cannot read it back.
+
+### Decisions made during step 3 (core safety logic)
+
+- **Grounding verifier (Q6)**: auto-send now requires a passing verifier. A reply that is otherwise clean but not yet verified is a draft flagged `eligibleForVerification`, so the pipeline runs the verifier only on real auto-send candidates. A **failed** verifier now **escalates** (uncertain) instead of drafting, because an unsupported claim must escalate (brief).
+- **Claims must match the same kind of statement** in the cited sources: "24 hours" is not supported by "24 EUR". Money also accepts a currency token within a few characters of the number ("Price (EUR): 24"). Bare numbers such as order numbers and quantities may echo the customer's email; amounts, percentages, durations, dates and commitments may not.
+- **Contact forms**: mail from our own address or a noreply address with an external Reply-To is processed (that is how website forms deliver enquiries). The reply goes to the Reply-To. If that address belongs to a different organization than From, the reply is never auto-sent.
+- **Loops between two assistants**: auto-sent replies will carry `Auto-Submitted: auto-replied` (RFC 3834, set in step 9), and every inbound message with that header is skipped. Two Noctiv tenants therefore can't loop. Owner-approved replies don't carry the header.
+- **Injection heuristics** only ever block auto-send (they make a message a draft). They are not the security boundary; the policy engine and sanitizer are.
+- **Source hygiene**: Prettier 3.9 expands backslash-u escapes into the invisible characters themselves. Invisible characters are therefore written as escaped strings or built from code points, and a test fails the build if any file contains one literally.

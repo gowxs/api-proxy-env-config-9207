@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold) and 2 (schema + RLS) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS) and 3 (core safety logic) done.
 
 ## Repository layout
 
@@ -87,3 +87,26 @@ without tenant context return nothing. It also covers knowledge-base search
 (vector and full text), composite foreign keys, credential column privileges,
 anonymous access and the duplicate-message constraints. A new table without
 `tenant_id`, forced RLS or both policies fails the suite automatically.
+
+## Core safety logic (`packages/core`)
+
+Pure functions with no I/O. The pipeline in step 8 calls them in this order:
+
+| Module                     | Job                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mail/loop-filter.ts`      | Never-reply rules: auto-reply/bulk/list headers, bounces, noreply-style senders, our own address                                            |
+| `llm/schemas.ts`           | Strict zod schemas for the classifier and reply JSON; invalid output never throws                                                           |
+| `prompt/build.ts`          | Prompts with the email and knowledge base in delimited blocks marked by a random nonce; `S1…Sn` source labels                               |
+| `safety/injection.ts`      | Heuristic injection signals (EN/DE/NL/FR/ES/LV); any signal blocks auto-send                                                                |
+| `safety/sanitize-reply.ts` | Removes links and addresses that aren't in the knowledge base, plus invisible characters                                                    |
+| `claims/*`                 | Detects prices, percentages, durations, dates, times, weekdays and commitment wording in 6 languages; checks each against the cited sources |
+| `policy/decide.ts`         | Final action: escalate > draft > auto_send                                                                                                  |
+| `guard/guard-reply.ts`     | Runs all of the above on one model output; builds the recipient and threading headers from the original email only                          |
+| `crypto/sealed-box.ts`     | X25519 + HKDF + AES-256-GCM credential sealing bound to tenant and connection                                                               |
+
+Generate the credential key pair with
+`node packages/core/scripts/generate-sealing-keys.ts secrets/sealing-private.key`.
+
+Attack-email fixtures live in `packages/core/test/fixtures/attack-emails.ts`. The
+suite in `test/injection-resistance.test.ts` runs each one as if the model obeyed
+the attacker completely.
