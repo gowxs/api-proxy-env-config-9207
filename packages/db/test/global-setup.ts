@@ -2,7 +2,6 @@ import postgres from 'postgres';
 import {
   GenericContainer,
   Network,
-  Wait,
   type StartedNetwork,
   type StartedTestContainer,
 } from 'testcontainers';
