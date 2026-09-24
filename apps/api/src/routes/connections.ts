@@ -37,6 +37,8 @@ const testBody = z.object({
   username: z.string().min(1).max(254).optional(),
   password: z.string().min(1).max(512),
   displayName: z.string().max(200).optional(),
+  /** Reconnect an existing (disconnected) mailbox with a new App Password. */
+  reconnectId: z.uuid().optional(),
   ...serverSchema,
 });
 
@@ -49,6 +51,8 @@ interface TestJobPayload {
   displayName: string | null;
   sealed: string;
   keyId: string;
+  /** Set when the test was started to reconnect this existing mailbox. */
+  reconnect?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -80,7 +84,19 @@ export function connectionRoutes(app: FastifyInstance, deps: AppDeps): void {
         .code(400)
         .send({ error: 'imap and smtp settings are required for this provider' });
     }
-    const connectionId = randomUUID();
+    let connectionId: string = randomUUID();
+    if (body.reconnectId) {
+      const [existing] = await withTenant(
+        deps.sql,
+        tenantId,
+        (tx) => tx<{ email_address: string }[]>`
+          select email_address from public.email_connections where id = ${body.reconnectId!}`,
+      );
+      if (!existing || existing.email_address.toLowerCase() !== settings.emailAddress)
+        return reply.code(404).send({ error: 'mailbox to reconnect not found' });
+      // The password is sealed to this connection id (AAD), so reuse it.
+      connectionId = body.reconnectId;
+    }
     const { ciphertext, keyId } = sealMailboxPassword(
       body.password,
       deps.credentialsPublicKey,
@@ -93,6 +109,7 @@ export function connectionRoutes(app: FastifyInstance, deps: AppDeps): void {
       displayName: body.displayName ?? null,
       sealed: ciphertext.toString('base64'),
       keyId,
+      ...(body.reconnectId ? { reconnect: true } : {}),
     };
     const jobId = await withTenant(deps.sql, tenantId, (tx) =>
       enqueue(tx, {
@@ -149,6 +166,24 @@ export function connectionRoutes(app: FastifyInstance, deps: AppDeps): void {
         return { code: 409 as const, error: 'connection test has not passed' };
       const p = job.payload;
       const r = job.result;
+      const [existing] = await tx<{ status: string }[]>`
+        select status from public.email_connections where id = ${p.connectionId} for update`;
+      if (existing && (!p.reconnect || existing.status === 'connected'))
+        return { code: 409 as const, error: 'this mailbox is already connected' };
+      if (existing) {
+        // Reconnect: new credentials; the inbox position is kept (mail that arrived meanwhile is processed).
+        await tx`
+          update public.email_connections
+          set provider = ${p.settings.provider}, imap_host = ${p.settings.imap.host}, imap_port = ${p.settings.imap.port},
+              imap_secure = ${p.settings.imap.secure}, smtp_host = ${p.settings.smtp.host}, smtp_port = ${p.settings.smtp.port},
+              smtp_security = ${p.settings.smtp.security}, username = ${p.settings.username},
+              credentials_ciphertext = ${Buffer.from(p.sealed, 'base64')}, credentials_key_id = ${p.keyId},
+              status = 'connected', last_error_code = null, last_error_detail = null, last_checked_at = now()
+          where id = ${p.connectionId}`;
+        await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id)
+                 values (${tenantId}, 'owner', ${userId}, 'connection.reconnected', 'email_connection', ${p.connectionId})`;
+        return { code: 201 as const, id: p.connectionId };
+      }
       const inserted = await tx`
         insert into public.email_connections
           (id, tenant_id, provider, email_address, display_name, imap_host, imap_port, imap_secure,

@@ -11,10 +11,11 @@
   "dependencies": {
     "@noctiv/core": "workspace:*",
     "@noctiv/db": "workspace:*",
-    "fastify": "^5.12.5",
-    "zod": "^4.6.5",
+    "@noctiv/kb": "workspace:*",
     "@noctiv/mail": "workspace:*",
+    "fastify": "^5.12.5",
     "jose": "^6.2.12",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
   }
 }

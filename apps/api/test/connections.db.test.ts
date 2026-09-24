@@ -184,3 +184,39 @@ describe('connection wizard API (GreenMail)', () => {
     expect(cnt).toHaveLength(1);
   });
 });
+
+describe('reconnecting a disconnected mailbox', () => {
+  it('keeps the connection (and its history), with new sealed credentials', async () => {
+    const [c] = await owner<{ id: string }[]>`
+      select id from public.email_connections where tenant_id = ${A.tenantId} and email_address = ${GREENMAIL_USERS.shopA.address}`;
+    await owner`update public.email_connections set status = 'disconnected', last_error_code = 'AUTH_FAILED' where id = ${c!.id}`;
+    const test = await post(`/v1/tenants/${A.tenantId}/connections/test`, A.userId, {
+      ...greenmailBody(GREENMAIL_USERS.shopA.address, GREENMAIL_USERS.shopA.password),
+      reconnectId: c!.id,
+    });
+    expect(test.json()).toMatchObject({ status: 'ok' });
+    const saved = await post(`/v1/tenants/${A.tenantId}/connections`, A.userId, {
+      testId: test.json().testId,
+    });
+    expect(saved.json()).toEqual({ id: c!.id, status: 'connected' });
+    const [row] = await owner<
+      { status: string; last_error_code: string | null; credentials_ciphertext: Buffer }[]
+    >`
+      select status, last_error_code, credentials_ciphertext from public.email_connections where id = ${c!.id}`;
+    expect(row).toMatchObject({ status: 'connected', last_error_code: null });
+    expect(openMailboxPassword(row!.credentials_ciphertext, keys, A.tenantId, c!.id)).toBe(
+      GREENMAIL_USERS.shopA.password,
+    );
+  });
+
+  it("cannot reconnect another tenant's mailbox or a different address", async () => {
+    const [bConn] = await owner<
+      { id: string }[]
+    >`select id from public.email_connections where tenant_id = ${B.tenantId} limit 1`;
+    const res = await post(`/v1/tenants/${A.tenantId}/connections/test`, A.userId, {
+      ...greenmailBody(GREENMAIL_USERS.shopA.address, GREENMAIL_USERS.shopA.password),
+      reconnectId: bConn!.id,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});

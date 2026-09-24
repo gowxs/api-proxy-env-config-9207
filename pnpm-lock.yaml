@@ -41,6 +41,9 @@ importers:
       '@noctiv/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@noctiv/kb':
+        specifier: workspace:*
+        version: link:../../packages/kb
       '@noctiv/mail':
         specifier: workspace:*
         version: link:../../packages/mail

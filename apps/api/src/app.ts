@@ -1,4 +1,4 @@
-import Fastify, { type FastifyBaseLogger } from 'fastify';
+import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Logger } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
@@ -6,6 +6,8 @@ import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
 import { actionRoutes } from './routes/actions.ts';
 import { connectionRoutes } from './routes/connections.ts';
+import { meRoutes } from './routes/me.ts';
+import { HttpError, webRoutes } from './routes/web.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -33,6 +35,10 @@ export interface AppDeps {
   actionSecret?: string;
   /** Dashboard base URL, shown on action pages. */
   appUrl?: string;
+  /** Signup gate: creating a business needs one of these codes (empty = open). */
+  inviteCodes?: string[];
+  /** Development only: extra routes (the dev login). */
+  devRoutes?: (app: FastifyInstance) => void;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -76,6 +82,7 @@ export function buildApp(
   app.setErrorHandler((error, _req, reply) => {
     if (error instanceof AuthError) return reply.code(401).send({ error: 'unauthorized' });
     if (error instanceof ForbiddenError) return reply.code(403).send({ error: 'forbidden' });
+    if (error instanceof HttpError) return reply.code(error.status).send({ error: error.message });
     if (error instanceof ZodError)
       return reply
         .code(400)
@@ -88,6 +95,9 @@ export function buildApp(
   });
 
   connectionRoutes(app, full);
+  meRoutes(app, { ...full, inviteCodes: deps.inviteCodes ?? [] });
+  webRoutes(app, full);
+  deps.devRoutes?.(app);
   if (deps.actionSecret) {
     actionRoutes(app, {
       sql: deps.sql,

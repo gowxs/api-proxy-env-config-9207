@@ -8,6 +8,7 @@ import {
 
 export interface AuthUser {
   userId: string;
+  email?: string;
 }
 
 export type VerifyToken = (token: string) => Promise<AuthUser>;
@@ -40,7 +41,10 @@ export function createTokenVerifier(opts: {
         algorithms: ['ES256', 'RS256', 'EdDSA'],
       });
       if (typeof payload.sub !== 'string' || !payload.sub) throw new AuthError();
-      return { userId: payload.sub };
+      return {
+        userId: payload.sub,
+        ...(typeof payload.email === 'string' ? { email: payload.email } : {}),
+      };
     } catch {
       throw new AuthError();
     }

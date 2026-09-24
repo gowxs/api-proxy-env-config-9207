@@ -18,10 +18,31 @@ export const apiEnvSchema = z
     /** Shared with the worker: verifies Approve / Reject links in owner emails. */
     ACTION_LINK_SECRET: z.string().min(32).optional(),
     PUBLIC_APP_URL: z.url().default('http://localhost:3000'),
+    /** Comma-separated invite codes; signup is gated while set (required in production, Q12). */
+    SIGNUP_INVITE_CODES: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean),
+      ),
+    /** Local development only: enables POST /dev/login for this (seeded) user. */
+    DEV_LOGIN_USER_ID: z.uuid().optional(),
+    DEV_LOGIN_EMAIL: z.email().default('owner@noctiv.local'),
   })
   .refine((e) => !(e.NODE_ENV === 'production' && e.AUTH_JWKS_JSON), {
     path: ['AUTH_JWKS_JSON'],
     message: 'must not be set in production',
+  })
+  .refine((e) => !(e.NODE_ENV === 'production' && e.DEV_LOGIN_USER_ID), {
+    path: ['DEV_LOGIN_USER_ID'],
+    message: 'must not be set in production',
+  })
+  .refine((e) => e.NODE_ENV !== 'production' || e.SIGNUP_INVITE_CODES.length > 0, {
+    path: ['SIGNUP_INVITE_CODES'],
+    message: 'is required in production (invite-only signup)',
   })
   .refine((e) => e.NODE_ENV !== 'production' || e.ACTION_LINK_SECRET, {
     path: ['ACTION_LINK_SECRET'],
