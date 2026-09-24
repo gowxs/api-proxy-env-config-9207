@@ -29,6 +29,7 @@ import { currentBudget, enqueue, recordUsage, withTenant } from '@noctiv/db';
 import { loadAllowlist, retrieveKnowledge } from '@noctiv/kb';
 import type { Sql, TransactionSql } from 'postgres';
 import { QUEUES } from '../queues.ts';
+import { setLeadStage } from './leads.ts';
 
 export interface PipelineDeps {
   sql: Sql;
@@ -137,20 +138,6 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     },
     thread: { status: row.thread_status },
   };
-}
-
-async function setLeadStage(
-  tx: TransactionSql,
-  tenantId: string,
-  leadId: string,
-  to: string,
-  reason: string,
-) {
-  const [lead] = await tx<{ stage: string }[]>`select stage from public.leads where id = ${leadId}`;
-  if (!lead || lead.stage === to || lead.stage === 'converted') return;
-  await tx`update public.leads set stage = ${to}, stage_changed_at = now(), last_activity_at = now() where id = ${leadId}`;
-  await tx`insert into public.lead_events (tenant_id, lead_id, from_stage, to_stage, actor, reason)
-           values (${tenantId}, ${leadId}, ${lead.stage}, ${to}, 'system', ${reason})`;
 }
 
 /** Lead per reply address; a customer answer to our reply stops follow-ups (brief §5). */

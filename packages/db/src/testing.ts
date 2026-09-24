@@ -25,6 +25,13 @@ export const GREENMAIL_USERS = {
   shopB: { address: 'info@other-shop.test', password: 'app-pass-b' },
   customer: { address: 'anna@example-mail.test', password: 'customer-pass' },
   customer2: { address: 'janis@example-mail.test', password: 'customer2-pass' },
+  sendShop: { address: 'hello@lumen-studio.test', password: 'app-pass-c' },
+  sendCustomer: { address: 'maris@example-mail.test', password: 'maris-pass' },
+  /** Owner login email for notification tests. */
+  owner: { address: 'owner@lumen-studio.test', password: 'owner-pass' },
+  admin: { address: 'admin@noctiv.test', password: 'admin-pass' },
+  /** The system mailer's SMTP account (Brevo stand-in). */
+  system: { address: 'notify@noctiv.test', password: 'system-pass' },
 } as const;
 export const TEST_EMBEDDING_MODEL = 'test-embedding';
 

@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest) and 8 (processing pipeline) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline) and 9 (sending) done.
 
 ## Repository layout
 
@@ -182,7 +182,7 @@ is processed only if **all** its mailboxes are test mailboxes.
 To ingest one source by hand (until step 7 adds the job queue):
 `node --env-file=.env apps/worker/scripts/ingest-source.ts <tenant_id> <source_id>`.
 
-## Mail flow (steps 6–8)
+## Mail flow (steps 6–9)
 
 1. **Connect (API → worker).** The wizard's password is sealed at once with the worker's
    public key. A `connection.test` job logs in to IMAP and SMTP, then the tested
@@ -193,8 +193,18 @@ To ingest one source by hand (until step 7 adds the job queue):
    transaction. A duplicate Message-ID is ignored.
 3. **Process (worker).** Loop filter, lead, budget, classify, hard-list escalation,
    retrieval, reply, safety checks, fact-check (auto-send candidates only), then a
-   draft, an approved reply (sending arrives in step 9) or an escalation. The owner's
-   Telegram notification is queued in privacy mode.
+   draft, an approved reply or an escalation. The owner's email notification is queued
+   in privacy mode.
+4. **Send (worker, `mail.send`).** The draft is locked. Auto-sends re-check the tenant
+   mode and rate caps; if either now fails, the reply goes back to the owner for
+   approval. The outbound email is recorded with its Message-ID before the SMTP send,
+   so a double approval or a repeated job can't send twice. Replies carry
+   `In-Reply-To`/`References` and the tenant signature. Only auto-sends carry
+   `Auto-Submitted: auto-replied`. After sending: the message is appended to Sent
+   (unless Gmail saves it itself), the thread waits for the customer with the next
+   follow-up time (Mon–Fri, 09:00–17:00 tenant time), and the lead moves to `sent`.
+   If a worker crashed mid-send, the retry looks for the Message-ID in Sent; if that
+   proves nothing, it never resends and the owner is told instead.
 
 Run a real mailbox check in development with `MAIL_ALLOW_INSECURE=false`; GreenMail needs `true`.
 Hand-picked real-model pipeline run: `LIVE_PIPELINE=1 pnpm test:live apps/worker` (free-tier quota applies).

@@ -526,3 +526,13 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Channel interface:** notifications go through a `NotificationChannel` interface (email implemented), so a chat channel can be added later.
 - **Mailbox providers:** Yahoo added (`imap.mail.yahoo.com:993`, `smtp.mail.yahoo.com:465`). The live mailbox tests (Gmail + Yahoo) happen together with the step 9 live send test, once the founder provides both mailboxes.
 - **Job queue:** own implementation confirmed (replaces pg-boss).
+
+### Decisions made during step 9 (sending)
+
+- **Exactly once as far as SMTP allows:** the `outbound_emails` row (unique per draft, with our pre-generated Message-ID) is written before the SMTP send. A second approval or a repeated job finds it and does nothing.
+- **Crash in the middle of a send:** the retry searches the Sent folder for the Message-ID. Found → marked sent. Not found → resent only for Gmail-type mailboxes (they file every accepted message in Sent themselves); for all others it is **not** resent: the draft becomes `send_failed` and the owner is told to check. A duplicate reply to a customer is worse than a missing one the owner hears about.
+- **Temporary SMTP errors (4xx, timeouts)** are retried with the same Message-ID (job backoff). **Permanent errors (5xx)** and the last retry mark the draft `send_failed` and notify the owner. **SMTP login failure** disconnects the mailbox (same flow as IMAP).
+- **Auto-sends are re-checked at send time:** if the owner switched to draft-only or a rate cap was reached meanwhile, the reply goes back to `pending_approval` and the owner gets the normal draft email.
+- **Follow-up clock (Q7):** `next_followup_at` = N business days (Mon–Fri) after sending, at the same local time, moved into 09:00–17:00 tenant time. No holiday calendar. A new reply restarts the follow-up count.
+- **Sent folder:** the exact bytes sent over SMTP are appended, marked read. An APPEND failure is logged and does not fail the send.
+

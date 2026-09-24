@@ -6,7 +6,7 @@ import type { ConnectOptions, MailServerSettings } from './types.ts';
 
 const DEFAULT_TIMEOUT = 20_000;
 
-function assertEncrypted(settings: MailServerSettings, opts: ConnectOptions): void {
+export function assertEncrypted(settings: MailServerSettings, opts: ConnectOptions): void {
   if (opts.allowInsecure) return;
   if (!settings.imap.secure || !['tls', 'starttls'].includes(settings.smtp.security)) {
     throw new MailConnectError('INSECURE_SETTINGS', 'config');

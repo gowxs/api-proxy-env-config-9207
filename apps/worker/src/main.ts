@@ -7,6 +7,7 @@ import { connectionTestHandler } from './jobs/connection-test.ts';
 import { kbIngestHandler } from './jobs/kb-ingest.ts';
 import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
+import { mailSendHandler } from './jobs/mail-send.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { QUEUES } from './queues.ts';
 
@@ -51,7 +52,12 @@ const runner = new JobRunner({
       embeddings: providers.embeddings,
       fetcher: createSafeFetcher(),
     }),
-    // mail.send is added in step 9; its jobs wait in the queue until then.
+    [QUEUES.mailSend]: mailSendHandler({
+      sql: db.sql,
+      keys,
+      allowInsecure: config.MAIL_ALLOW_INSECURE,
+      logger,
+    }),
   },
   onError: (job, error, outcome) =>
     logger.warn(
