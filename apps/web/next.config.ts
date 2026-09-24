@@ -4,7 +4,8 @@ import type { NextConfig } from 'next';
 const API_INTERNAL_URL = process.env.API_INTERNAL_URL ?? 'http://localhost:4000';
 
 const config: NextConfig = {
-  output: 'standalone',
+  // Netlify packages Next.js itself; standalone output is for our own Docker image.
+  output: process.env.NETLIFY ? undefined : 'standalone',
   poweredByHeader: false,
   reactStrictMode: true,
   // The floating dev badge covers the mobile navigation.
