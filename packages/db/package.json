@@ -12,6 +12,7 @@
     "migrate": "node scripts/migrate.ts"
   },
   "dependencies": {
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "@noctiv/core": "workspace:*"
   }
 }

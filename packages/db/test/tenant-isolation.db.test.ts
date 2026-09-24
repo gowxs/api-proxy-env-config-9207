@@ -9,7 +9,13 @@
 import postgres, { type Sql, type TransactionSql } from 'postgres';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { withTenant } from '../src/index.ts';
-import { asDashboardUser, axisVector, seedTenant, type SeededTenant } from '../src/testing.ts';
+import {
+  asDashboardUser,
+  axisVector,
+  seedTenant,
+  TEST_EMBEDDING_MODEL,
+  type SeededTenant,
+} from '../src/testing.ts';
 
 const owner = postgres(inject('ownerDatabaseUrl'), { max: 2, onnotice: () => {} });
 // max: 1 so tests can prove settings do not leak between transactions on a pooled connection.
@@ -213,8 +219,8 @@ describe('worker writes stay inside the tenant', () => {
         worker,
         A.tenantId,
         (tx) =>
-          tx`insert into public.kb_chunks (tenant_id, source_id, chunk_index, content)
-           values (${A.tenantId}, ${B.sourceId}, 99, 'smuggled')`,
+          tx`insert into public.kb_chunks (tenant_id, source_id, chunk_index, content, embedding_model)
+           values (${A.tenantId}, ${B.sourceId}, 99, 'smuggled', ${TEST_EMBEDDING_MODEL})`,
       ),
     ).rejects.toMatchObject({ code: '23503' });
     await expect(
@@ -329,8 +335,8 @@ describe('knowledge-base search', () => {
     // Query equals B's embedding (axis 1); A's chunk (axis 0) is further away.
     const rows = await withTenant(worker, A.tenantId, (tx) =>
       tx.unsafe<{ chunk_id: string }[]>(
-        'select chunk_id from app.search_kb_chunks($1, $2::extensions.vector, 10)',
-        [A.tenantId, axisVector(1)],
+        'select chunk_id from app.search_kb_chunks($1, $2, $3::extensions.vector, 10)',
+        [A.tenantId, TEST_EMBEDDING_MODEL, axisVector(1)],
       ),
     );
     expect(rows.map((r) => r.chunk_id)).toEqual([A.chunkId]);
@@ -338,8 +344,9 @@ describe('knowledge-base search', () => {
 
   it("asking for tenant B's chunks from tenant A's context returns nothing", async () => {
     const vector = await withTenant(worker, A.tenantId, (tx) =>
-      tx.unsafe('select chunk_id from app.search_kb_chunks($1, $2::extensions.vector, 10)', [
+      tx.unsafe('select chunk_id from app.search_kb_chunks($1, $2, $3::extensions.vector, 10)', [
         B.tenantId,
+        TEST_EMBEDDING_MODEL,
         axisVector(1),
       ]),
     );
@@ -382,7 +389,11 @@ describe('knowledge-base search', () => {
   it('the worker scheduler listing returns identifiers only', async () => {
     const rows = await worker<{ tenant_id: string; connection_id: string }[]>`
       select * from app.list_mail_connections()`;
-    expect(Object.keys(rows[0] ?? {}).sort()).toEqual(['connection_id', 'tenant_id']);
+    expect(Object.keys(rows[0] ?? {}).sort()).toEqual([
+      'connection_id',
+      'is_test_mailbox',
+      'tenant_id',
+    ]);
     expect(rows.map((r) => r.connection_id)).toEqual(
       expect.arrayContaining([A.connectionId, B.connectionId]),
     );

@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS) and 3 (core safety logic) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic) and 4 (LLM providers) done.
 
 ## Repository layout
 
@@ -14,6 +14,7 @@ and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build or
 | `apps/worker`         | IMAP listeners, job consumers, crons — the only process that can decrypt mailbox credentials |
 | `apps/web`            | Next.js + Tailwind dashboard                                                                 |
 | `packages/core`       | Pure domain logic, env loading, redacting logger                                             |
+| `packages/llm`        | Gemini providers (AI Studio free tier for tests, Vertex AI EU for production), fake provider |
 | `packages/db`         | Postgres client, migration runner, `withTenant` helper                                       |
 | `supabase/migrations` | SQL schema — source of truth (Supabase CLI compatible)                                       |
 | `docker/`             | Local services (Supabase Postgres, GreenMail)                                                |
@@ -45,12 +46,13 @@ pnpm dev:web            # http://localhost:3000
 
 ## Commands
 
-| Command                                              | Does                                                                                                                 |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                                          | Unit tests (no Docker needed)                                                                                        |
-| `pnpm test:db`                                       | Database tests incl. tenant isolation. Starts a throwaway `supabase/postgres` container, or uses `TEST_DATABASE_URL` |
-| `pnpm lint` / `pnpm typecheck` / `pnpm format:check` | Static checks (also run in CI)                                                                                       |
-| `pnpm db:migrate`                                    | Apply pending migrations to `MIGRATION_DATABASE_URL`                                                                 |
+| Command                                              | Does                                                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm test`                                          | Unit tests (no Docker needed)                                                                                            |
+| `pnpm test:db`                                       | Database tests incl. tenant isolation. Starts a throwaway `supabase/postgres` container, or uses `TEST_DATABASE_URL`     |
+| `pnpm lint` / `pnpm typecheck` / `pnpm format:check` | Static checks (also run in CI)                                                                                           |
+| `pnpm test:live`                                     | Opt-in: runs the attack fixtures through the real model (needs `GEMINI_API_KEY` or GCP credentials; synthetic data only) |
+| `pnpm db:migrate`                                    | Apply pending migrations to `MIGRATION_DATABASE_URL`                                                                     |
 
 ## Environment variables
 
@@ -110,3 +112,37 @@ Generate the credential key pair with
 Attack-email fixtures live in `packages/core/test/fixtures/attack-emails.ts`. The
 suite in `test/injection-resistance.test.ts` runs each one as if the model obeyed
 the attacker completely.
+
+## LLM providers (`packages/llm`)
+
+Both providers implement the same `LlmProvider` / `EmbeddingProvider` interfaces
+(`packages/core/src/llm/types.ts`) on Google's `@google/genai` SDK.
+
+| Provider                 | When                                                    | Data                                                     | Mailboxes processed    |
+| ------------------------ | ------------------------------------------------------- | -------------------------------------------------------- | ---------------------- |
+| `VertexGeminiProvider`   | `GCP_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS` set | Paid tier, `europe-west4` regional endpoint, no training | all                    |
+| `GoogleAiStudioProvider` | only `GEMINI_API_KEY` set                               | **Free tier: Google may train on it**                    | only `is_test_mailbox` |
+| `FakeProvider`           | `LLM_PROVIDER=fake` (never in production)               | stays local                                              | all                    |
+
+Default models: `gemini-3.8-flash` (replies), `gemini-3.5-flash-lite`
+(classification) and `gemini-embedding-001` at 768 dimensions. The same names
+are used on both providers, so stored embeddings stay comparable.
+`kb_chunks.embedding_model` records which model produced each vector.
+
+**Test mailboxes.** Two independent locks keep customer data away from the free tier:
+
+1. At startup the worker only takes on mailboxes flagged `is_test_mailbox`.
+2. Every model call declares its data origin (`test_mailbox`, `test_fixture` or
+   `customer_data`). The free-tier provider rejects `customer_data` before any
+   network request.
+
+Only the operator can set the flag, as the schema owner:
+
+```sql
+update public.email_connections set is_test_mailbox = true where email_address = 'test@example.com';
+```
+
+The API, the worker and tenants can't set or change it; a trigger blocks them.
+
+To check a configured provider live (models served, embedding size, JSON output), run
+`pnpm --filter @noctiv/llm check-models`.

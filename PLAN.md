@@ -457,3 +457,20 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Loops between two assistants**: auto-sent replies will carry `Auto-Submitted: auto-replied` (RFC 3834, set in step 9), and every inbound message with that header is skipped. Two Noctiv tenants therefore can't loop. Owner-approved replies don't carry the header.
 - **Injection heuristics** only ever block auto-send (they make a message a draft). They are not the security boundary; the policy engine and sanitizer are.
 - **Source hygiene**: Prettier 3.9 expands backslash-u escapes into the invisible characters themselves. Invisible characters are therefore written as escaped strings or built from code points, and a test fails the build if any file contains one literally.
+
+### Decisions made during step 4 (LLM providers)
+
+- **Founder change (no GCP billing yet):** two providers behind one interface. `GoogleAiStudioProvider` (Gemini Developer API, `GEMINI_API_KEY`, free tier) is for development and tests only. `VertexGeminiProvider` (`europe-west4`, service account) is chosen automatically when GCP credentials are present and wins if both are configured.
+- **Free-tier guard with two locks:**
+  - The worker processes only mailboxes flagged `email_connections.is_test_mailbox`.
+  - Every generate/embed call carries a data origin, and the free-tier provider rejects `customer_data` before any network call.
+  - A tenant's knowledge base counts as test data only if all of that tenant's mailboxes are test mailboxes.
+  - Only the schema owner can set the flag (enforced by a trigger).
+- **Models** (from Google's official Gemini cookbook, 2026-09-24; Google's docs sites are blocked from the build environment): `gemini-3.8-flash` (quality), `gemini-3.5-flash-lite` (fast), `gemini-embedding-001`. Availability on Vertex in `europe-west4` is **not verified**; `check-models` confirms it once credentials exist.
+- **Embeddings:** always 768 dimensions (`outputDimensionality`), L2-normalized, the same model on both providers. `kb_chunks.embedding_model` records the model, and search only compares vectors from the same model, so a model change means re-embedding rather than silently mixing vector spaces.
+- **EU-only guard:** Vertex locations outside the EU are refused (London and Zurich included). The SDK's default `global` endpoint is never used, and startup is refused if `GOOGLE_GEMINI_BASE_URL` or `GOOGLE_VERTEX_BASE_URL` is set.
+- **Budget (Q3):**
+  - State is computed from today's UTC usage, so no reset job is needed.
+  - At 100 % the admin gets an alert; at 150 % the admin and the owner are notified. Alerts are queued in `notifications`, deduplicated per day.
+  - Embedding tokens count toward the budget. They are estimated at 4 characters per token because the API does not report them.
+  - Cost in EUR is not computed yet; prices could not be confirmed.

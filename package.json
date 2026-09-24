@@ -22,7 +22,8 @@
     "db:down": "docker compose -f docker/compose.dev.yml down",
     "db:migrate": "node --env-file-if-exists=.env packages/db/scripts/migrate.ts",
     "services:up": "docker compose -f docker/compose.dev.yml up -d",
-    "services:down": "docker compose -f docker/compose.dev.yml down -v"
+    "services:down": "docker compose -f docker/compose.dev.yml down -v",
+    "test:live": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project live"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

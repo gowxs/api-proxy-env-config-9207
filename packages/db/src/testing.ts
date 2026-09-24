@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { Sql, TransactionSql } from 'postgres';
 
 export const EMBEDDING_DIMS = 768;
+export const TEST_EMBEDDING_MODEL = 'test-embedding';
 
 /** Unit vector with 1 at `axis` — makes nearest-neighbour results predictable. */
 export function axisVector(axis: number): string {
@@ -64,14 +65,15 @@ export async function seedTenant(
     await tx`insert into public.kb_sources (id, tenant_id, type, title, status)
              values (${sourceId}, ${tenantId}, 'note', ${`Prices ${label}`}, 'ready')`;
     await tx.unsafe(
-      `insert into public.kb_chunks (id, tenant_id, source_id, chunk_index, content, embedding)
-       values ($1, $2, $3, 0, $4, $5::extensions.vector)`,
+      `insert into public.kb_chunks (id, tenant_id, source_id, chunk_index, content, embedding, embedding_model)
+       values ($1, $2, $3, 0, $4, $5::extensions.vector, $6)`,
       [
         chunkId,
         tenantId,
         sourceId,
         `Tenant ${label} secret price list: consulting costs 100 EUR`,
         axisVector(opts.embeddingAxis),
+        TEST_EMBEDDING_MODEL,
       ],
     );
     await tx`insert into public.kb_allowlist (tenant_id, source_id, kind, value)

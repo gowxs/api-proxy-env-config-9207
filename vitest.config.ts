@@ -7,7 +7,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['{apps,packages}/*/test/**/*.test.ts'],
-          exclude: ['**/*.db.test.ts', '**/node_modules/**'],
+          exclude: ['**/*.db.test.ts', '**/*.live.test.ts', '**/node_modules/**'],
         },
       },
       {
@@ -19,6 +19,15 @@ export default defineConfig({
           globalSetup: ['packages/db/test/global-setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 180_000,
+          fileParallelism: false,
+        },
+      },
+      {
+        // Calls the real model provider; opt-in, never in CI.
+        test: {
+          name: 'live',
+          include: ['{apps,packages}/*/test/**/*.live.test.ts'],
+          testTimeout: 180_000,
           fileParallelism: false,
         },
       },

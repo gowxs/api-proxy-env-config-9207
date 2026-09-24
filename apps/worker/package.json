@@ -11,6 +11,8 @@
   "dependencies": {
     "@noctiv/core": "workspace:*",
     "@noctiv/db": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@noctiv/llm": "workspace:*",
+    "postgres": "^3.4.9"
   }
 }
