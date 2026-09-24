@@ -62,7 +62,7 @@ export function classifyError(provider: string, error: unknown): LlmError {
   const status = typeof e?.status === 'number' ? e.status : undefined;
   if (status === 429) {
     // A per-day quota does not come back in seconds, whatever retryDelay says.
-    const quota = quotaIds(error);
+    const quota = quotaIds(error) ?? providerMessage(error);
     if (isDailyQuota(error)) {
       return new LlmError(provider, 'quota_exhausted', status, undefined, quota);
     }
@@ -102,4 +102,18 @@ function quotaIds(error: unknown): string | undefined {
   const text = error instanceof Error ? error.message : String(error);
   const ids = [...text.matchAll(/"quotaId"\s*:\s*"([A-Za-z0-9_-]{1,120})"/g)].map((m) => m[1]!);
   return ids.length ? [...new Set(ids)].join(',') : undefined;
+}
+
+/**
+ * Google's own error text when a 429 names no quota (e.g. "Resource has been
+ * exhausted"). A status text, never the request content; capped.
+ */
+function providerMessage(error: unknown): string | undefined {
+  const text = error instanceof Error ? error.message : String(error);
+  const m = /"message"\s*:\s*"((?:[^"\\]|\\.){1,400})/.exec(text);
+  const msg = (m ? m[1]! : text)
+    .replace(/\\n|\s+/g, ' ')
+    .trim()
+    .slice(0, 160);
+  return msg ? `"${msg}"` : undefined;
 }

@@ -30,4 +30,16 @@ describe('classifyError', () => {
       'p request failed: rate_limited (HTTP 429, EmbedContentInputTokensPerMinutePerProjectPerModel-FreeTier)',
     );
   });
+
+  it("without a quota id, quotes the start of Google's own message", () => {
+    const e = Object.assign(
+      new Error(
+        '{"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}',
+      ),
+      { status: 429 },
+    );
+    expect(classifyError('p', e).message).toBe(
+      'p request failed: rate_limited (HTTP 429, "Resource has been exhausted (e.g. check quota).")',
+    );
+  });
 });
