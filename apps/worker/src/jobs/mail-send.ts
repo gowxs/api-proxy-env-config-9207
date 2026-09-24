@@ -278,7 +278,7 @@ async function planSend(
     const reasons: string[] = [];
     if (d.mode !== 'auto_send') reasons.push('mode_changed_to_draft_only');
     if (caps!.sender >= d.max_ai_replies_per_sender_24h) reasons.push('sender_cap_reached');
-    if (caps!.hour >= d.max_replies_per_hour) reasons.push('hourly_cap_reached');
+    if (caps!.hour >= d.max_replies_per_hour) reasons.push('tenant_hour_cap_reached');
     if (reasons.length) {
       await downgradeToApproval(tx, tenantId, d.id, d.source_message_id, reasons);
       return { done: { status: 'downgraded', reasons } };

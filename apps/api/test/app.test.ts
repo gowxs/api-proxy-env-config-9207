@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { createLogger } from '@noctiv/core';
+import { createLogger, signActionToken } from '@noctiv/core';
 import type { Sql } from 'postgres';
 import { buildApp } from '../src/app.ts';
 
@@ -38,5 +40,60 @@ describe('api health endpoints', () => {
       url: '/v1/tenants/00000000-0000-4000-8000-000000000000/connections',
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('action links (no database needed for invalid tokens)', () => {
+  const secret = 's'.repeat(40);
+
+  it('never writes the link token to the logs', async () => {
+    const lines: string[] = [];
+    const logged = createLogger({
+      service: 'api-test',
+      level: 'info',
+      destination: new Writable({
+        write(chunk: Buffer, _enc, cb) {
+          lines.push(chunk.toString());
+          cb();
+        },
+      }),
+    });
+    const app = buildApp({
+      ...base,
+      logger: logged,
+      checkDatabase: async () => true,
+      actionSecret: secret,
+    });
+    const token = 'v1.c2VjcmV0LXBheWxvYWQ.c2lnbmF0dXJl';
+    const res = await app.inject({ method: 'GET', url: `/actions/${token}` });
+    expect(res.statusCode).toBe(404);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.join('\n')).not.toContain('c2VjcmV0LXBheWxvYWQ');
+    expect(lines.join('\n')).toContain('/actions/[REDACTED]');
+  });
+
+  it('rejects a tampered token and reports an expired one', async () => {
+    const app = buildApp({ ...base, checkDatabase: async () => true, actionSecret: secret });
+    const ids = { tenantId: randomUUID(), draftId: randomUUID() };
+    const good = signActionToken({ ...ids, action: 'approve' }, secret);
+    const tampered = good.replace(/.$/, (c) => (c === 'A' ? 'B' : 'A'));
+    const bad = await app.inject({ method: 'POST', url: `/actions/${tampered}` });
+    expect(bad.statusCode).toBe(404);
+    expect(bad.headers['content-security-policy']).toContain("default-src 'none'");
+    const old = signActionToken(
+      { ...ids, action: 'approve' },
+      secret,
+      new Date(Date.now() - 8 * 86_400_000),
+    );
+    const expired = await app.inject({ method: 'GET', url: `/actions/${old}` });
+    expect(expired.statusCode).toBe(410);
+    expect(expired.body).toContain('expired');
+  });
+
+  it('is switched off without a secret', async () => {
+    const app = buildApp({ ...base, checkDatabase: async () => true });
+    const res = await app.inject({ method: 'GET', url: '/actions/v1.x.y' });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toContain('application/json');
   });
 });

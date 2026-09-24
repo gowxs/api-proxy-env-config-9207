@@ -536,3 +536,11 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Follow-up clock (Q7):** `next_followup_at` = N business days (Mon–Fri) after sending, at the same local time, moved into 09:00–17:00 tenant time. No holiday calendar. A new reply restarts the follow-up count.
 - **Sent folder:** the exact bytes sent over SMTP are appended, marked read. An APPEND failure is logged and does not fail the send.
 
+### Decisions made during step 10 (owner email notifications)
+
+- **Delivery:** the worker sends pending notifications every 15 s, per tenant inside its RLS context, rows locked with `SKIP LOCKED`. On failure it retries after 1, 2, 4… minutes (at most 1 hour), then gives up after 5 attempts. A tenant with no owner email fails at once (`no_recipient`). Each email's Message-ID is derived from the notification id, so a rare repeat delivery is recognisable. Delivery is at-least-once.
+- **Links:** `/actions/<token>` on the API; the token is `v1.<payload>.<HMAC-SHA256>` with tenant, draft, action and expiry. `ACTION_LINK_SECRET` is shared by the API and the worker and is required in production. GET shows a confirmation page (no scripts, strict CSP, no-referrer, no-store); only POST decides. Approve → draft `approved` and a `mail.send` job; Reject → `rejected`. Both are audited as the owner (via email link). Tokens are redacted from request logs.
+- **Content safety:** customer-derived text in owner emails (subject, name, model summary) is shown escaped and with links removed, so a phishing link in a customer email never becomes clickable in the owner's inbox.
+- **Recipients:** owner = the Supabase login email(s) of the tenant's owners (read through a SECURITY DEFINER function returning only emails). Admin = `ADMIN_EMAIL`. Production config refuses to start without the mailer, the link secret and `ADMIN_EMAIL`.
+- **Loop safety:** notification emails carry `Auto-Submitted: auto-generated`. If the owner's login is also a connected mailbox, the loop filter skips them (tested).
+

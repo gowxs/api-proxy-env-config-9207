@@ -9,6 +9,8 @@ import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { MailboxManager } from './mailbox/manager.ts';
+import { deliverNotifications } from './notify/delivery.ts';
+import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
 
 const config = loadWorkerConfig();
@@ -96,12 +98,59 @@ const housekeepingTimer = setInterval(
     ),
   60 * 60_000,
 );
+
+let notifyTimer: NodeJS.Timeout | undefined;
+if (config.SYSTEM_SMTP_HOST) {
+  const email = new EmailChannel({
+    transport: createSystemTransport({
+      host: config.SYSTEM_SMTP_HOST,
+      port: config.SYSTEM_SMTP_PORT,
+      security: config.SYSTEM_SMTP_SECURITY,
+      user: config.SYSTEM_SMTP_USER,
+      pass: config.SYSTEM_SMTP_PASS,
+      from: config.SYSTEM_MAIL_FROM,
+    }),
+    from: config.SYSTEM_MAIL_FROM,
+  });
+  let running = false;
+  const deliver = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await deliverNotifications({
+        sql: db.sql,
+        routes: {
+          email_owner: { channel: email, audience: 'owner' },
+          email_admin: { channel: email, audience: 'admin' },
+        },
+        adminEmail: config.ADMIN_EMAIL,
+        links: {
+          apiUrl: config.PUBLIC_API_URL,
+          appUrl: config.PUBLIC_APP_URL,
+          actionSecret: config.ACTION_LINK_SECRET,
+        },
+        logger,
+      });
+    } catch (e) {
+      logger.error({ err: String(e) }, 'notification delivery failed');
+    } finally {
+      running = false;
+    }
+  };
+  notifyTimer = setInterval(() => void deliver(), config.NOTIFY_POLL_MS);
+  if (!config.ACTION_LINK_SECRET) {
+    logger.warn('ACTION_LINK_SECRET not set: draft emails carry no Approve / Reject links');
+  }
+} else {
+  logger.warn('SYSTEM_SMTP_HOST not set: owner notifications stay queued');
+}
 logger.info({ mailboxes: manager.active.length }, 'worker started');
 
 const shutdown = async (signal: string) => {
   logger.info({ signal }, 'shutting down');
   clearInterval(refreshTimer);
   clearInterval(housekeepingTimer);
+  if (notifyTimer) clearInterval(notifyTimer);
   await manager.stopAll();
   await runner.stop();
   await db.end();

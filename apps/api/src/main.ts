@@ -20,6 +20,8 @@ const app = buildApp({
   ),
   credentialsPublicKey: config.CREDENTIALS_PUBLIC_KEY,
   connectionTestWaitMs: config.CONNECTION_TEST_WAIT_MS,
+  actionSecret: config.ACTION_LINK_SECRET,
+  appUrl: config.PUBLIC_APP_URL,
 });
 
 const shutdown = async (signal: string) => {

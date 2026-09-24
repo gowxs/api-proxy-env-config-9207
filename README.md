@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline) and 9 (sending) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest), 8 (processing pipeline), 9 (sending) and 10 (owner email notifications) done.
 
 ## Repository layout
 
@@ -60,16 +60,37 @@ pnpm dev:web            # http://localhost:3000
 
 See [.env.example](.env.example) for the full, commented list. Current ones:
 
-| Variable                 | Used by        | Purpose                                                               |
-| ------------------------ | -------------- | --------------------------------------------------------------------- |
-| `NODE_ENV`, `LOG_LEVEL`  | all            | runtime mode, pino log level                                          |
-| `MIGRATION_DATABASE_URL` | migrate script | schema owner (`postgres`) — CI/deploy only, never given to api/worker |
-| `API_HOST`, `API_PORT`   | api            | listen address                                                        |
-| `API_DATABASE_URL`       | api            | connects as `noctiv_api` (RLS enforced)                               |
-| `WORKER_DATABASE_URL`    | worker         | connects as `noctiv_worker` (RLS enforced)                            |
-| `TEST_DATABASE_URL`      | tests          | optional; disposable DB instead of a container                        |
+| Variable                                           | Used by        | Purpose                                                               |
+| -------------------------------------------------- | -------------- | --------------------------------------------------------------------- |
+| `NODE_ENV`, `LOG_LEVEL`                            | all            | runtime mode, pino log level                                          |
+| `MIGRATION_DATABASE_URL`                           | migrate script | schema owner (`postgres`) — CI/deploy only, never given to api/worker |
+| `API_HOST`, `API_PORT`                             | api            | listen address                                                        |
+| `API_DATABASE_URL`                                 | api            | connects as `noctiv_api` (RLS enforced)                               |
+| `WORKER_DATABASE_URL`                              | worker         | connects as `noctiv_worker` (RLS enforced)                            |
+| `TEST_DATABASE_URL`                                | tests          | optional; disposable DB instead of a container                        |
+| `SYSTEM_SMTP_*`, `SYSTEM_MAIL_FROM`, `ADMIN_EMAIL` | worker         | system mailer for owner/admin notifications (Brevo in production)     |
+| `ACTION_LINK_SECRET`                               | api + worker   | signs Approve / Reject links (same value in both)                     |
+| `PUBLIC_API_URL`, `PUBLIC_APP_URL`                 | worker, api    | base URLs used in notification links                                  |
 
 Secrets are never committed. Configuration errors name the variable but never print its value.
+
+## Owner notifications (step 10)
+
+Drafts, escalations, disconnected mailboxes, failed sends and budget stops are emailed
+to the tenant owner's login address by the system mailer, never through the tenant's
+own mailbox. Admin alerts go to `ADMIN_EMAIL`. Emails are in privacy mode unless the
+tenant enables full text (`tenants.notify_full_text`). Privacy mode shows the sender
+domain, subject, summary and reasons, but no draft body or customer name. Links
+inside customer-derived text are removed. Every notification email carries
+`Auto-Submitted: auto-generated`.
+
+Draft emails carry **Approve** and **Reject** links, signed with HMAC and valid for
+7 days (`/actions/<token>` on the API). Opening a link only shows a confirmation page;
+the button (POST) acts, so link-scanning mail filters cannot approve anything. A draft
+is decided once; later clicks show what happened. Editing is dashboard-only. Tokens
+are redacted from request logs. Notifications go through a `NotificationChannel`
+interface (email today). Delivery retries with backoff (1, 2, 4… minutes) and gives up
+after 5 attempts.
 
 ## Database access model (short version)
 

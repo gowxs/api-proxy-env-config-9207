@@ -4,6 +4,7 @@ import { withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
 import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
+import { actionRoutes } from './routes/actions.ts';
 import { connectionRoutes } from './routes/connections.ts';
 
 declare module 'fastify' {
@@ -28,6 +29,10 @@ export interface AppDeps {
   credentialsPublicKey: string;
   connectionTestWaitMs: number;
   requireMember: (tenantId: string, userId: string) => Promise<void>;
+  /** Shared with the worker: verifies Approve / Reject links. Without it those routes are off. */
+  actionSecret?: string;
+  /** Dashboard base URL, shown on action pages. */
+  appUrl?: string;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -46,7 +51,12 @@ export function buildApp(
   deps: Omit<AppDeps, 'requireMember'> & Partial<Pick<AppDeps, 'requireMember'>>,
 ) {
   const full: AppDeps = { ...deps, requireMember: deps.requireMember ?? memberCheck(deps.sql) };
-  const app = Fastify({ loggerInstance: deps.logger as FastifyBaseLogger, bodyLimit: 1024 * 1024 });
+  const app = Fastify({
+    loggerInstance: deps.logger as FastifyBaseLogger,
+    bodyLimit: 1024 * 1024,
+    // Signed action tokens are ~250 characters.
+    routerOptions: { maxParamLength: 512 },
+  });
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 
@@ -78,5 +88,12 @@ export function buildApp(
   });
 
   connectionRoutes(app, full);
+  if (deps.actionSecret) {
+    actionRoutes(app, {
+      sql: deps.sql,
+      actionSecret: deps.actionSecret,
+      appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+    });
+  }
   return app;
 }
