@@ -4,7 +4,7 @@ Multi-tenant "AI employee" for small businesses: reads a business mailbox, draft
 grounded replies from the tenant's knowledge base, gets owner approval via Telegram,
 and follows up. See [PLAN.md](PLAN.md) for architecture, data model and build order.
 
-**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers) and 5 (knowledge base) done.
+**Status:** Phase 1 in progress — steps 1 (scaffold), 2 (schema + RLS), 3 (core safety logic), 4 (LLM providers), 5 (knowledge base), 6 (mailbox connections), 7 (IMAP ingest) and 8 (processing pipeline) done.
 
 ## Repository layout
 
@@ -181,3 +181,20 @@ is processed only if **all** its mailboxes are test mailboxes.
 
 To ingest one source by hand (until step 7 adds the job queue):
 `node --env-file=.env apps/worker/scripts/ingest-source.ts <tenant_id> <source_id>`.
+
+## Mail flow (steps 6–8)
+
+1. **Connect (API → worker).** The wizard's password is sealed at once with the worker's
+   public key. A `connection.test` job logs in to IMAP and SMTP, then the tested
+   mailbox is saved. Only the worker can open the password.
+2. **Ingest (worker).** One IDLE listener per mailbox, plus a 3-minute poll, triggers
+   `mail.fetch`. The INBOX is opened read-only; mail from before connecting is never
+   processed. Each message is stored with its thread and its `mail.process` job in one
+   transaction. A duplicate Message-ID is ignored.
+3. **Process (worker).** Loop filter, lead, budget, classify, hard-list escalation,
+   retrieval, reply, safety checks, fact-check (auto-send candidates only), then a
+   draft, an approved reply (sending arrives in step 9) or an escalation. The owner's
+   Telegram notification is queued in privacy mode.
+
+Run a real mailbox check in development with `MAIL_ALLOW_INSECURE=false`; GreenMail needs `true`.
+Hand-picked real-model pipeline run: `LIVE_PIPELINE=1 pnpm test:live apps/worker` (free-tier quota applies).

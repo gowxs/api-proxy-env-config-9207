@@ -27,6 +27,9 @@ export default defineConfig({
         test: {
           name: 'live',
           include: ['{apps,packages}/*/test/**/*.live.test.ts'],
+          // Live pipeline tests also need the throwaway database and GreenMail.
+          globalSetup: ['packages/db/test/global-setup.ts'],
+          hookTimeout: 180_000,
           testTimeout: 180_000,
           fileParallelism: false,
         },

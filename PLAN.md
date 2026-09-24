@@ -507,3 +507,12 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Upload screens** are built in step 12 (founder OK).
 - **No billing:** steps 7–8 are tested end to end with the fake provider; the real model is used only for a few hand-picked emails within the free tier's 20 requests per day.
 - **Job queue: own implementation instead of pg-boss (changes Q9).** pg-boss creates a table partition per queue at runtime, which needs schema-owner rights our RLS-bound runtime roles must not have. `public.jobs` is a small queue: `SKIP LOCKED`, singleton keys, retries with exponential backoff, dead-lettering, leases re-claimed after a crash, and `tenant_id` + RLS like every other table. The worker claims across tenants only through SECURITY DEFINER functions.
+
+### Decisions made during steps 6–8
+
+- **API authentication:** Supabase access tokens are verified against the project's JWKS (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`). Tenant access is checked by membership inside the tenant's RLS context.
+- **Mail server safety:** tenant-supplied IMAP/SMTP hosts must resolve to public addresses and standard ports. We connect to the checked IP, with TLS verified against the host name. Encrypted connections only; `MAIL_ALLOW_INSECURE` (GreenMail) is refused in production.
+- **No backlog, ever:** the first fetch only records the inbox position. A UIDVALIDITY reset re-reads recent mail, but never mail that arrived before the mailbox was connected (found and fixed in step 7 testing).
+- **The mailbox is never modified:** INBOX is opened read-only, nothing is marked read.
+- **Processing is claimed** (`message_processing.status = 'processing'`), so a finished message is never processed twice even if a job is repeated.
+- **Step 9 boundary:** approved auto-send drafts get a `mail.send` job, which waits in the queue until step 9 adds sending.
