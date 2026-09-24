@@ -4,6 +4,20 @@ Noctiv is a **processor** for its tenants (the businesses). Their customers' ema
 personal data. This page lists what is stored, where, for how long, and who can see it.
 Subprocessors: [../subprocessors.md](../subprocessors.md).
 
+## Temporary test deployment (2026-09-24)
+
+The founder's phone-review deployment differs from the target described below:
+
+- **api + worker: Northflank, London (UK, outside the EU).** Northflank's EU regions have no free tier.
+  The UK has an EU adequacy decision, but our rule is EU-only, so this is a recorded, temporary exception.
+- **web: Netlify** (global CDN). It serves the pages and proxies `/api` requests to the api.
+- **database: Supabase Frankfurt**, unchanged: data at rest stays in the EU.
+- Both processes warn at every start while `DATA_REGION_IN_EU=false`; the worker also emails the admin.
+- Only operator-flagged test mailboxes are processed; the free AI tier refuses all other mail.
+- Owner notification emails wait in the queue until Brevo credentials are configured.
+
+Move api + worker to an EU region before any real customer mailbox is connected.
+
 ## Flow
 
 ```

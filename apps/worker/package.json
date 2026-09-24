@@ -16,10 +16,10 @@
     "postgres": "^3.4.9",
     "@noctiv/kb": "workspace:*",
     "@noctiv/mail": "workspace:*",
-    "imapflow": "^2.0.6"
+    "imapflow": "^2.0.6",
+    "nodemailer": "^10.0.10"
   },
   "devDependencies": {
-    "nodemailer": "^10.0.10",
     "@types/nodemailer": "^8.0.2"
   }
 }

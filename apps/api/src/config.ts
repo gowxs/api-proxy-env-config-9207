@@ -1,4 +1,4 @@
-import { loadEnv } from '@noctiv/core';
+import { dataRegionEnv, dataRegionProblem, loadEnv } from '@noctiv/core';
 import { z } from 'zod';
 
 export const apiEnvSchema = z
@@ -31,6 +31,7 @@ export const apiEnvSchema = z
     /** Local development only: enables POST /dev/login for this (seeded) user. */
     DEV_LOGIN_USER_ID: z.uuid().optional(),
     DEV_LOGIN_EMAIL: z.email().default('owner@noctiv.local'),
+    ...dataRegionEnv,
     /** true behind the Caddy reverse proxy (client IP from X-Forwarded-For). */
     API_TRUST_PROXY: z
       .enum(['true', 'false'])
@@ -48,6 +49,10 @@ export const apiEnvSchema = z
   .refine((e) => e.NODE_ENV !== 'production' || e.SIGNUP_INVITE_CODES.length > 0, {
     path: ['SIGNUP_INVITE_CODES'],
     message: 'is required in production (invite-only signup)',
+  })
+  .refine((e) => dataRegionProblem(e) === null, {
+    path: ['DATA_REGION_IN_EU'],
+    message: 'must be set (true/false) in production',
   })
   .refine((e) => e.NODE_ENV !== 'production' || e.ACTION_LINK_SECRET, {
     path: ['ACTION_LINK_SECRET'],

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { loadEnv } from '@noctiv/core';
+import { dataRegionEnv, dataRegionProblem, loadEnv } from '@noctiv/core';
 import { z } from 'zod';
 
 export const workerEnvSchema = z
@@ -9,7 +9,21 @@ export const workerEnvSchema = z
     WORKER_DATABASE_URL: z.url(),
     CREDENTIALS_PUBLIC_KEY: z.string().regex(/^[A-Za-z0-9_-]{43}$/, 'base64url X25519 public key'),
     /** File holding the private sealing key (0600, outside the repository and the database). */
-    CREDENTIALS_PRIVATE_KEY_FILE: z.string().min(1),
+    CREDENTIALS_PRIVATE_KEY_FILE: z.string().min(1).optional(),
+    /** Or the key itself, from the host's secret store (container platforms without secret files). */
+    CREDENTIALS_PRIVATE_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/)
+      .optional(),
+    /**
+     * Production without the system mailer (temporary, until Brevo credentials exist):
+     * notifications stay queued and are sent once the mailer is configured.
+     */
+    SYSTEM_MAILER_PENDING: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    ...dataRegionEnv,
     /** Development/tests only (GreenMail): plaintext, private hosts, self-signed certs. */
     MAIL_ALLOW_INSECURE: z
       .enum(['true', 'false'])
@@ -41,12 +55,21 @@ export const workerEnvSchema = z
   })
   .refine(
     (e) =>
-      e.NODE_ENV !== 'production' || (e.SYSTEM_SMTP_HOST && e.ACTION_LINK_SECRET && e.ADMIN_EMAIL),
+      e.NODE_ENV !== 'production' ||
+      ((e.SYSTEM_SMTP_HOST || e.SYSTEM_MAILER_PENDING) && e.ACTION_LINK_SECRET && e.ADMIN_EMAIL),
     {
       path: ['SYSTEM_SMTP_HOST'],
       message: 'SYSTEM_SMTP_HOST, ACTION_LINK_SECRET and ADMIN_EMAIL are required in production',
     },
-  );
+  )
+  .refine((e) => Boolean(e.CREDENTIALS_PRIVATE_KEY_FILE) !== Boolean(e.CREDENTIALS_PRIVATE_KEY), {
+    path: ['CREDENTIALS_PRIVATE_KEY'],
+    message: 'set exactly one of CREDENTIALS_PRIVATE_KEY_FILE or CREDENTIALS_PRIVATE_KEY',
+  })
+  .refine((e) => dataRegionProblem(e) === null, {
+    path: ['DATA_REGION_IN_EU'],
+    message: 'must be set (true/false) in production',
+  });
 
 export type WorkerConfig = z.infer<typeof workerEnvSchema>;
 
@@ -54,6 +77,8 @@ export const loadWorkerConfig = (source?: Record<string, string | undefined>): W
   loadEnv(workerEnvSchema, source);
 
 export function loadSealingKeys(config: WorkerConfig): { publicKey: string; privateKey: string } {
-  const privateKey = readFileSync(config.CREDENTIALS_PRIVATE_KEY_FILE, 'utf8').trim();
+  const privateKey =
+    config.CREDENTIALS_PRIVATE_KEY ??
+    readFileSync(config.CREDENTIALS_PRIVATE_KEY_FILE!, 'utf8').trim();
   return { publicKey: config.CREDENTIALS_PUBLIC_KEY, privateKey };
 }

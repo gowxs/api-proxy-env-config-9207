@@ -1,4 +1,4 @@
-import { createLogger } from '@noctiv/core';
+import { createLogger, nonEuWarning } from '@noctiv/core';
 import { createDb, JobRunner } from '@noctiv/db';
 import { createSafeFetcher } from '@noctiv/kb';
 import { createProviders, resolveLlmConfig } from '@noctiv/llm';
@@ -20,6 +20,8 @@ import { QUEUES } from './queues.ts';
 
 const config = loadWorkerConfig();
 const logger = createLogger({ service: 'worker', level: config.LOG_LEVEL });
+const regionWarning = nonEuWarning(config, 'worker');
+if (regionWarning) logger.warn({ region: config.DATA_REGION }, regionWarning);
 const keys = loadSealingKeys(config);
 const providers = createProviders(resolveLlmConfig());
 const db = createDb(config.WORKER_DATABASE_URL, { applicationName: 'noctiv-worker', max: 20 });
@@ -129,17 +131,27 @@ void hourly();
 
 let notifyTimer: NodeJS.Timeout | undefined;
 if (config.SYSTEM_SMTP_HOST) {
-  const email = new EmailChannel({
-    transport: createSystemTransport({
-      host: config.SYSTEM_SMTP_HOST,
-      port: config.SYSTEM_SMTP_PORT,
-      security: config.SYSTEM_SMTP_SECURITY,
-      user: config.SYSTEM_SMTP_USER,
-      pass: config.SYSTEM_SMTP_PASS,
-      from: config.SYSTEM_MAIL_FROM,
-    }),
+  const transport = createSystemTransport({
+    host: config.SYSTEM_SMTP_HOST,
+    port: config.SYSTEM_SMTP_PORT,
+    security: config.SYSTEM_SMTP_SECURITY,
+    user: config.SYSTEM_SMTP_USER,
+    pass: config.SYSTEM_SMTP_PASS,
     from: config.SYSTEM_MAIL_FROM,
   });
+  const email = new EmailChannel({ transport, from: config.SYSTEM_MAIL_FROM });
+  if (regionWarning && config.ADMIN_EMAIL) {
+    // Every start, so a temporary non-EU deployment is not forgotten.
+    void transport
+      .sendMail({
+        from: config.SYSTEM_MAIL_FROM,
+        to: config.ADMIN_EMAIL,
+        subject: '[admin] Noctiv worker started outside the EU',
+        text: `${regionWarning}\n\nRegion: ${config.DATA_REGION}\nStarted: ${new Date().toISOString()}`,
+        headers: { 'Auto-Submitted': 'auto-generated' },
+      })
+      .catch((e: unknown) => logger.error({ err: String(e) }, 'region warning email failed'));
+  }
   let running = false;
   const deliver = async () => {
     if (running) return;
@@ -170,7 +182,9 @@ if (config.SYSTEM_SMTP_HOST) {
     logger.warn('ACTION_LINK_SECRET not set: draft emails carry no Approve / Reject links');
   }
 } else {
-  logger.warn('SYSTEM_SMTP_HOST not set: owner notifications stay queued');
+  logger.warn(
+    'SYSTEM_SMTP_HOST not set: owner and admin notifications stay queued until the system mailer is configured',
+  );
 }
 // PLAN.md §4.7: follow-ups.scan every 15 minutes.
 const followupTimer = setInterval(

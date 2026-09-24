@@ -1,4 +1,4 @@
-import { createLogger } from '@noctiv/core';
+import { createLogger, nonEuWarning } from '@noctiv/core';
 import { createDb } from '@noctiv/db';
 import { buildApp } from './app.ts';
 import { createTokenVerifier } from './auth.ts';
@@ -7,6 +7,8 @@ import { createDevAuth } from './routes/dev.ts';
 
 const config = loadApiConfig();
 const logger = createLogger({ service: 'api', level: config.LOG_LEVEL });
+const regionWarning = nonEuWarning(config, 'API');
+if (regionWarning) logger.warn({ region: config.DATA_REGION }, regionWarning);
 const db = createDb(config.API_DATABASE_URL, { applicationName: 'noctiv-api' });
 const authBase = `${config.SUPABASE_URL.replace(/\/+$/, '')}/auth/v1`;
 
