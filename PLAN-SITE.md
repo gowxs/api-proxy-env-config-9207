@@ -2,7 +2,7 @@
 
 Separate from the app. Static, fast, accessible, no tracking. Lives in `apps/site`.
 
-Status: **design system + home hero built, waiting for review.** The rest of the pages start after sign-off.
+Status: **all pages live on Cloudflare Pages** (project `noctiv-site`). New copy is marked with `data-new`; add `?review` to any URL to see it outlined.
 
 ## 1. Story and principles
 
@@ -104,15 +104,13 @@ Navigation: How it works · Pricing · Contact · Sign in (→ `https://app.noct
 
 ## 5. Hosting and domains
 
-- **Cloudflare Pages**, project `noctiv-site`, custom domains `noctiv.io` and `www.noctiv.io` (www → apex redirect).
+- **Cloudflare Pages**, project `noctiv-site` (`noctiv-site.pages.dev`), custom domains `noctiv.io` and `www.noctiv.io`. Both serve the site; canonical tags point to `noctiv.io`. A 301 from www to the apex needs a redirect rule (token permission Zone › Single Redirect: Edit, or one rule in the dashboard).
 - **DNS is already on Cloudflare** (nameservers `ara`/`yahir.ns.cloudflare.com`), so no nameserver change is needed.
   - The apex currently has proxied A records pointing to an origin that returns error 521. They get replaced when the Pages custom domain is attached.
   - Mail records stay untouched: MX Hostinger, SPF, Brevo code and DKIM.
 - **App at `app.noctiv.io`:** a CNAME to `noctiv-app.netlify.app` (DNS only, not proxied), plus the domain added in Netlify. Supabase Auth Site URL and redirect URLs then move to `https://app.noctiv.io`.
-- **Auto-deploy on push:** a GitHub Actions workflow runs on changes under `apps/site/**`. It builds and runs `wrangler pages deploy`, and needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-  - Pushes to `main` deploy to production.
-  - Other branches get preview URLs.
-- **Token scopes needed:** Account › Cloudflare Pages: Edit; Zone › DNS: Edit (noctiv.io); Zone › Zone: Read.
+- **Auto-deploy on push:** `.github/workflows/site.yml` runs on changes under `apps/site/**`, builds and runs `wrangler pages deploy` to production. It needs one repository secret, `CLOUDFLARE_API_TOKEN`; the account ID is in the workflow. Until the phase-1 branch is merged, pushes to it deploy to production too.
+- **Token scopes:** Account › Cloudflare Pages: Edit; Zone › DNS: Edit (noctiv.io); Zone › Zone: Read. Optional: Zone › Single Redirect: Edit (www → apex).
 
 ## 6. Open items
 

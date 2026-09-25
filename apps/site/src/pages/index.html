@@ -23,80 +23,119 @@
       </p>
     </div>
 
-    <figure class="demo" data-step="done" aria-labelledby="demo-caption">
-      <div class="demo-sky" aria-hidden="true">
-        <span class="demo-day" data-day>Thursday morning</span>
-        <span class="demo-clock">
-          <span class="icon">
-            <svg class="moon" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M20.6 14.4A8.6 8.6 0 0 1 9.6 3.4a8.6 8.6 0 1 0 11 11Z" />
-            </svg>
-            <svg
-              class="sun"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none" />
-              <path
-                d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"
-              />
-            </svg>
-          </span>
-          <span data-clock>08:05</span>
-        </span>
-      </div>
-      <div class="demo-body">
-        <div class="msg msg--in">
-          <div class="msg-meta"><span>Sarah M. · customer</span><time>23:41</time></div>
-          Hi, is the linen throw still available in sage, and how long does delivery to Germany
-          take?
-        </div>
-        <div class="msg msg--draft">
-          <div class="msg-meta"><span>Noctiv · draft reply</span><time>23:42</time></div>
-          Hi Sarah, yes, the linen throw is in stock in sage. Delivery to Germany takes 3–5 business
-          days and costs €9.90. Would you like me to hold one for you?
-          <div class="msg-src">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path
-                fill="currentColor"
-                d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.2 5.3-3.8 4.2a.8.8 0 0 1-1.2 0L4.8 9a.8.8 0 1 1 1.2-1.1l.8.9 3.2-3.5a.8.8 0 0 1 1.2 1Z"
-              />
-            </svg>
-            <span><b>Sourced:</b> Stock list, Shipping policy · no prices invented</span>
-          </div>
-          <div class="drafting" aria-hidden="true">
-            <span class="dots"><i></i><i></i><i></i></span>Noctiv is drafting a reply
-          </div>
-        </div>
-        <div class="approval">
-          <span>Sent to you for approval</span>
-          <span class="approval-state">
-            <span class="pill pill--wait" aria-hidden="true">Waiting for you</span>
-            <span class="pill pill--ok"
-              ><svg viewBox="0 0 16 16" aria-hidden="true">
-                <path
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="m3.5 8.5 3 3 6-6.5"
-                /></svg
-              >Approved 08:05</span
-            >
-          </span>
-        </div>
-      </div>
-      <figcaption>
-        <span id="demo-caption"
-          >Example: a customer e-mail at 23:41, a draft reply at 23:42, approved at 08:05.</span
-        >
-        <button class="demo-toggle" type="button" data-toggle hidden>Pause</button>
-      </figcaption>
-    </figure>
+    {{> demo}}
   </div>
   <hr class="dawn-line" />
+</section>
+
+{{> jobs}}
+
+<section class="section" id="who">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Built for two kinds of inbox.</h2>
+    </div>
+    <div class="audiences">
+      <article class="panel audience">
+        <h3>Online stores</h3>
+        <p class="who">
+          Shopify, WooCommerce and any shop that gets "where is my order?" twenty times a day.
+        </p>
+        <ul>
+          <li>
+            <b>Stock and shipping questions</b
+            ><span>answered from your own policy pages, not from a generic bot script.</span>
+          </li>
+          <li>
+            <b>Pre-sale questions at night</b
+            ><span
+              >are exactly the ones that decide whether the cart gets checked out tomorrow.</span
+            >
+          </li>
+          <li>
+            <b>Refunds and complaints</b
+            ><span>are never answered automatically; they land on your phone as a summary.</span>
+          </li>
+        </ul>
+      </article>
+      <article class="panel audience">
+        <h3>Service businesses</h3>
+        <p class="who">
+          Agencies, studios, repair shops, clinics, trades: anyone who wins work by e-mail and loses
+          it by silence.
+        </p>
+        <ul>
+          <li>
+            <b>Quote requests</b
+            ><span>get an immediate reply with your prices, delivery times and next step.</span>
+          </li>
+          <li>
+            <b>Follow-ups you'd forget</b
+            ><span>go out on their own, and stop the moment the customer answers.</span>
+          </li>
+          <li>
+            <b>A clear pipeline</b
+            ><span>shows which inquiries are waiting on you and which are waiting on them.</span>
+          </li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+{{> rules}} {{> steps}}
+
+<section class="section" id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>One plan. Less than a day of an assistant's salary.</h2>
+    </div>
+    {{> price}}
+  </div>
+</section>
+
+<section class="section" id="faq">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Questions people ask before trying it.</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>Will it send something embarrassing to a customer?</summary>
+        <p>
+          Not without you. New accounts only produce drafts, and even in auto-send mode anything
+          with a number that isn't in your knowledge base, or anything emotional or about money
+          back, is held for you.
+        </p>
+      </details>
+      <details>
+        <summary>Do I have to move to a new helpdesk?</summary>
+        <p>
+          No. Noctiv works inside the mailbox you already use. Replies go out from your address and
+          appear in your Sent folder like any other e-mail.
+        </p>
+      </details>
+      <details>
+        <summary>What about e-mails it can't answer?</summary>
+        <p>
+          You get a short summary with a link to reply yourself. That's the whole point: it handles
+          the repetitive ones so you can spend time on the rest.
+        </p>
+      </details>
+      <details>
+        <summary>Does it work in my language?</summary>
+        <p>
+          It replies in the language the customer wrote in. Your knowledge base can be in any
+          language.
+        </p>
+      </details>
+      <details>
+        <summary>Where is my data stored?</summary>
+        <p>
+          In a database in Frankfurt, Germany. E-mail content is kept for 90 days by default and can
+          be deleted at any time.
+        </p>
+      </details>
+    </div>
+  </div>
 </section>

@@ -7,7 +7,9 @@
     "build": "node build.ts",
     "dev": "node build.ts --serve",
     "shots": "node scripts/shots.ts",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "check": "node scripts/check.ts",
+    "assets": "node scripts/assets.ts"
   },
   "devDependencies": {
     "@fontsource-variable/manrope": "^5.3.0",

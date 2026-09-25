@@ -1,0 +1,47 @@
+name: Site
+
+# Builds apps/site and deploys it to Cloudflare Pages (noctiv.io).
+# Needs one repository secret: CLOUDFLARE_API_TOKEN (Pages: Edit).
+# Pushes to main deploy to production. Until the phase-1 branch is merged,
+# pushes to it deploy to production too; remove it from the list after the merge.
+
+on:
+  push:
+    branches: [main, claude/noctiv-phase-1-plan-09rtlv]
+    paths:
+      - 'apps/site/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 97570d018bffbb1ed393458ee52abfaa
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @noctiv/site
+      - run: pnpm --filter @noctiv/site build
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not set (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          npx --yes wrangler@4 pages deploy apps/site/dist --project-name noctiv-site --branch main

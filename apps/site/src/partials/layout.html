@@ -22,6 +22,9 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preload" href="/fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin />
     {{head}}
+    <script>
+      if (/[?&]review\b/.test(location.search)) document.documentElement.classList.add('review');
+    </script>
     <style>
       {{css}}
     </style>

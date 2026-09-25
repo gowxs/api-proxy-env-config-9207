@@ -5,8 +5,8 @@
  *   node build.ts          build once
  *   node build.ts --serve  build, then serve dist/ on :4321, rebuilding on every page request
  */
+import { createHash } from 'node:crypto';
 import {
-  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -23,6 +23,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
 const ORIGIN = 'https://noctiv.io';
+/** The web app ("Sign in"). Switch to https://app.noctiv.io/ once that domain points at the app. */
+const APP_URL = process.env.SITE_APP_URL ?? 'https://noctiv-app.netlify.app/';
 
 interface PageMeta {
   title: string;
@@ -86,6 +88,48 @@ function render(tpl: string, vars: Record<string, string>, parts: Record<string,
   return out.replace(/\{\{(\w+)\}\}/g, (m, key: string) => (key in vars ? vars[key]! : m));
 }
 
+/**
+ * Cloudflare Pages headers. Scripts are only the inline ones we wrote, allowed
+ * by hash; everything else is same-origin. Styles stay inline (one small block).
+ */
+function headers(scripts: string[]): string {
+  const hashes = scripts
+    .map((s) => `'sha256-${createHash('sha256').update(s).digest('base64')}'`)
+    .sort()
+    .join(' ');
+  const csp = [
+    "default-src 'none'",
+    `script-src ${hashes || "'none'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "manifest-src 'self'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    'upgrade-insecure-requests',
+  ].join('; ');
+  return `/*
+  Content-Security-Policy: ${csp}
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
+  Cross-Origin-Opener-Policy: same-origin
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.png
+  Cache-Control: public, max-age=86400
+
+/favicon.*
+  Cache-Control: public, max-age=86400
+`;
+}
+
 const escapeAttr = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
@@ -100,8 +144,25 @@ export function build(): { pages: string[] } {
       .map(read)
       .join('\n'),
   );
+  // Fonts get content-hashed names so they can be cached forever.
+  const fontSrc = join(ROOT, 'node_modules/@fontsource-variable/manrope/files');
+  mkdirSync(join(DIST, 'fonts'), { recursive: true });
+  const fontNames: Record<string, string> = {};
+  for (const [name, file] of [
+    ['manrope-latin', 'manrope-latin-wght-normal.woff2'],
+    ['manrope-latin-ext', 'manrope-latin-ext-wght-normal.woff2'],
+  ] as const) {
+    const data = readFileSync(join(fontSrc, file));
+    const hashed = `${name}.${createHash('sha256').update(data).digest('hex').slice(0, 10)}.woff2`;
+    writeFileSync(join(DIST, 'fonts', hashed), data);
+    fontNames[`/fonts/${name}.woff2`] = `/fonts/${hashed}`;
+  }
+  const withFonts = (text: string) =>
+    text.replace(/\/fonts\/manrope-latin(?:-ext)?\.woff2/g, (m) => fontNames[m] ?? m);
+
   const parts = partials();
   const layout = parts.layout!;
+  const inlineScripts = new Set<string>();
   const pages: string[] = [];
   const sitemap: string[] = [];
 
@@ -124,9 +185,11 @@ export function build(): { pages: string[] } {
         origin: ORIGIN,
         head: meta.noindex ? '<meta name="robots" content="noindex" />' : '',
         css,
-        content: raw.slice(m[0].length),
+        // Partials inside the page body are expanded before it goes into the layout.
+        content: render(raw.slice(m[0].length), {}, parts),
         scripts,
         nav: meta.nav ?? '',
+        app: APP_URL,
         year: String(new Date().getFullYear()),
       },
       parts,
@@ -134,23 +197,17 @@ export function build(): { pages: string[] } {
     const target =
       slug === 'index' ? 'index.html' : slug === '404' ? '404.html' : join(slug, 'index.html');
     mkdirSync(dirname(join(DIST, target)), { recursive: true });
-    writeFileSync(join(DIST, target), minifyHtml(html));
+    const finalHtml = withFonts(minifyHtml(html));
+    const leftover = /\{\{[^}]*\}\}/.exec(finalHtml);
+    if (leftover) throw new Error(`${file}: unresolved template tag ${leftover[0]}`);
+    for (const m of finalHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)) inlineScripts.add(m[1]!);
+    writeFileSync(join(DIST, target), finalHtml);
     pages.push(path);
     if (!meta.noindex && slug !== '404') sitemap.push(ORIGIN + path);
   }
 
-  // Static files and the two font subsets.
   if (existsSync(join(SRC, 'public'))) cpSync(join(SRC, 'public'), DIST, { recursive: true });
-  const fonts = join(ROOT, 'node_modules/@fontsource-variable/manrope/files');
-  mkdirSync(join(DIST, 'fonts'), { recursive: true });
-  copyFileSync(
-    join(fonts, 'manrope-latin-wght-normal.woff2'),
-    join(DIST, 'fonts/manrope-latin.woff2'),
-  );
-  copyFileSync(
-    join(fonts, 'manrope-latin-ext-wght-normal.woff2'),
-    join(DIST, 'fonts/manrope-latin-ext.woff2'),
-  );
+  writeFileSync(join(DIST, '_headers'), headers([...inlineScripts]));
 
   writeFileSync(
     join(DIST, 'sitemap.xml'),
@@ -192,6 +249,17 @@ export function serve(port = 4321): Promise<() => void> {
           ? join(DIST, p, 'index.html')
           : join(DIST, '404.html');
         res.statusCode = file.endsWith('404.html') ? 404 : 200;
+      }
+      // Same global headers as Cloudflare Pages (the "/*" block of _headers).
+      const global = /^\/\*\n((?: {2}.+\n)+)/.exec(readFileSync(join(DIST, '_headers'), 'utf8'));
+      for (const line of global?.[1]!.trim().split('\n') ?? []) {
+        const i = line.indexOf(':');
+        if (
+          !/^(Strict-Transport|Content-Security)/.test(line.trim()) ||
+          extname(file) === '.html'
+        ) {
+          res.setHeader(line.slice(0, i).trim(), line.slice(i + 1).trim());
+        }
       }
       res.setHeader('content-type', TYPES[extname(file)] ?? 'application/octet-stream');
       res.end(readFileSync(file));
