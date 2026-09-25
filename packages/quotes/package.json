@@ -1,0 +1,22 @@
+{
+  "name": "@noctiv/quotes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Quotes (beta): price-list parsing, mapping validation, totals and VAT, auto-send rules, PDF.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@expo-google-fonts/manrope": "^0.4.2",
+    "pdfkit": "^0.20.2",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.17.6"
+  }
+}

@@ -2,6 +2,7 @@ import {
   emptyAllowlist,
   hostOf,
   isAutomaticMode,
+  logoAllowed,
   nextFollowupAt,
   ownerNotificationPayload,
   renderReplyEmail,
@@ -9,9 +10,19 @@ import {
   type Logger,
   type TenantMode,
 } from '@noctiv/core';
-import { loadAllowlist } from '@noctiv/kb';
+import { loadAllowlist, type SafeFetch } from '@noctiv/kb';
+import {
+  fetchQuoteLogo,
+  loadQuoteDocument,
+  quoteAcceptUrl,
+  quotePdfFileName,
+  quotePdfInput,
+  renderQuotePdf,
+  signQuoteToken,
+  type QuoteDocument,
+} from '@noctiv/quotes';
 
-type DraftKind = 'reply' | 'followup' | 'acknowledgement';
+type DraftKind = 'reply' | 'followup' | 'acknowledgement' | 'quote';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -41,6 +52,8 @@ export interface MailSendDeps {
    * of being recovered. Must stay below the job lease (900 s).
    */
   inProgressMs?: number;
+  /** Quotes (beta): signs the accept link in the PDF and fetches the logo. */
+  quotes?: { secret: string; publicApiUrl: string; fetchLogo: SafeFetch };
 }
 
 type SentVia = 'auto' | 'owner_approval';
@@ -80,6 +93,8 @@ interface SendPlan {
   };
   tenant: { timezone: string; followupAfterDays: number; followupMax: number };
   followupsSent: number;
+  /** A 'quote' draft: the quote to attach as a PDF. */
+  quote: { doc: QuoteDocument; logoAllowed: boolean } | null;
 }
 
 type PlanResult =
@@ -141,6 +156,30 @@ export function mailSendHandler(deps: MailSendDeps) {
       }
     }
 
+    let attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+    if (plan.quote) {
+      if (!deps.quotes) {
+        await withTenant(deps.sql, tenantId, (tx) =>
+          finalizeFailed(tx, tenantId, draftId, plan.outbound.id, 'QUOTES_NOT_CONFIGURED'),
+        );
+        return { status: 'failed', code: 'QUOTES_NOT_CONFIGURED' };
+      }
+      const { doc, logoAllowed } = plan.quote;
+      const token = signQuoteToken(
+        { tenantId, quoteId: doc.id, validUntil: doc.validUntil },
+        deps.quotes.secret,
+      );
+      const logo = logoAllowed
+        ? await fetchQuoteLogo(deps.quotes.fetchLogo, doc.brand.logoUrl)
+        : null;
+      const pdf = await renderQuotePdf(
+        quotePdfInput(doc, quoteAcceptUrl(deps.quotes.publicApiUrl, token), logo),
+      );
+      attachments = [
+        { filename: quotePdfFileName(doc.number), content: pdf, contentType: 'application/pdf' },
+      ];
+    }
+
     const raw = await buildOutboundMessage({
       from: { address: c.settings.emailAddress, name: c.displayName },
       to: plan.draft.to,
@@ -151,6 +190,7 @@ export function mailSendHandler(deps: MailSendDeps) {
       inReplyTo: plan.inReplyTo,
       references: plan.references,
       autoSubmitted: plan.outbound.sentVia === 'auto',
+      attachments,
     });
 
     let response: string;
@@ -313,6 +353,40 @@ async function planSend(
   }
   if (!d.body?.trim()) return { fail: { code: 'DRAFT_EMPTY', outboundId: existing?.id ?? null } };
 
+  let quote: SendPlan['quote'] = null;
+  const quoteHold: string[] = [];
+  if (d.kind === 'quote') {
+    const [q] = await tx<
+      {
+        id: string;
+        status: string;
+        total_cents: number;
+        limit_cents: number;
+        enabled: boolean;
+        expired: boolean;
+      }[]
+    >`
+      select q.id, q.status, q.total_cents, t.quotes_auto_send_limit_cents as limit_cents,
+             t.quotes_enabled as enabled, q.valid_until < (now() at time zone t.timezone)::date as expired
+      from public.quotes q join public.tenants t on t.id = q.tenant_id
+      where q.draft_id = ${d.id}`;
+    if (!q) return { fail: { code: 'QUOTE_MISSING', outboundId: existing?.id ?? null } };
+    if (!existing) {
+      if (q.status !== 'pending_approval') return { done: { skipped: `quote_${q.status}` } };
+      // Approved after its validity ended: the owner edits the date and approves again.
+      if (q.expired) return { fail: { code: 'QUOTE_EXPIRED', outboundId: null } };
+      // Send-time re-check of the automatic-send limit (the owner may have lowered it).
+      if (q.total_cents > q.limit_cents) quoteHold.push('quote_over_limit');
+      if (!q.enabled) quoteHold.push('quotes_disabled');
+    }
+    const doc = await loadQuoteDocument(tx, q.id);
+    if (!doc) return { fail: { code: 'QUOTE_MISSING', outboundId: existing?.id ?? null } };
+    const logoOk = doc.brand.logoUrl
+      ? logoAllowed(doc.brand.logoUrl, await loadAllowlist(tx))
+      : false;
+    quote = { doc, logoAllowed: logoOk };
+  }
+
   if (!existing && outbound.sentVia === 'auto') {
     // Serialise auto-sends per tenant so two jobs cannot both pass the caps.
     await tx`select 1 from public.tenants where id = ${tenantId} for update`;
@@ -329,6 +403,7 @@ async function planSend(
     if (!d.entitled) reasons.push('billing_inactive');
     if (caps!.sender >= d.max_ai_replies_per_sender_24h) reasons.push('sender_cap_reached');
     if (caps!.hour >= d.max_replies_per_hour) reasons.push('tenant_hour_cap_reached');
+    reasons.push(...quoteHold);
     if (reasons.length) {
       if (isAck) {
         // Not a reply the owner should approve: the escalation already asks them to answer.
@@ -408,6 +483,7 @@ async function planSend(
         followupMax: d.followup_max,
       },
       followupsSent: d.followups_sent,
+      quote,
     },
   };
 }
@@ -483,6 +559,11 @@ async function finalizeSent(
                      ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'acknowledgement' })})`;
     return;
   }
+  const isQuote = plan.draft.kind === 'quote';
+  if (isQuote) {
+    await tx`update public.quotes set status = 'sent', sent_at = ${now}
+             where draft_id = ${plan.draft.id} and status = 'pending_approval'`;
+  }
   const isFollowup = plan.draft.kind === 'followup';
   const sentCount = isFollowup ? plan.followupsSent + 1 : 0;
   const more = sentCount < plan.tenant.followupMax;
@@ -499,8 +580,12 @@ async function finalizeSent(
       tx,
       tenantId,
       plan.leadId,
-      isFollowup ? 'followed_up' : 'sent',
-      plan.outbound.sentVia === 'auto' ? 'auto reply sent' : 'approved reply sent',
+      isFollowup ? 'followed_up' : isQuote ? 'quoted' : 'sent',
+      isQuote
+        ? `quote ${plan.quote?.doc.number ?? ''} sent`.trim()
+        : plan.outbound.sentVia === 'auto'
+          ? 'auto reply sent'
+          : 'approved reply sent',
     );
   }
   if (plan.sourceMessageId && plan.outbound.sentVia === 'auto') {
@@ -556,6 +641,7 @@ async function downgradeToApproval(
   reasons: string[],
 ): Promise<void> {
   await tx`update public.drafts set status = 'pending_approval', decided_by = null, decided_at = null where id = ${draftId}`;
+  await tx`update public.quotes set hold_reasons = ${reasons} where draft_id = ${draftId}`;
   const [src] = sourceMessageId
     ? await tx<
         {

@@ -636,3 +636,71 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Rules** (enforced in `packages/core/src/email-design/render.ts`, shared by the worker and the preview API): multipart/alternative with a complete text/plain part (reply, signature, contact lines); inline CSS only; no remote assets except the logo; no tracking; HTML over 40 KB is not sent (text only); no pure black, text on the brand colour chosen for contrast.
 - **Logo:** https only, and its host must be in the tenant's knowledge-base allowlist (its own website). Checked by the API on save (400 otherwise) and again at send time (dropped, company name shown instead).
 - **Tests:** `core/test/email-design.test.ts` (plain fallback, rules, allowlist, colours), `mail/test/outbound.test.ts` (MIME structure), `api/test/email-design.db.test.ts` (settings, allowlist on save, preview), worker send test (multipart delivered through GreenMail; plain stays text only).
+
+## 21. Quotes (beta) — plan (founder request 2026-09-26)
+
+A per-tenant module, off by default (Settings → "Quotes (beta)"). When a customer asks for a price on things in the tenant's price list, Noctiv drafts a quote (lines, totals, VAT, validity) with a branded PDF and an "Approve quote" link, instead of a plain reply. Every number comes from the confirmed price list or from the customer's own e-mail; code does all arithmetic.
+
+### 21.1 Data
+
+| Table / column | Contents |
+| --- | --- |
+| `tenants.quotes_enabled` | boolean, default false. |
+| `tenants.quotes_currency` | ISO code, default `EUR`. |
+| `tenants.quotes_vat_mode` | `none` (no VAT line), `exclusive` (prices exclude VAT; VAT added), `inclusive` (prices include VAT; VAT shown as "of which"). Default `exclusive`. |
+| `tenants.quotes_vat_rate` | percent, numeric(5,2), default 21. |
+| `tenants.quotes_validity_days` | default 14. |
+| `tenants.quotes_auto_send_limit_cents` | default 50 000 (€500). |
+| `tenants.quotes_next_number` | per-tenant counter for `Q-2026-0001`. |
+| `price_items` | name, description, unit ("pcs", "hour", "m²"…), `unit_price_cents`, `min_qty`, `max_qty` (optional), `vat_note` (text shown on the line), `status` `draft`/`confirmed`/`archived`, `source` `manual`/`csv`/`file`, `import_id`. Only `confirmed` items can be quoted. |
+| `price_imports` | an uploaded PDF/DOCX price list: file name, extracted text, status `pending`/`parsing`/`ready`/`failed`, item count. Parsing creates `draft` items the owner confirms. |
+| `quotes` | number, thread, lead, draft, status `draft`/`pending_approval`/`sent`/`viewed`/`accepted`/`expired`/`rejected`, currency, VAT mode/rate snapshot, subtotal/VAT/total cents, `valid_until`, notes, `sent_at`, `viewed_at`, `accepted_at`. |
+| `quote_lines` | quote, price item, item name/unit snapshot, `qty`, `unit_price_cents` (copied from the item), `line_total_cents`, the customer's own words for the line. |
+| `drafts.kind` | + `quote` (a reply with the quote attached). |
+| `leads.stage` | + `quoted`, `accepted`. |
+
+All tables have `tenant_id`, forced RLS and isolation policies like the rest.
+
+### 21.2 Price list
+
+- **Manual:** add/edit/archive items in Settings → Quotes → Price list (confirmed on save).
+- **CSV import:** header row with `name, description, unit, unit_price, min_qty, max_qty, vat_note` (name and unit_price required; `;` or `,`; decimal comma accepted). Rows are checked and shown before import; imported rows are `confirmed` (the owner wrote the file).
+- **PDF/DOCX import:** text is extracted as for the knowledge base, then a worker job asks the model to list items as strict JSON (name, description, unit, price, min/max). Code keeps an item only if its price appears in the extracted text. Items land as `draft`; the owner reviews, edits and confirms them. Same free-tier rule as the knowledge base.
+
+### 21.3 Detection and drafting (worker)
+
+1. The classifier gets a new category `quote_request` ("asks what specific products or services would cost, often with quantities"). With quotes off, `quote_request` is handled exactly like `sales_inquiry`.
+2. With quotes on, and a `quote_request` that is not on the hard list, the pipeline runs a **mapping** call: the model sees the e-mail and the confirmed price list (as labels `P1…Pn`, names, units, min/max; **no prices**). It returns strict JSON: `lines: [{item: "P3", qty, customer_text}]`, `unmapped: [customer_text]`, `language`.
+3. **Code validates** every line: the label exists and is confirmed; `qty` is a positive number within min/max; `qty` must appear in the customer's e-mail (the number itself or a written-out 1–12), or be 1 when the customer named no quantity. Anything that fails moves to `unmapped`.
+4. **Totals in code, in integer cents:** line = qty × unit price; subtotal = Σ lines; VAT per the tenant's mode and rate (rounded half-up per quote, not per line); total. The quote number, validity date and totals are never produced by the model.
+5. **Unmapped items:** if nothing maps, or anything is unmapped, no quote is made. The reply asks **one** clarifying question (fixed text per language naming what we could not match), and the owner is notified (`quote_needs_you`). That reply follows the normal mode rules (it states no facts).
+6. **Otherwise** a quote plus a short cover reply (fixed text per language: quote number, total, validity and the accept link, all filled in by code). The cover reply and quote are one `quote` draft.
+
+### 21.4 Modes and auto-send
+
+- **Mode 1 (approve everything):** always `pending_approval`.
+- **Modes 2 and 3:** auto-sent only if every line mapped to a confirmed item, nothing is unmapped, the total is at or under `quotes_auto_send_limit_cents` (default €500), and the usual guards pass (budget, sender/hour caps, no injection signs, reply-to matches). Otherwise → approval, with the reason (`quote_over_limit`, `quote_unmapped`, …).
+- The send step re-checks the limit and the mode (as it does for replies today).
+
+### 21.5 Output
+
+- **PDF** (worker, `pdfkit`, embedded font with full Latin-extended support): brand colour bar, logo (the allowlisted e-mail-design logo, fetched with the safe fetcher; skipped if unavailable), company name/address/website/phone, quote number and dates, customer, line table (item, qty, unit, unit price, total), subtotal, VAT line, total, validity, notes, "Accept online: <link>". Attached to the reply as `Quote-Q-2026-0001.pdf`; the reply itself uses the tenant's e-mail design.
+- **Accept link:** `https://app.noctiv.io/api/q/<token>` (HMAC token: tenant, quote, expiry = validity + 30 days). `GET` shows a no-script page with the quote summary and an **Accept quote** button, and marks the quote `viewed` (first open). `POST` accepts: status `accepted`, lead → `accepted`, owner notified (`quote_accepted`). Expired quotes show "expired, ask for a new quote". `GET …/pdf` downloads the same PDF.
+- **Expiry:** the hourly job marks sent/viewed quotes past `valid_until` as `expired`.
+
+### 21.6 App screens
+
+- **Settings:** a "Quotes (beta)" switch with a link to Settings → Quotes.
+- **Settings → Quotes:** price list (search, add, edit, archive; draft items highlighted with Confirm), import (CSV, PDF/DOCX), quote settings (currency, VAT mode and rate, validity, auto-send limit).
+- **Quotes list** (`/quotes`, linked from the dashboard): number, customer, total, status badge (pending approval, sent, viewed, accepted, expired), date.
+- **Quote on the draft page:** the lines as an editable table (change quantity, remove a line, add an item from the confirmed list, notes, validity), totals recomputed by the API, then Approve and send. The conversation page shows the quote with its status.
+
+### 21.7 Site
+
+"Quotes (beta)" line on Pricing (included list) and How it works, marked `data-new` for review.
+
+### 21.8 Tests
+
+- **Core (unit):** mapping validation (unknown label, draft item, qty not in the e-mail, min/max, assumed 1), totals and rounding, VAT none/exclusive/inclusive, the auto-send decision (limit, unmapped, mode), CSV parsing (separators, decimal comma, bad rows), and quote number format.
+- **Worker (db):** quote drafted in mode 1; auto-sent in mode 2 under the limit, held over it; clarifying question plus owner notification for unmapped items; a sent message has the PDF attached; import parsing keeps only prices present in the text.
+- **API (db):** price list CRUD and CSV import, draft items not quotable, editing lines recomputes totals, the accept link (view, accept, expired, bad token) moves the lead to `quoted` → `accepted` and notifies the owner.

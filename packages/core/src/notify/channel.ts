@@ -12,6 +12,9 @@ export type NotificationKind =
   | 'budget_state'
   /** The in-app free trial ends in 7 days / 1 day (app.queue_trial_reminders). */
   | 'trial_ending'
+  /** Quotes (beta): the customer accepted a quote; a request had items not on the price list. */
+  | 'quote_accepted'
+  | 'quote_needs_you'
   /** One-off check that the system mailer reaches the owner (queued by an operator). */
   | 'test';
 

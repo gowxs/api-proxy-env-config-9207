@@ -35,6 +35,7 @@ interface Tenant {
   retention_days: number;
   reply_signature: string | null;
   email_template: string;
+  quotes_enabled: boolean;
 }
 
 function AutoSendDialog({
@@ -200,6 +201,17 @@ function SettingsForm({
       <Card title="Mailbox">
         <Link className="text-sm text-indigo-700" href="/settings/mailboxes">
           Manage connected mailboxes →
+        </Link>
+      </Card>
+
+      <Card title="Quotes (beta)">
+        <p className="text-sm text-neutral-600">
+          {t.quotes_enabled
+            ? 'On: price requests get a quote from your price list, with a PDF and an approve link.'
+            : 'Off. Turn it on to answer price requests with quotes from your price list.'}
+        </p>
+        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/quotes">
+          {t.quotes_enabled ? 'Price list and quote settings →' : 'Set up quotes →'}
         </Link>
       </Card>
 

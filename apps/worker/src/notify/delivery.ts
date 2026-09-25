@@ -156,6 +156,12 @@ function links(
       return { dashboard: draftId ? `${app}/drafts/${draftId}` : `${app}/drafts` };
     case 'mailbox_disconnected':
       return { dashboard: `${app}/settings/mailboxes` };
+    case 'quote_accepted':
+    case 'quote_needs_you':
+      return {
+        dashboard:
+          typeof p.threadId === 'string' ? `${app}/conversations/${p.threadId}` : `${app}/quotes`,
+      };
     default:
       return { dashboard: `${app}/` };
   }

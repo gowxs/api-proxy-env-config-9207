@@ -41,12 +41,15 @@ export interface OutboundInput {
   /** RFC 3834: set on replies nobody approved, so other assistants never answer them. */
   autoSubmitted?: boolean;
   date?: Date;
+  /** Files attached after the body (e.g. a quote PDF); bytes only, never paths or URLs. */
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 }
 
 /**
  * Builds the complete RFC 5322 message once; the same bytes are sent over
  * SMTP and appended to the Sent folder. Text only, or multipart/alternative
- * (text first, then HTML) when an HTML design is given.
+ * (text first, then HTML) when an HTML design is given; wrapped in
+ * multipart/mixed when there are attachments.
  */
 export async function buildOutboundMessage(i: OutboundInput): Promise<Buffer> {
   const refs = [...(i.references ?? []), ...(i.inReplyTo ? [i.inReplyTo] : [])]
@@ -62,6 +65,15 @@ export async function buildOutboundMessage(i: OutboundInput): Promise<Buffer> {
     subject: headerText(i.subject),
     text: i.text,
     ...(i.html ? { html: i.html } : {}),
+    ...(i.attachments?.length
+      ? {
+          attachments: i.attachments.map((a) => ({
+            filename: headerText(a.filename, 100),
+            content: a.content,
+            contentType: a.contentType,
+          })),
+        }
+      : {}),
     messageId: i.messageId,
     date: i.date ?? new Date(),
     ...(i.inReplyTo ? { inReplyTo: i.inReplyTo } : {}),

@@ -10,6 +10,7 @@ import { kbIngestHandler } from './jobs/kb-ingest.ts';
 import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
+import { quotesImportHandler } from './jobs/quotes-import.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { alertDeadJob } from './ops/alerts.ts';
 import { purgeExpiredContent, tenantDeleteHandler } from './ops/gdpr.ts';
@@ -38,6 +39,11 @@ if (providers.description.trainingPolicy === 'may_train_on_data') {
   );
 }
 
+// Quotes (beta) need the link secret for the customer's accept link.
+const quotes = config.ACTION_LINK_SECRET
+  ? { secret: config.ACTION_LINK_SECRET, publicApiUrl: config.PUBLIC_API_URL }
+  : undefined;
+
 const runner = new JobRunner({
   sql: db.sql,
   // A crashed worker's jobs are re-claimed after this. Long enough for a website
@@ -58,7 +64,9 @@ const runner = new JobRunner({
       llm: providers.llm,
       embeddings: providers.embeddings,
       logger,
+      ...(quotes ? { quotes } : {}),
     }),
+    [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
     [QUEUES.healthCheck]: healthCheckHandler({
       sql: db.sql,
@@ -81,6 +89,14 @@ const runner = new JobRunner({
       keys,
       allowInsecure: config.MAIL_ALLOW_INSECURE,
       logger,
+      ...(quotes
+        ? {
+            quotes: {
+              ...quotes,
+              fetchLogo: createSafeFetcher({ maxBytes: 1024 * 1024, timeoutMs: 8_000 }),
+            },
+          }
+        : {}),
     }),
   },
   onError: (job, error, outcome) => {
@@ -130,6 +146,8 @@ const hourly = () =>
     scanHealthChecks(db.sql),
     purgeExpiredContent(db.sql),
     db.sql`select app.queue_trial_reminders()`,
+    db.sql`select app.expire_quotes()`,
+    db.sql`select app.purge_expired_quote_text()`,
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();

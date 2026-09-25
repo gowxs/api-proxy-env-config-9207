@@ -32,12 +32,15 @@ import { loadAllowlist, retrieveKnowledge } from '@noctiv/kb';
 import type { Sql, TransactionSql } from 'postgres';
 import { QUEUES } from '../queues.ts';
 import { setLeadStage } from './leads.ts';
+import { draftQuote } from './quote.ts';
 
 export interface PipelineDeps {
   sql: Sql;
   llm: LlmProvider;
   embeddings: EmbeddingProvider;
   logger?: Logger;
+  /** Quotes (beta): signs the customer's accept link. Without it quote requests get normal replies. */
+  quotes?: { secret: string; publicApiUrl: string };
 }
 
 export type ProcessOutcome =
@@ -45,7 +48,7 @@ export type ProcessOutcome =
   | { status: 'skipped'; reason: string }
   | { status: 'drafted' | 'auto_send' | 'escalated'; reasons: string[] };
 
-interface Loaded {
+export interface Loaded {
   processingStatus: string;
   message: {
     id: string;
@@ -69,6 +72,7 @@ interface Loaded {
     notifyFullText: boolean;
     maxPerSender24h: number;
     maxPerHour: number;
+    quotesEnabled: boolean;
   };
   thread: { status: string };
   /** In the trial or subscribed (app.billing_entitled). */
@@ -99,6 +103,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       notify_full_text: boolean;
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
+      quotes_enabled: boolean;
       thread_status: string;
       entitled: boolean;
       backlog: boolean;
@@ -107,7 +112,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
-           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, th.status as thread_status,
+           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
     from public.message_processing mp
@@ -146,6 +151,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       notifyFullText: row.notify_full_text,
       maxPerSender24h: row.max_ai_replies_per_sender_24h,
       maxPerHour: row.max_replies_per_hour,
+      quotesEnabled: row.quotes_enabled,
     },
     thread: { status: row.thread_status },
     entitled: row.entitled,
@@ -330,6 +336,23 @@ export async function processMessage(
       embedTokens,
       null,
     );
+  }
+
+  // 4b. Quotes (beta): a price request for items on the confirmed price list gets a quote.
+  //     With quotes off, quote_request is handled exactly like sales_inquiry.
+  if (classification.category === 'quote_request' && l.tenant.quotesEnabled && deps.quotes) {
+    const q = await draftQuote(deps, tenantId, l, leadId, {
+      classification,
+      body,
+      origin,
+      budgetState: budget.state,
+      usage,
+      llmCalls,
+      embedTokens,
+    });
+    if (q.outcome) return q.outcome;
+    usage = q.usage;
+    llmCalls = q.llmCalls;
   }
 
   // 5. Retrieve, generate, guard.
@@ -521,7 +544,7 @@ async function writeProcessing(
     where message_id = ${messageId}`;
 }
 
-async function notifyOwner(
+export async function notifyOwner(
   tx: TransactionSql,
   tenantId: string,
   dedupeKey: string,

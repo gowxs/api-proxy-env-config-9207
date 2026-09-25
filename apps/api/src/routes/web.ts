@@ -20,6 +20,8 @@ import type { FastifyInstance } from 'fastify';
 import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
+import { HttpError } from './http-error.ts';
+import { quoteSettingsColumns, quoteSettingsShape, selectQuotes } from './quotes.ts';
 
 /** Queue names shared with the worker (apps/worker/src/queues.ts). */
 const MAIL_SEND_QUEUE = 'mail.send';
@@ -43,17 +45,13 @@ const LEAD_STAGES = [
   'sent',
   'followed_up',
   'replied',
+  'quoted',
+  'accepted',
   'converted',
   'escalated',
 ] as const;
 
-export class HttpError extends Error {
-  readonly status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export { HttpError };
 
 /** 1 approve everything, 2 auto-reply to grounded questions, 3 fully automatic. */
 const modeRank = (m: TenantMode) => TENANT_MODES.indexOf(m);
@@ -126,6 +124,7 @@ const settingsBody = z
     replySignature: z.string().max(1000).nullable(),
     onboardingCompleted: z.literal(true),
     ...designShape,
+    ...quoteSettingsShape,
   })
   .partial()
   .strict();
@@ -177,7 +176,9 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                max_replies_per_hour, max_ai_replies_per_sender_24h, followup_after_days, followup_max,
                retention_days, reply_signature, onboarding_completed_at, created_at,
                email_template, brand_company_name, brand_logo_url, brand_color, brand_website,
-               brand_phone, brand_address, brand_social_links
+               brand_phone, brand_address, brand_social_links,
+               quotes_enabled, quotes_currency, quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate,
+               quotes_validity_days, quotes_auto_send_limit_cents
         from public.tenants`;
       return t;
     }),
@@ -209,7 +210,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
-      Object.assign(cols, await designColumns(tx, b));
+      Object.assign(cols, await designColumns(tx, b), quoteSettingsColumns(b));
       if (Object.keys(cols).length) {
         await tx`update public.tenants set ${tx(cols)} where id = ${tenantId}`;
         await audit(tx, tenantId, req.user!.userId, 'settings.updated', 'tenant', tenantId, {
@@ -328,6 +329,11 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         from public.usage_daily where day = (now() at time zone 'utc')::date`;
       const kb = await tx<{ status: string; n: number }[]>`
         select status, count(*)::int as n from public.kb_sources group by status`;
+      const [quotes] = await tx<{ enabled: boolean; open: number; accepted: number }[]>`
+        select t.quotes_enabled as enabled,
+               (select count(*) from public.quotes where status in ('pending_approval', 'sent', 'viewed'))::int as open,
+               (select count(*) from public.quotes where status = 'accepted')::int as accepted
+        from public.tenants t`;
       return {
         mode: t!.mode,
         timezone: tz,
@@ -349,6 +355,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           estCostEur: Number(usage?.cost ?? 0) / 1_000_000,
         },
         knowledge: Object.fromEntries(kb.map((k) => [k.status, k.n])),
+        quotes,
       };
     }),
   );
@@ -404,7 +411,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const escalations = await tx`
         select id, category, reason, summary, suggestion_draft_id, resolved_at, created_at
         from public.escalations where thread_id = ${id} order by created_at`;
-      return { thread, messages, drafts, escalations };
+      const quotes = await selectQuotes(tx, tx`q.thread_id = ${id}`);
+      return { thread, messages, drafts, escalations, quotes };
     }),
   );
 
@@ -479,6 +487,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const { id } = idParams.parse(req.params);
       await lockDecidable(tx, id);
       await tx`update public.drafts set status = 'rejected', decided_by = 'owner', decided_at = now() where id = ${id}`;
+      await tx`update public.quotes set status = 'rejected' where draft_id = ${id} and status = 'pending_approval'`;
       await audit(tx, tenantId, req.user!.userId, 'draft.rejected', 'draft', id, {
         via: 'dashboard',
       });

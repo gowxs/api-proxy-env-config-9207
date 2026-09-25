@@ -14,6 +14,7 @@
     "@noctiv/kb": "workspace:*",
     "@noctiv/llm": "workspace:*",
     "@noctiv/mail": "workspace:*",
+    "@noctiv/quotes": "workspace:*",
     "imapflow": "^2.0.6",
     "nodemailer": "^10.0.10",
     "postgres": "^3.4.9",

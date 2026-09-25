@@ -1,5 +1,6 @@
 import type { Notification } from '@noctiv/core';
 import { headerText, MAIL_ERROR_MESSAGES, type MailErrorCode } from '@noctiv/mail';
+import { formatMoney } from '@noctiv/quotes';
 
 export interface RenderedEmail {
   subject: string;
@@ -30,6 +31,10 @@ const REASONS: Record<string, string> = {
   claim_without_sources: 'the reply stated facts without a source',
   verifier_failed: 'a fact check found statements not backed by your knowledge base',
   acknowledgement_sent: 'the customer got a short acknowledgement (fully automatic mode)',
+  quote_over_limit: 'the quote total is above your automatic-send limit',
+  quote_unmapped: 'some requested items are not on your price list',
+  quote_empty: 'nothing in the request matched your price list',
+  quotes_disabled: 'Quotes (beta) is switched off',
 };
 
 export function describeReason(code: string): string {
@@ -286,6 +291,38 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
           footer: FOOTER,
         },
       );
+    }
+    case 'quote_accepted': {
+      const total =
+        typeof p.totalCents === 'number' ? formatMoney(p.totalCents, str(p.currency) || 'EUR') : '';
+      const number = headerText(str(p.number), 40);
+      return render(`Quote ${number} accepted`, {
+        heading: `Your customer accepted quote ${number}.`,
+        lines: [
+          ['Account', n.tenantName],
+          ...(total ? ([['Total', total]] as [string, string][]) : []),
+        ],
+        note: 'The lead moved to “accepted”. Reply to the customer to arrange the next steps.',
+        buttons: [['Open conversation', n.links.dashboard]],
+        footer: FOOTER,
+      });
+    }
+    case 'quote_needs_you': {
+      const items = Array.isArray(p.unmapped)
+        ? p.unmapped.map((u) => `“${untrusted(u, 80)}”`).join(', ')
+        : '';
+      return render('A quote request needs you', {
+        heading: 'A customer asked for prices on something not on your price list.',
+        lines: [
+          ['Account', n.tenantName],
+          ...(items ? ([['Not matched', items]] as [string, string][]) : []),
+        ],
+        note: p.questionSent
+          ? 'Noctiv asked the customer one clarifying question. Add the missing items to your price list so the next request can be quoted.'
+          : 'A clarifying question is waiting for your approval. You can also add the missing items to your price list and answer yourself.',
+        buttons: [['Open conversation', n.links.dashboard]],
+        footer: FOOTER,
+      });
     }
     case 'test':
       return render('Noctiv test notification', {

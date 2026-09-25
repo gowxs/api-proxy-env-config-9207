@@ -15,6 +15,8 @@ import {
   useLoad,
 } from '@/components/ui';
 import { api } from '@/lib/api';
+import type { Quote } from '@/lib/quotes';
+import { QuoteBlock } from '@/components/quote';
 import { reasonText, THREAD_STATUS } from '@/lib/reasons';
 import { useTenantId } from '@/lib/session';
 
@@ -35,7 +37,7 @@ interface Message {
 }
 interface Draft {
   id: string;
-  kind: 'reply' | 'followup' | 'acknowledgement';
+  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote';
   status: string;
   to_address: string;
   subject: string;
@@ -68,6 +70,8 @@ interface Detail {
   messages: Message[];
   drafts: Draft[];
   escalations: Escalation[];
+  /** Quotes (beta) in this conversation. */
+  quotes?: Quote[];
 }
 
 const fmt = (iso: string) =>
@@ -93,10 +97,13 @@ const DRAFT_STATUS: Record<
 
 function DraftCard({
   draft,
+  quote,
   tenantId,
   onChange,
 }: {
   draft: Draft;
+  /** For a quote draft: the quote it carries. */
+  quote?: Quote;
   tenantId: string;
   onChange: () => void;
 }) {
@@ -115,11 +122,13 @@ function DraftCard({
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold">
-          {draft.kind === 'followup'
-            ? 'Follow-up draft'
-            : draft.kind === 'acknowledgement'
-              ? 'Acknowledgement (sent automatically)'
-              : 'Reply draft'}
+          {draft.kind === 'quote'
+            ? 'Quote reply'
+            : draft.kind === 'followup'
+              ? 'Follow-up draft'
+              : draft.kind === 'acknowledgement'
+                ? 'Acknowledgement (sent automatically)'
+                : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}
@@ -127,6 +136,14 @@ function DraftCard({
       <p className="mb-2 text-xs text-neutral-500">
         To {draft.to_address} · {draft.subject}
       </p>
+      {quote && (
+        <div className="mb-3">
+          <QuoteBlock quote={quote} tenantId={tenantId} onChange={onChange} />
+          <p className="mt-2 text-xs text-neutral-500">
+            Sent as a PDF attachment with an “Approve quote” link. The message to the customer:
+          </p>
+        </div>
+      )}
       {draft.status === 'suggestion' && (
         <p className="mb-2 text-xs text-red-800">
           The assistant was not sure about this answer. Check every fact before sending.
@@ -309,8 +326,20 @@ function ConversationView() {
       ))}
 
       {openDrafts.map((d) => (
-        <DraftCard key={d.id} draft={d} tenantId={tenantId} onChange={() => void reload()} />
+        <DraftCard
+          key={d.id}
+          draft={d}
+          quote={data.quotes?.find((q) => q.draft_id === d.id)}
+          tenantId={tenantId}
+          onChange={() => void reload()}
+        />
       ))}
+
+      {(data.quotes ?? [])
+        .filter((q) => !openDrafts.some((d) => d.id === q.draft_id))
+        .map((q) => (
+          <QuoteBlock key={q.id} quote={q} tenantId={tenantId} onChange={() => void reload()} />
+        ))}
 
       <ul className="space-y-3">
         {data.messages.map((m) => (

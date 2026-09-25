@@ -8,4 +8,5 @@ export const QUEUES = {
   followup: 'followup.generate',
   healthCheck: 'connection.health',
   tenantDelete: 'tenant.delete',
+  quotesImport: 'quotes.import',
 } as const;

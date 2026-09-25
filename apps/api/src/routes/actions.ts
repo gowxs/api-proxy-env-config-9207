@@ -133,6 +133,10 @@ export function actionRoutes(app: FastifyInstance, deps: ActionDeps) {
           select status from public.drafts where id = ${c.draftId}`;
         return { decided: false as const, status: cur?.status };
       }
+      if (c.action === 'reject') {
+        await tx`update public.quotes set status = 'rejected'
+                 where draft_id = ${c.draftId} and status = 'pending_approval'`;
+      }
       if (c.action === 'approve') {
         await enqueue(tx, {
           tenantId: c.tenantId,

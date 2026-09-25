@@ -59,7 +59,8 @@ export function defaultRules(): Rule[] {
     },
     {
       name: 'action-links',
-      match: (req) => (req.url.startsWith('/actions/') ? `act:${req.ip}` : null),
+      match: (req) =>
+        req.url.startsWith('/actions/') || req.url.startsWith('/q/') ? `act:${req.ip}` : null,
       limiter: new RateLimiter({ max: 30, windowMs: 10 * MIN }),
     },
     {

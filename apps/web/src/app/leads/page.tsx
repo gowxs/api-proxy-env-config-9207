@@ -22,6 +22,8 @@ const STAGES = [
   'sent',
   'followed_up',
   'replied',
+  'quoted',
+  'accepted',
   'converted',
   'escalated',
 ] as const;
@@ -32,6 +34,8 @@ const STAGE_TEXT: Record<Stage, string> = {
   sent: 'Answered',
   followed_up: 'Followed up',
   replied: 'Replied',
+  quoted: 'Quoted',
+  accepted: 'Quote accepted',
   converted: 'Won',
   escalated: 'Needs you',
 };
@@ -41,6 +45,8 @@ const STAGE_TONE: Record<Stage, 'gray' | 'amber' | 'green' | 'red' | 'blue'> = {
   sent: 'blue',
   followed_up: 'blue',
   replied: 'amber',
+  quoted: 'blue',
+  accepted: 'green',
   converted: 'green',
   escalated: 'red',
 };

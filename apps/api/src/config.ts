@@ -18,6 +18,8 @@ export const apiEnvSchema = z
     /** Shared with the worker: verifies Approve / Reject links in owner emails. */
     ACTION_LINK_SECRET: z.string().min(32).optional(),
     PUBLIC_APP_URL: z.url().default('http://localhost:3000'),
+    /** Public base URL of this API; defaults to PUBLIC_APP_URL + /api (the dashboard proxies it). */
+    PUBLIC_API_URL: z.url().optional(),
     /** Comma-separated invite codes; signup is gated while set (required in production, Q12). */
     SIGNUP_INVITE_CODES: z
       .string()

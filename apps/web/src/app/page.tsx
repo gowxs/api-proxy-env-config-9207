@@ -35,6 +35,7 @@ interface Dashboard {
     estCostEur: number;
   };
   knowledge: Record<string, number>;
+  quotes?: { enabled: boolean; open: number; accepted: number };
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -191,6 +192,21 @@ function DashboardView() {
           {(data.knowledge.failed ?? 0) > 0 && ` · ${data.knowledge.failed} failed`}
         </p>
       </Card>
+
+      {data.quotes?.enabled && (
+        <Card
+          title="Quotes (beta)"
+          action={
+            <Link className="text-sm text-indigo-700" href="/quotes">
+              Open
+            </Link>
+          }
+        >
+          <p className="text-sm text-neutral-700">
+            {data.quotes.open} open · {data.quotes.accepted} accepted
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

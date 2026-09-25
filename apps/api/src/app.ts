@@ -10,6 +10,8 @@ import { actionRoutes } from './routes/actions.ts';
 import { billingRoutes, type BillingConfig } from './routes/billing.ts';
 import { connectionRoutes } from './routes/connections.ts';
 import { meRoutes } from './routes/me.ts';
+import { quoteLinkRoutes } from './routes/quote-link.ts';
+import { quoteRoutes } from './routes/quotes.ts';
 import { HttpError, webRoutes } from './routes/web.ts';
 
 declare module 'fastify' {
@@ -38,6 +40,8 @@ export interface AppDeps {
   actionSecret?: string;
   /** Dashboard base URL, shown on action pages. */
   appUrl?: string;
+  /** Public base URL of this API (customer quote links: <url>/q/<token>). */
+  publicApiUrl?: string;
   /** Signup gate: creating a business needs one of these codes (empty = open). */
   inviteCodes?: string[];
   /** Development only: extra routes (the dev login). */
@@ -63,6 +67,9 @@ export function memberCheck(sql: Sql) {
     if (rows.length === 0) throw new ForbiddenError();
   };
 }
+
+const publicApiUrl = (d: { publicApiUrl?: string; appUrl?: string }) =>
+  d.publicApiUrl ?? `${(d.appUrl ?? 'https://app.noctiv.io').replace(/\/+$/, '')}/api`;
 
 export function buildApp(
   deps: Omit<AppDeps, 'requireMember'> & Partial<Pick<AppDeps, 'requireMember'>>,
@@ -111,6 +118,7 @@ export function buildApp(
   connectionRoutes(app, full);
   meRoutes(app, { ...full, inviteCodes: deps.inviteCodes ?? [] });
   webRoutes(app, full);
+  quoteRoutes(app, { ...full, publicApiUrl: publicApiUrl(deps) });
   billingRoutes(app, {
     sql: deps.sql,
     billing: deps.billing ?? { env: 'sandbox' },
@@ -123,6 +131,11 @@ export function buildApp(
       sql: deps.sql,
       actionSecret: deps.actionSecret,
       appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+    });
+    quoteLinkRoutes(app, {
+      sql: deps.sql,
+      secret: deps.actionSecret,
+      publicApiUrl: publicApiUrl(deps),
     });
   }
   return app;

@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const CATEGORIES = [
   'sales_inquiry',
+  /** Asks what specific products or services would cost (Quotes beta; else like sales_inquiry). */
+  'quote_request',
   'product_question',
   'support',
   'complaint',
