@@ -212,6 +212,7 @@ async function planSend(
       thread_status: string;
       last_outbound_at: Date | null;
       tenant_status: string;
+      entitled: boolean;
       mode: string;
       reply_signature: string | null;
       tenant_name: string;
@@ -224,7 +225,7 @@ async function planSend(
   >`
     select d.id, d.status, d.kind, d.to_address, d.subject, d.body, d.decided_by, d.thread_id, d.source_message_id,
            th.connection_id, th.lead_id, th.followups_sent, th.status as thread_status, th.last_outbound_at,
-           t.status as tenant_status, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
+           t.status as tenant_status, app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
            t.followup_after_days, t.followup_max, t.max_replies_per_hour, t.max_ai_replies_per_sender_24h
     from public.drafts d
     join public.threads th on th.id = d.thread_id
@@ -301,6 +302,8 @@ async function planSend(
     // Acknowledgements are a mode-3 feature; replies go out in either automatic mode.
     if (isAck ? d.mode !== 'full_auto' : !isAutomaticMode(d.mode as TenantMode))
       reasons.push(isAck ? 'mode_changed' : 'mode_changed_to_draft_only');
+    // Subscription lapsed between drafting and sending: the owner decides.
+    if (!d.entitled) reasons.push('billing_inactive');
     if (caps!.sender >= d.max_ai_replies_per_sender_24h) reasons.push('sender_cap_reached');
     if (caps!.hour >= d.max_replies_per_hour) reasons.push('tenant_hour_cap_reached');
     if (reasons.length) {

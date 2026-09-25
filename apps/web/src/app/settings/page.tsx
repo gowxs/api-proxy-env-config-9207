@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { BillingCard } from '@/components/billing';
 import { AppPage } from '@/components/shell';
 import {
   Badge,
@@ -192,6 +193,8 @@ function SettingsForm({
         )}
       </Card>
 
+      <BillingCard showPortal />
+
       <Card title="Mailbox">
         <Link className="text-sm text-indigo-700" href="/settings/mailboxes">
           Manage connected mailboxes →
@@ -371,7 +374,8 @@ function DeleteAccount({ tenantId, name }: { tenantId: string; name: string }) {
         happened. This cannot be undone.
       </p>
       <p className="mt-2 text-sm text-neutral-700">
-        Emails already in your own mailbox are not touched.
+        Emails already in your own mailbox are not touched. A subscription is cancelled at once;
+        invoices stay available from Paddle.
       </p>
       <label className="mt-3 block text-sm">
         Type <strong>{name}</strong> to confirm

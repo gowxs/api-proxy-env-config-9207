@@ -65,6 +65,7 @@ interface ThreadState {
   timezone: string;
   followup_max: number;
   tenant_status: string;
+  entitled: boolean;
   notify_full_text: boolean;
   max_ai_replies_per_sender_24h: number;
   max_replies_per_hour: number;
@@ -75,7 +76,8 @@ interface ThreadState {
 async function lockThread(tx: TransactionSql, threadId: string) {
   const [t] = await tx<ThreadState[]>`
     select th.status, th.next_followup_at, th.followups_sent, th.last_outbound_at, l.stage as lead_stage,
-           t.name as tenant_name, t.mode, t.timezone, t.followup_max, t.status as tenant_status, t.notify_full_text,
+           t.name as tenant_name, t.mode, t.timezone, t.followup_max, t.status as tenant_status,
+           app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled, t.notify_full_text,
            t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, c.status as conn_status, c.is_test_mailbox
     from public.threads th
     join public.tenants t on t.id = th.tenant_id
@@ -108,6 +110,7 @@ async function check(
   if (!t.next_followup_at || t.next_followup_at > now)
     return { status: 'skipped', reason: 'not_due' };
   if (t.tenant_status !== 'active') return { status: 'skipped', reason: 'tenant_inactive' };
+  if (!t.entitled) return { status: 'skipped', reason: 'billing_inactive' };
   if (t.conn_status !== 'connected') return { status: 'skipped', reason: 'mailbox_not_connected' };
   const stopWith = async (reason: string): Promise<FollowupOutcome> => {
     await stop(tx, threadId, reason);

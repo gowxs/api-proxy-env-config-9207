@@ -9,6 +9,8 @@ export interface RenderedEmail {
 
 const REASONS: Record<string, string> = {
   tenant_draft_only: 'your account is set to approve everything',
+  arrived_while_paused: 'it arrived while the service was paused (no subscription)',
+  billing_inactive: 'the service is paused (no active subscription)',
   budget_limited: 'the daily AI budget is nearly used up',
   sender_cap_reached: 'this customer already got the maximum number of automatic replies today',
   tenant_hour_cap_reached: 'the hourly limit for automatic replies was reached',

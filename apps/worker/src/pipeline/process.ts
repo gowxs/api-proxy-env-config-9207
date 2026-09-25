@@ -71,6 +71,10 @@ interface Loaded {
     maxPerHour: number;
   };
   thread: { status: string };
+  /** In the trial or subscribed (app.billing_entitled). */
+  entitled: boolean;
+  /** Arrived while service was stopped; handled in approve-everything mode. */
+  backlog: boolean;
 }
 
 async function load(tx: TransactionSql, messageId: string): Promise<Loaded | undefined> {
@@ -96,12 +100,16 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
       thread_status: string;
+      entitled: boolean;
+      backlog: boolean;
     }[]
   >`
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
-           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, th.status as thread_status
+           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, th.status as thread_status,
+           app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
+           coalesce(m.received_at < t.billing_resumed_at, false) as backlog
     from public.message_processing mp
     join public.messages m on m.id = mp.message_id
     join public.email_connections c on c.id = m.connection_id
@@ -133,12 +141,15 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     ownAddresses: own.map((o) => o.email_address),
     tenant: {
       name: row.tenant_name,
-      mode: row.mode,
+      // Mail that arrived while service was stopped (no subscription) is only drafted.
+      mode: row.backlog ? 'draft_only' : row.mode,
       notifyFullText: row.notify_full_text,
       maxPerSender24h: row.max_ai_replies_per_sender_24h,
       maxPerHour: row.max_replies_per_hour,
     },
     thread: { status: row.thread_status },
+    entitled: row.entitled,
+    backlog: row.backlog,
   };
 }
 
@@ -222,6 +233,12 @@ export async function processMessage(
       await withTenant(deps.sql, tenantId, (tx) => finishSkipped(tx, m.id, loop.reason));
       return { status: 'skipped', reason: loop.reason };
     }
+  }
+
+  // No subscription after the trial: nothing is read by the model or answered.
+  if (!l.entitled) {
+    await withTenant(deps.sql, tenantId, (tx) => finishSkipped(tx, m.id, 'billing_inactive'));
+    return { status: 'skipped', reason: 'billing_inactive' };
   }
 
   const recipient = resolveReplyRecipient({ from: m.from, replyTo });
@@ -392,7 +409,14 @@ export async function processMessage(
     });
   }
 
-  const d = guarded.decision;
+  const d = l.backlog
+    ? {
+        ...guarded.decision,
+        reasons: guarded.decision.reasons.map((r) =>
+          r === 'tenant_draft_only' ? ('arrived_while_paused' as const) : r,
+        ),
+      }
+    : guarded.decision;
   if (d.action === 'escalate') {
     // Mode 3: a message that could not be grounded also gets a fixed acknowledgement.
     const ack = decideAcknowledgement({

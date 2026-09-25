@@ -15,6 +15,7 @@ The founder's phone-review deployment differs from the target described below:
 - Both processes warn at every start while `DATA_REGION_IN_EU=false`; the worker also emails the admin.
 - Only operator-flagged test mailboxes are processed; the free AI tier refuses all other mail.
 - Owner notification emails and Supabase Auth emails go out through Brevo SMTP (sender noreply@noctiv.io).
+- Subscriptions: the owner pays in Paddle Checkout (overlay in the dashboard; Paddle is merchant of record and holds all payment data). Paddle sends signed `subscription.*` webhooks to the API, which stores only the status, customer and subscription IDs on the tenant.
 
 Move api + worker to an EU region before any real customer mailbox is connected.
 

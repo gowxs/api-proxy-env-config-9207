@@ -1,6 +1,7 @@
 import { createLogger, nonEuWarning } from '@noctiv/core';
 import { createDb } from '@noctiv/db';
 import { buildApp } from './app.ts';
+import { createPaddleClient } from './billing/paddle.ts';
 import { createTokenVerifier } from './auth.ts';
 import { loadApiConfig } from './config.ts';
 import { createDevAuth } from './routes/dev.ts';
@@ -40,6 +41,16 @@ const app = buildApp({
   appUrl: config.PUBLIC_APP_URL,
   inviteCodes: config.SIGNUP_INVITE_CODES,
   trustProxy: config.API_TRUST_PROXY,
+  billing: {
+    env: config.PADDLE_ENV,
+    apiKey: config.PADDLE_API_KEY,
+    webhookSecret: config.PADDLE_WEBHOOK_SECRET,
+    clientToken: config.PADDLE_CLIENT_TOKEN,
+    priceId: config.PADDLE_PRICE_ID,
+  },
+  ...(config.PADDLE_API_KEY
+    ? { paddle: createPaddleClient({ apiKey: config.PADDLE_API_KEY, env: config.PADDLE_ENV }) }
+    : {}),
   ...(devAuth ? { devRoutes: devAuth.routes } : {}),
 });
 

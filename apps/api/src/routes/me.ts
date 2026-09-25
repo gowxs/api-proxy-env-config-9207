@@ -60,13 +60,33 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     const [t] = await withTenant(
       deps.sql,
       tenantId,
-      (tx) => tx<{ name: string }[]>`select name from public.tenants`,
+      (tx) =>
+        tx<{ name: string; paddle_subscription_id: string | null; billing_status: string }[]>`
+          select name, paddle_subscription_id, billing_status from public.tenants`,
     );
     if (!t || confirmName.trim() !== t.name.trim())
       throw new HttpError(400, 'Type the business name exactly as shown to confirm.');
     const [r] = await deps.sql<{ ok: boolean }[]>`
       select app.request_tenant_deletion(${tenantId}, ${req.user!.userId}) as ok`;
     if (!r?.ok) throw new HttpError(403, 'Only an owner can delete the account.');
+    // No more charges for a deleted business.
+    if (t.paddle_subscription_id && t.billing_status !== 'canceled') {
+      if (!deps.paddle) {
+        req.log.error(
+          { tenantId },
+          'deleted tenant has a subscription but Paddle is not configured',
+        );
+      } else {
+        await deps.paddle
+          .cancelNow(t.paddle_subscription_id)
+          .catch((err: Error) =>
+            req.log.error(
+              { tenantId, err: { message: err.message } },
+              'cancel subscription after deletion failed; cancel it in the Paddle dashboard',
+            ),
+          );
+      }
+    }
     return reply.code(202).send({ status: 'deleting' });
   });
 

@@ -1,6 +1,8 @@
 /** Owner-facing wording for policy reasons (same meaning as the notification emails). */
 const REASONS: Record<string, string> = {
   tenant_draft_only: 'Mode 1: approve everything',
+  arrived_while_paused: 'Arrived while the service was paused (no subscription)',
+  billing_inactive: 'Service paused: no active subscription',
   budget_limited: 'AI budget nearly used up',
   sender_cap_reached: 'Automatic-reply limit for this customer reached',
   tenant_hour_cap_reached: 'Hourly automatic-reply limit reached',

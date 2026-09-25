@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BillingCard } from '@/components/billing';
 import { AppPage } from '@/components/shell';
 import { Badge, Card, ErrorText, Loading, timeAgo, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -136,6 +137,8 @@ function DashboardView() {
           </Link>
         </p>
       </Card>
+
+      <BillingCard />
 
       <Card title={`Today (${data.timezone})`}>
         <div className="grid grid-cols-3 gap-2">

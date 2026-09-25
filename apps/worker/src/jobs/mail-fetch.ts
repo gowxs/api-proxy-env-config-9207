@@ -9,6 +9,7 @@ import {
   type InboundMessage,
 } from '@noctiv/mail';
 import type { Sql } from 'postgres';
+import { tenantEntitled } from '../billing.ts';
 import { storeInbound } from '../ingest/store.ts';
 import {
   DISCONNECT_CODES,
@@ -37,6 +38,8 @@ export function mailFetchHandler(deps: MailFetchDeps) {
     const connectionId = String(job.payload.connectionId);
     const conn = await withTenant(deps.sql, job.tenantId, (tx) => loadConnection(tx, connectionId));
     if (!conn || conn.status !== 'connected') return { skipped: 'not_connected' };
+    // No subscription after the trial: the mail waits in the inbox until service resumes.
+    if (!(await tenantEntitled(deps.sql, job.tenantId))) return { skipped: 'billing_inactive' };
 
     const password = openMailboxPassword(conn.ciphertext, deps.keys, job.tenantId, conn.id);
     let client;

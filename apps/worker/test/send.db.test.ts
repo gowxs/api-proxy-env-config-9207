@@ -264,6 +264,24 @@ describe('auto-send safety re-checked at send time', () => {
     });
     expect(await inboxWith(d.tag)).toHaveLength(0);
   });
+
+  it('a lapsed subscription stops queued auto replies; the owner can still approve them', async () => {
+    const t = await seedTenant(owner, 'send-lapsed', { embeddingAxis: 74 });
+    await owner`update public.tenants set mode = 'auto_send', billing_status = 'canceled' where id = ${t.tenantId}`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const d = await makeDraft({ tenantId: t.tenantId, connectionId: conn, decidedBy: 'auto' });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({
+      status: 'downgraded',
+      reasons: ['billing_inactive'],
+    });
+    expect(await inboxWith(d.tag)).toHaveLength(0);
+    const approved = await makeDraft({ tenantId: t.tenantId, connectionId: conn });
+    expect(await send(job(t.tenantId, approved.draftId))).toEqual({ status: 'sent' });
+  });
 });
 
 describe('mode 3: acknowledgements', () => {

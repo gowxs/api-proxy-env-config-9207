@@ -5,7 +5,9 @@ import type { Sql } from 'postgres';
 import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
 import { registerRateLimits } from './rate-limit.ts';
+import type { PaddleClient } from './billing/paddle.ts';
 import { actionRoutes } from './routes/actions.ts';
+import { billingRoutes, type BillingConfig } from './routes/billing.ts';
 import { connectionRoutes } from './routes/connections.ts';
 import { meRoutes } from './routes/me.ts';
 import { HttpError, webRoutes } from './routes/web.ts';
@@ -42,6 +44,10 @@ export interface AppDeps {
   devRoutes?: (app: FastifyInstance) => void;
   /** Behind Caddy in production: take the client IP from X-Forwarded-For. */
   trustProxy?: boolean;
+  /** Paddle Billing settings; without them checkout and the webhook are off. */
+  billing?: BillingConfig;
+  /** Paddle API client (needs PADDLE_API_KEY). */
+  paddle?: PaddleClient;
   /** Off only in tests that need many requests. */
   rateLimits?: boolean;
 }
@@ -105,6 +111,12 @@ export function buildApp(
   connectionRoutes(app, full);
   meRoutes(app, { ...full, inviteCodes: deps.inviteCodes ?? [] });
   webRoutes(app, full);
+  billingRoutes(app, {
+    sql: deps.sql,
+    billing: deps.billing ?? { env: 'sandbox' },
+    ...(deps.paddle ? { paddle: deps.paddle } : {}),
+    requireMember: full.requireMember,
+  });
   deps.devRoutes?.(app);
   if (deps.actionSecret) {
     actionRoutes(app, {

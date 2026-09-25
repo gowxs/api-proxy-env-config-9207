@@ -38,6 +38,8 @@ export type EscalateReason =
 
 export type DraftReason =
   | 'tenant_draft_only'
+  /** Set by the worker: the message arrived while service was stopped (no subscription). */
+  | 'arrived_while_paused'
   | 'budget_limited'
   | 'sender_cap_reached'
   | 'tenant_hour_cap_reached'

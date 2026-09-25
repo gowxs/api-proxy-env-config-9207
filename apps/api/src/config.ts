@@ -32,6 +32,15 @@ export const apiEnvSchema = z
     DEV_LOGIN_USER_ID: z.uuid().optional(),
     DEV_LOGIN_EMAIL: z.email().default('owner@noctiv.local'),
     ...dataRegionEnv,
+    /** Paddle Billing (subscriptions). Sandbox until live keys are set. */
+    PADDLE_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+    PADDLE_API_KEY: z.string().min(1).optional(),
+    PADDLE_WEBHOOK_SECRET: z.string().min(1).optional(),
+    PADDLE_CLIENT_TOKEN: z.string().min(1).optional(),
+    PADDLE_PRICE_ID: z
+      .string()
+      .regex(/^pri_[a-z0-9]+$/, 'a Paddle price id (pri_…)')
+      .optional(),
     /** true behind the Caddy reverse proxy (client IP from X-Forwarded-For). */
     API_TRUST_PROXY: z
       .enum(['true', 'false'])
@@ -54,6 +63,12 @@ export const apiEnvSchema = z
     path: ['DATA_REGION_IN_EU'],
     message: 'must be set (true/false) in production',
   })
+  .refine(
+    (e) =>
+      !e.PADDLE_CLIENT_TOKEN ||
+      e.PADDLE_CLIENT_TOKEN.startsWith(e.PADDLE_ENV === 'sandbox' ? 'test_' : 'live_'),
+    { path: ['PADDLE_CLIENT_TOKEN'], message: 'does not match PADDLE_ENV (test_… or live_…)' },
+  )
   .refine((e) => e.NODE_ENV !== 'production' || e.ACTION_LINK_SECRET, {
     path: ['ACTION_LINK_SECRET'],
     message: 'is required in production',

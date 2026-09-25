@@ -490,6 +490,37 @@ describe('pipeline: fully automatic tenant (mode 3)', () => {
   });
 });
 
+describe('pipeline: subscription (Paddle billing)', () => {
+  it('after the trial without a subscription, mail is not read by the model or answered', async () => {
+    const T = await tenantWithKb('pipe-lapsed', 'auto_send');
+    await owner`update public.tenants set trial_ends_at = now() - interval '1 minute' where id = ${T.tenantId}`;
+    const llm = scripted({});
+    const id = await receive(T, inbound({}));
+    expect(await run(T, llm, id)).toEqual({ status: 'skipped', reason: 'billing_inactive' });
+    expect(llm.calls).toHaveLength(0);
+    const listed =
+      await worker`select connection_id from app.list_mail_connections() where tenant_id = ${T.tenantId}`;
+    expect(listed).toHaveLength(0);
+  });
+
+  it('a subscribed tenant is served; mail from while it was paused is only drafted', async () => {
+    const T = await tenantWithKb('pipe-resumed', 'auto_send');
+    await owner`update public.tenants set trial_ends_at = now() - interval '20 days', billing_status = 'active',
+                billing_resumed_at = now() - interval '5 minutes' where id = ${T.tenantId}`;
+    const listed =
+      await worker`select connection_id from app.list_mail_connections() where tenant_id = ${T.tenantId}`;
+    expect(listed).toHaveLength(1);
+
+    const old = await receive(T, { ...inbound({}), date: new Date(Date.now() - 3 * 3_600_000) });
+    expect(await run(T, scripted({}), old)).toEqual({
+      status: 'drafted',
+      reasons: ['arrived_while_paused'],
+    });
+    const fresh = await receive(T, inbound({ from: 'ben@example-mail.test' }));
+    expect(await run(T, scripted({}), fresh)).toMatchObject({ status: 'auto_send' });
+  });
+});
+
 describe('pipeline: free-tier second lock', () => {
   it('refuses a real mailbox and processes a test mailbox', async () => {
     const T = await tenantWithKb('pipe-free');
