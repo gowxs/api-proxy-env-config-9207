@@ -15,8 +15,32 @@ const PROVIDERS: { id: Provider; label: string }[] = [
   { id: 'outlook', label: 'Outlook / Microsoft 365' },
 ];
 
-/** App Password guides. Screenshots are placeholders until the founder supplies them (Q13). */
-const GUIDES: Partial<Record<Provider, { steps: string[]; shots: string[] }>> = {
+/** A guide screenshot; without `src` a placeholder is shown until one is supplied. */
+interface Shot {
+  caption: string;
+  src?: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
+const GMAIL_APP_PASSWORDS: Shot = {
+  caption: 'App passwords: type "Noctiv", then Create',
+  src: '/guides/gmail-2-app-passwords.webp',
+  alt: 'Google Account, App passwords page: the list of your app passwords, an App name field and a Create button.',
+  width: 750,
+  height: 719,
+};
+const GMAIL_GENERATED: Shot = {
+  caption: 'Copy the 16-character password',
+  src: '/guides/gmail-3-generated.webp',
+  alt: 'Google dialog "Generated app password" showing a 16-character password in four groups of four letters, with a Done button.',
+  width: 750,
+  height: 1001,
+};
+
+/** App Password guides, with screenshots from the founder (Q13). */
+const GUIDES: Partial<Record<Provider, { steps: string[]; shots: Shot[] }>> = {
   gmail: {
     steps: [
       'Open myaccount.google.com and go to Security.',
@@ -26,9 +50,15 @@ const GUIDES: Partial<Record<Provider, { steps: string[]; shots: string[] }>> = 
       'Copy the 16-character password and paste it below. Spaces do not matter.',
     ],
     shots: [
-      'Google Account → Security → 2-Step Verification',
-      'App passwords page with "Noctiv" entered',
-      'The generated 16-character password',
+      {
+        caption: '2-Step Verification must be On',
+        src: '/guides/gmail-1-two-step.webp',
+        alt: 'Google Account, Security and sign-in: 2-Step Verification shows "On".',
+        width: 750,
+        height: 345,
+      },
+      GMAIL_APP_PASSWORDS,
+      GMAIL_GENERATED,
     ],
   },
   google_workspace: {
@@ -38,7 +68,7 @@ const GUIDES: Partial<Record<Provider, { steps: string[]; shots: string[] }>> = 
       'Open myaccount.google.com/apppasswords, create one named "Noctiv".',
       'Copy the 16-character password and paste it below.',
     ],
-    shots: ['Admin console setting', 'App passwords page', 'The generated password'],
+    shots: [{ caption: 'Admin console setting' }, GMAIL_APP_PASSWORDS, GMAIL_GENERATED],
   },
   yahoo: {
     steps: [
@@ -48,9 +78,9 @@ const GUIDES: Partial<Record<Provider, { steps: string[]; shots: string[] }>> = 
       'Copy the password and paste it below.',
     ],
     shots: [
-      'Yahoo Account security page',
-      'Generate app password dialog',
-      'The generated password',
+      { caption: 'Yahoo Account security page' },
+      { caption: 'Generate app password dialog' },
+      { caption: 'The generated password' },
     ],
   },
   hostinger: {
@@ -58,7 +88,15 @@ const GUIDES: Partial<Record<Provider, { steps: string[]; shots: string[] }>> = 
       'Use your full email address and the mailbox password from hPanel → Emails.',
       'If you enabled two-factor sign-in for webmail, create a separate password for apps.',
     ],
-    shots: ['hPanel → Emails → mailbox settings'],
+    shots: [
+      {
+        caption: 'hPanel → Emails → Connect apps & devices → Other',
+        src: '/guides/hostinger-settings.webp',
+        alt: 'Hostinger hPanel, Connect apps & devices, Other: sign in with your full email address and password; incoming server imap.hostinger.com, outgoing server smtp.hostinger.com.',
+        width: 750,
+        height: 1145,
+      },
+    ],
   },
   generic: {
     steps: [
@@ -195,20 +233,34 @@ export function MailboxForm({
                 ))}
               </ol>
               {guide.shots.length > 0 && (
-                <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {guide.shots.map((s) => (
-                    <div
-                      key={s}
-                      className="flex h-24 items-center justify-center rounded-md border border-dashed border-neutral-300 bg-white p-2 text-center text-xs text-neutral-400"
-                    >
-                      [Screenshot: {s}]
-                    </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  {guide.shots.map((shot, i) => (
+                    <figure key={shot.caption} className="space-y-1">
+                      {shot.src ? (
+                        <img
+                          src={shot.src}
+                          alt={shot.alt ?? shot.caption}
+                          width={shot.width}
+                          height={shot.height}
+                          loading="lazy"
+                          className="h-auto w-full rounded-md border border-neutral-200"
+                        />
+                      ) : (
+                        <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-neutral-300 bg-white p-2 text-center text-xs text-neutral-400">
+                          Screenshot coming soon
+                        </div>
+                      )}
+                      <figcaption className="text-xs text-neutral-600">
+                        {guide.shots.length > 1 ? `${i + 1}. ` : ''}
+                        {shot.caption}
+                      </figcaption>
+                    </figure>
                   ))}
                 </div>
               )}
               <p className="mt-2 text-xs text-neutral-500">
                 Noctiv reads your inbox without marking anything as read, and sends only replies you
-                approve (or, if you switch it on later, replies that pass every safety check).
+                approve (or, in mode 2 or 3, replies that pass every safety check).
               </p>
             </details>
           )}
