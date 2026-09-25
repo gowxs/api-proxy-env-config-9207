@@ -4,7 +4,7 @@
 @font-face {
   font-family: 'Manrope';
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 200 800;
   src: url('/fonts/manrope-latin.woff2') format('woff2-variations');
   unicode-range:
@@ -14,7 +14,7 @@
 @font-face {
   font-family: 'Manrope';
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 200 800;
   src: url('/fonts/manrope-latin-ext.woff2') format('woff2-variations');
   unicode-range:

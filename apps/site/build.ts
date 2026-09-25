@@ -59,7 +59,7 @@ function minifyJs(js: string): string {
 
 function minifyHtml(html: string): string {
   return html
-    .replace(/<!--(?!\[)[\s\S]*?-->/g, '')
+    .replace(/<!--(?!\[|\/?email_off)[\s\S]*?-->/g, '')
     .replace(/>\s+</g, '><')
     .replace(/\n\s+/g, '\n')
     .trim();
@@ -91,6 +91,9 @@ function render(tpl: string, vars: Record<string, string>, parts: Record<string,
 /**
  * Cloudflare Pages headers. Scripts are only the inline ones we wrote, allowed
  * by hash; everything else is same-origin. Styles stay inline (one small block).
+ * `no-transform` stops Cloudflare's edge from rewriting pages: without it the
+ * zone injected an analytics beacon and replaced mailto: links with its e-mail
+ * obfuscation script (both blocked by the CSP; found on the first deploy).
  */
 function headers(scripts: string[]): string {
   const hashes = scripts
@@ -118,6 +121,7 @@ function headers(scripts: string[]): string {
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()
   Cross-Origin-Opener-Policy: same-origin
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
 
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable

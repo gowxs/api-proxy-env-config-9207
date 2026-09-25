@@ -98,7 +98,7 @@ Navigation: How it works · Pricing · Contact · Sign in (→ `https://app.noct
 - **Build:** `apps/site/build.ts`, no framework and no runtime dependencies. Pages are HTML with a JSON header, assembled from partials; CSS (~12 KB min) inlined per page; the demo script inlined on Home only. Output: `apps/site/dist`.
 - **Performance target:** Lighthouse 95+ on mobile for all four categories. The home page is ~30 KB HTML + 25 KB font, one request each, no images above the fold.
 - **SEO:** unique titles and descriptions, canonical URLs, Open Graph + Twitter card, a 1200×630 OG image generated from HTML at build time, `sitemap.xml`, `robots.txt`, semantic headings, `lang="en"`.
-- **Privacy:** no cookies, no analytics, no third-party requests (fonts self-hosted). If analytics are wanted later: Cloudflare Web Analytics (cookieless), only after an update to the privacy page.
+- **Privacy:** no cookies, no analytics, no third-party requests (fonts self-hosted). HTML is served with `Cache-Control: no-transform` and wrapped in `<!--email_off-->`, so Cloudflare's zone features (Web Analytics auto-setup, e-mail obfuscation) can't inject scripts or rewrite mailto: links. If analytics are wanted later: Cloudflare Web Analytics (cookieless), only after an update to the privacy page.
 - **Security headers** (`_headers`): strict CSP (self + inline styles/scripts hashed), HSTS, `X-Content-Type-Options`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, frame-ancestors none; long cache for fonts and images.
 - **Review tooling:** `pnpm --filter @noctiv/site shots` takes phone-size screenshots (390 × 844 @3x) in light and dark; `dev` serves on :4321.
 
