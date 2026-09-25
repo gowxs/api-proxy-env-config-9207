@@ -301,6 +301,8 @@ describe('embedding failures (found live: free-tier per-minute limit)', () => {
       reason: 'embedding_failed',
       retryable: true,
       detail: 'rate_limited',
+      // For the worker log only; the source row keeps just reason:detail.
+      diagnostic: 'LlmError: google_ai_studio request failed: rate_limited (HTTP 429)',
     });
     expect(await status(id)).toEqual({ status: 'pending', error: 'embedding_failed:rate_limited' });
 
