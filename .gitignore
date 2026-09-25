@@ -14,3 +14,7 @@ coverage/
 next-env.d.ts
 # local secrets (credential sealing keys etc.)
 secrets/
+
+# apps/site review output (scripts/check.ts, shots.ts)
+apps/site/check/
+apps/site/shots/
