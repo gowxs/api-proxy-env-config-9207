@@ -26,7 +26,9 @@ export type PriceListExtraction = z.infer<typeof PriceListExtractionSchema>;
 /** Every price-like amount written in the text, in cents. */
 export function pricesInText(text: string): Set<number> {
   const out = new Set<number>();
-  for (const m of text.matchAll(/\d{1,3}(?:[ \u00a0.,']\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g)) {
+  for (const m of text.matchAll(
+    /\d{1,3}(?:[ \u00a0.,']\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g,
+  )) {
     const c = parseMoney(m[0]);
     if (c !== null) out.add(c);
   }
