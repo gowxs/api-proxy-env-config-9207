@@ -46,10 +46,10 @@ describe('trial reminder e-mails', () => {
   });
 
   it('queues the last-day e-mail 1 day before the end', async () => {
-    const [{ ends }] = await owner<{ ends: Date }[]>`
+    const [row] = await owner<{ ends: Date }[]>`
       update public.tenants set trial_ends_at = trial_ends_at - interval '6 days'
       where id = ${A.tenantId} returning trial_ends_at as ends`;
-    expect(ends.getTime() - Date.now()).toBeLessThan(86_400_000);
+    expect(row!.ends.getTime() - Date.now()).toBeLessThan(86_400_000);
     // The end date moved, so a new 1-day reminder; no second 7-day one.
     expect(await queue()).toBe(1);
     const keys = (await reminders(A)).map((r) => r.dedupe_key.split(':')[0]);
