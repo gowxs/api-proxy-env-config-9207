@@ -32,7 +32,7 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 
 | Part            | Where                                                              | Notes                                                                       |
 | --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| Web             | Netlify project `noctiv-app` → https://noctiv-app.netlify.app      | `netlify.toml`; `/api/*` is proxied to the API (`API_INTERNAL_URL`)         |
+| Web             | Cloudflare Worker `noctiv-app` → https://app.noctiv.io             | OpenNext (`apps/web/wrangler.jsonc`); `/api/*` is proxied to the API        |
 | API             | Northflank project `noctiv`, service `api` (London, **non-EU**)    | built from this branch's `Dockerfile` (`SERVICE=api`), auto-deploys on push |
 | Worker          | Northflank project `noctiv`, service `worker` (London, **non-EU**) | same image, `SERVICE=worker`; warns and emails the admin while non-EU       |
 | Database + Auth | Supabase `bdbztonmdfnqqlonvywn` (Frankfurt)                        | migrations via the Supabase connector; runtime roles via the session pooler |

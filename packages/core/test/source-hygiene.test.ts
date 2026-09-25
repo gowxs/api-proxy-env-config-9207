@@ -10,7 +10,15 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
-const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'coverage']);
+const SKIP = new Set([
+  'node_modules',
+  '.git',
+  '.next',
+  '.open-next',
+  '.wrangler',
+  'dist',
+  'coverage',
+]);
 const EXTENSIONS = /\.(?:ts|tsx|js|mjs|cjs|json|sql|md|ya?ml|css)$/;
 const FORBIDDEN = new RegExp(
   '[\\u00A0\\u00AD\\u200B-\\u200F\\u202A-\\u202F\\u2060-\\u2069\\uFEFF]|[\\u{E0000}-\\u{E007F}]',

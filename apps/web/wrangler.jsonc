@@ -1,0 +1,19 @@
+// Web app on Cloudflare Workers (OpenNext). Build and deploy:
+//   pnpm --filter @noctiv/web cf:deploy
+// Build-time settings (API_INTERNAL_URL, NEXT_PUBLIC_*) come from the environment;
+// the production values are in .github/workflows/web.yml.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "noctiv-app",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "routes": [{ "pattern": "app.noctiv.io", "custom_domain": true }],
+  "workers_dev": true,
+  "preview_urls": false,
+  "send_metrics": false,
+}

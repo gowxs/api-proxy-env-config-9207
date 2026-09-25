@@ -1,3 +1,9 @@
 packages:
   - apps/*
   - packages/*
+
+# Install scripts allowed to run (everything else stays blocked).
+# esbuild and workerd fetch their platform binaries for the Cloudflare build (apps/web).
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

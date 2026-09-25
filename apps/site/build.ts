@@ -23,8 +23,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
 const ORIGIN = 'https://noctiv.io';
-/** The web app ("Sign in"). Switch to https://app.noctiv.io/ once that domain points at the app. */
-const APP_URL = process.env.SITE_APP_URL ?? 'https://noctiv-app.netlify.app/';
+/** The web app ("Sign in"). */
+const APP_URL = process.env.SITE_APP_URL ?? 'https://app.noctiv.io/';
 
 interface PageMeta {
   title: string;

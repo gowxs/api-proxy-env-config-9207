@@ -5,3 +5,5 @@ dist
 coverage
 supabase/migrations
 PLAN.md
+.open-next
+.wrangler

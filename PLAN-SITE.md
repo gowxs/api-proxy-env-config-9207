@@ -108,7 +108,7 @@ Navigation: How it works · Pricing · Contact · Sign in (→ `https://app.noct
 - **DNS is already on Cloudflare** (nameservers `ara`/`yahir.ns.cloudflare.com`), so no nameserver change is needed.
   - The apex currently has proxied A records pointing to an origin that returns error 521. They get replaced when the Pages custom domain is attached.
   - Mail records stay untouched: MX Hostinger, SPF, Brevo code and DKIM.
-- **App at `app.noctiv.io`:** a CNAME to `noctiv-app.netlify.app` (DNS only, not proxied), plus the domain added in Netlify. Supabase Auth Site URL and redirect URLs then move to `https://app.noctiv.io`.
+- **App at `app.noctiv.io`:** Cloudflare Worker `noctiv-app` (OpenNext), attached as a Workers custom domain; deployed by `.github/workflows/web.yml`. Supabase Auth Site URL is `https://app.noctiv.io`.
 - **Auto-deploy on push:** `.github/workflows/site.yml` runs on changes under `apps/site/**`, builds and runs `wrangler pages deploy` to production. It needs one repository secret, `CLOUDFLARE_API_TOKEN`; the account ID is in the workflow. Until the phase-1 branch is merged, pushes to it deploy to production too.
 - **Token scopes:** Account › Cloudflare Pages: Edit; Zone › DNS: Edit (noctiv.io); Zone › Zone: Read. Optional: Zone › Single Redirect: Edit (www → apex).
 
