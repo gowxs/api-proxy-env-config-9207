@@ -77,6 +77,13 @@ A 14-second loop driven by `data-step` states: the customer e-mail arrives at 23
 - Pauses when off-screen or the tab is hidden; a visible Pause button (WCAG 2.2.2).
 - The clock is decorative (`aria-hidden`); the figure caption states the three times.
 
+### Illustrations
+
+Three illustrations in the night → morning palette (masters in `apps/site/assets/illustrations/`, regenerated with `node scripts/images.ts`; WebP, content-hashed under `/img/`):
+
+- **Hero** (envelope over sunrise): behind the hero. Phones and tablets: a band anchored to the demo card, so the horizon sits under the card's top edge and the envelope glows in the gap above it; wide screens: the whole scene with the envelope between the two columns. The top fades into the header's night; a scrim keeps text readable. Also the OG image.
+- **Online stores** (parcel + tag) and **service businesses** (calendar + pen): 16:9 at the top of the two audience cards, lazy-loaded.
+
 ## 3. Page map
 
 Words and section order on Home are the approved draft. The other pages reuse approved copy where it exists; new copy is marked **(new, needs approval)**.

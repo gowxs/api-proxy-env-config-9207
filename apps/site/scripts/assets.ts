@@ -1,6 +1,6 @@
 /**
  * Renders the social image and app icons from HTML with the site's own fonts.
- *   node scripts/assets.ts   → src/public/og.png, apple-touch-icon.png, favicon.ico
+ *   node scripts/assets.ts   → src/public/og.jpg, apple-touch-icon.png, favicon.ico
  * Re-run after changing the brand; the outputs are committed.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,40 +24,41 @@ const font = readFileSync(
 ).toString('base64');
 const fontFace = `@font-face{font-family:Manrope;font-weight:200 800;src:url(data:font/woff2;base64,${font}) format('woff2')}`;
 
+// The hero illustration (assets/illustrations/hero.webp): night sky, a glowing
+// envelope, sunrise over water. Text sits on the darkened left.
+const heroArt = readFileSync(
+  join(import.meta.dirname, '../assets/illustrations/hero.webp'),
+).toString('base64');
 const og = `<!doctype html><html><head><style>${fontFace}
 *{margin:0;box-sizing:border-box}
 body{width:1200px;height:630px;font-family:Manrope;background:#0b1026;color:#eef1fa;position:relative;overflow:hidden}
-.glow{position:absolute;left:50%;bottom:-2px;width:1500px;height:260px;transform:translateX(-50%);background:radial-gradient(50% 100% at 50% 100%,rgba(242,169,126,.28),transparent 70%)}
-.line{position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,transparent,rgba(246,200,154,.6) 30%,#f2a97e 50%,rgba(246,200,154,.6) 70%,transparent)}
+.art{position:absolute;inset:0;background:url(data:image/webp;base64,${heroArt}) 13% 64%/150% auto no-repeat}
+.shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(11,16,38,.92) 0%,rgba(11,16,38,.78) 38%,rgba(11,16,38,.15) 62%,rgba(11,16,38,.25) 100%),linear-gradient(180deg,rgba(11,16,38,.55),transparent 30%)}
 .brand{position:absolute;left:80px;top:72px;display:flex;align-items:center;gap:16px;font-weight:800;font-size:40px;letter-spacing:-.03em}
-h1{position:absolute;left:80px;top:170px;width:640px;font-size:76px;line-height:1.02;letter-spacing:-.04em;font-weight:800}
-.card{position:absolute;right:80px;top:120px;width:360px;border-radius:24px;background:#121a3a;border:1px solid #2a3566;overflow:hidden}
-.sky{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;background:linear-gradient(100deg,#f7d3a8,#fbe6c8 55%,#fdf3e4);color:#3a2410;font-weight:700}
-.sky b{font-size:30px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.row{display:flex;justify-content:space-between;align-items:center;margin:14px 18px;padding:14px 16px;border-radius:14px;font-size:19px;font-weight:600}
-.in{background:#0b1026;border:1px solid #1b2550;color:#b4bcd9}
-.draft{background:#f5f6fa;color:#3b2fd0}
-.ok{background:#157a51;color:#fff;justify-content:center;gap:10px}
-.row span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
-.url{position:absolute;left:80px;bottom:64px;font-size:24px;font-weight:600;color:#8f98bd}
-</style></head><body><div class="glow"></div><div class="line"></div>
+h1{position:absolute;left:80px;top:176px;width:560px;font-size:72px;line-height:1.04;letter-spacing:-.04em;font-weight:800}
+.url{position:absolute;left:80px;bottom:64px;font-size:24px;font-weight:600;color:#b4bcd9}
+</style></head><body><div class="art"></div><div class="shade"></div>
 <div class="brand">${moon(44)}Noctiv</div>
 <h1>Your inbox, answered while you sleep.</h1>
-<div class="card"><div class="sky"><span>Thursday morning</span><b>08:05</b></div>
-<div class="row in"><span>Customer e-mail</span><span>23:41</span></div>
-<div class="row draft"><span>Draft reply</span><span>23:42</span></div>
-<div class="row ok"><span>✓ Approved</span><span>08:05</span></div><div style="height:6px"></div></div>
 <div class="url">noctiv.io</div></body></html>`;
 
 const icon = (size: number, radius: number) => `<!doctype html><html><head><style>*{margin:0}
 body{width:${size}px;height:${size}px;display:grid;place-items:center;background:#0b1026;border-radius:${radius}px}</style></head>
 <body>${moon(Math.round(size * 0.66))}</body></html>`;
 
-async function render(html: string, w: number, h: number, transparent = false): Promise<Buffer> {
+async function render(
+  html: string,
+  w: number,
+  h: number,
+  transparent = false,
+  type: 'png' | 'jpeg' = 'png',
+): Promise<Buffer> {
   const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   await p.setContent(html, { waitUntil: 'networkidle' });
   await p.evaluate(() => document.fonts.ready);
-  const png = await p.screenshot({ type: 'png', omitBackground: transparent });
+  const png = await p.screenshot(
+    type === 'jpeg' ? { type, quality: 86 } : { type, omitBackground: transparent },
+  );
   await p.close();
   return png;
 }
@@ -80,7 +81,7 @@ function ico(png: Buffer, size: number): Buffer {
 }
 
 try {
-  writeFileSync(join(PUBLIC, 'og.png'), await render(og, 1200, 630));
+  writeFileSync(join(PUBLIC, 'og.jpg'), await render(og, 1200, 630, false, 'jpeg'));
   writeFileSync(join(PUBLIC, 'apple-touch-icon.png'), await render(icon(180, 0), 180, 180));
   writeFileSync(join(PUBLIC, 'favicon.ico'), ico(await render(icon(32, 7), 32, 32, true), 32));
 } finally {
@@ -88,7 +89,7 @@ try {
 }
 console.log(
   'assets written:',
-  ['og.png', 'apple-touch-icon.png', 'favicon.ico']
+  ['og.jpg', 'apple-touch-icon.png', 'favicon.ico']
     .map((f) => `${f} ${readFileSync(join(PUBLIC, f)).length} B`)
     .join(', '),
 );

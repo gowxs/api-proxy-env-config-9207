@@ -23,7 +23,26 @@
       </p>
     </div>
 
-    {{> demo}}
+    <div class="hero-visual">
+      <picture class="hero-bg">
+        <source
+          media="(min-width: 40rem)"
+          srcset="/img/hero-1280.webp 1280w, /img/hero-1672.webp 1672w"
+          sizes="(min-width: 60rem) 100vw, 75rem"
+          width="1672"
+          height="941"
+        />
+        <img
+          src="/img/hero-phone.webp"
+          alt=""
+          width="627"
+          height="941"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </picture>
+      {{> demo}}
+    </div>
   </div>
   <hr class="dawn-line" />
 </section>
@@ -37,6 +56,17 @@
     </div>
     <div class="audiences">
       <article class="panel audience">
+        <img
+          class="audience-img"
+          src="/img/stores-880.webp"
+          srcset="/img/stores-560.webp 560w, /img/stores-880.webp 880w, /img/stores-1200.webp 1200w"
+          sizes="(min-width: 72rem) 34rem, (min-width: 56rem) 46vw, calc(100vw - 2rem)"
+          alt=""
+          width="1200"
+          height="675"
+          loading="lazy"
+          decoding="async"
+        />
         <h3>Online stores</h3>
         <p class="who">
           Shopify, WooCommerce and any shop that gets "where is my order?" twenty times a day.
@@ -59,6 +89,21 @@
         </ul>
       </article>
       <article class="panel audience">
+        <img
+          class="audience-img"
+          src="/img/services-880.webp"
+          srcset="
+            /img/services-560.webp   560w,
+            /img/services-880.webp   880w,
+            /img/services-1200.webp 1200w
+          "
+          sizes="(min-width: 72rem) 34rem, (min-width: 56rem) 46vw, calc(100vw - 2rem)"
+          alt=""
+          width="1200"
+          height="675"
+          loading="lazy"
+          decoding="async"
+        />
         <h3>Service businesses</h3>
         <p class="who">
           Agencies, studios, repair shops, clinics, trades: anyone who wins work by e-mail and loses

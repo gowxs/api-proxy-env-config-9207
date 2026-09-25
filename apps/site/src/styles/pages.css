@@ -191,6 +191,18 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+/* A 16:9 illustration across the top of each card. */
+.audience-img {
+  display: block;
+  width: calc(100% + 2 * var(--panel-pad));
+  max-width: none;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  margin: calc(-1 * var(--panel-pad)) calc(-1 * var(--panel-pad)) var(--s-5);
+  border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
+  background: var(--night-900);
+}
 .audience h3 {
   font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
   letter-spacing: -0.02em;

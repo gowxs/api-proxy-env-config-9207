@@ -189,17 +189,110 @@
 
 /* ---------- Hero ---------- */
 .hero {
+  /* Height of the phone/tablet picture band behind the hero. */
+  --band-h: 150vw;
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   padding-block: clamp(2.75rem, 1.5rem + 5vw, 6rem) clamp(3.5rem, 2rem + 6vw, 7rem);
   background:
     linear-gradient(to bottom, transparent 55%, color-mix(in srgb, #3a2a5c 40%, transparent)),
     var(--night-900);
 }
+/*
+ * The illustration (night sky, a glowing envelope, sunrise over water) sits
+ * behind the hero. Its top fades into the header's night; a scrim keeps the
+ * headline and the demo readable. Phones get a portrait slice behind the
+ * headline that fades out before the demo; wide screens the whole scene,
+ * with the envelope between the two columns.
+ */
+.hero-bg {
+  position: absolute;
+  z-index: -1;
+  /* Phones and tablets: a full-bleed portrait slice (2:3) anchored to the
+     demo card, so the horizon sits just under the card's top edge and the
+     envelope glows in the gap above it. */
+  left: 50%;
+  width: 100vw;
+  height: var(--band-h);
+  /* The horizon is at 73.5% of the picture's height. */
+  top: calc(1.5rem - 0.735 * var(--band-h));
+  transform: translateX(-50%);
+}
+.hero-bg img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--night-900) 0%,
+    rgb(11 16 38 / 0.6) 25%,
+    rgb(11 16 38 / 0.25) 45%,
+    rgb(11 16 38 / 0.2) 75%,
+    var(--night-900) 100%
+  );
+}
+.hero-visual {
+  position: relative;
+}
+@media (max-width: 59.99rem) {
+  /* Room for the envelope (35–46% of the band) above the demo. */
+  .hero .hero-grid {
+    gap: calc(0.385 * var(--band-h) + 1.5rem);
+  }
+}
+/* Tablets: the whole landscape scene at a capped height. */
+@media (min-width: 40rem) and (max-width: 59.99rem) {
+  .hero {
+    --band-h: 40rem;
+  }
+}
+@media (min-width: 60rem) {
+  /* Wide screens: the whole scene behind the hero (the hero is the
+     containing block), with the envelope between the two columns. */
+  .hero-visual {
+    position: static;
+  }
+  .hero-bg {
+    inset: 0;
+    width: auto;
+    height: auto;
+    transform: none;
+  }
+  .hero-bg img {
+    object-position: 50% 20%;
+  }
+  /* Text on the left over darkened sky; the envelope stays bright in the
+     gap between the columns; the demo on the right sits on a soft shade. */
+  .hero-bg::after {
+    background:
+      linear-gradient(to bottom, var(--night-900) 0%, transparent 25%),
+      linear-gradient(
+        to right,
+        rgb(11 16 38 / 0.85) 0%,
+        rgb(11 16 38 / 0.7) 36%,
+        rgb(11 16 38 / 0.1) 50%,
+        rgb(11 16 38 / 0.4) 62%,
+        rgb(11 16 38 / 0.55) 100%
+      );
+  }
+  /* Wide enough for the envelope between the text and the demo. */
+  .hero .hero-grid {
+    column-gap: clamp(10rem, 13vw, 14rem);
+  }
+}
 /* A faint warm glow sitting on the horizon; the only light in the night. */
 .hero::after {
   content: '';
   position: absolute;
+  z-index: -1;
   left: 50%;
   bottom: -1px;
   width: min(80rem, 180%);
@@ -213,8 +306,6 @@
   inset: auto 0 0 0;
 }
 .hero-grid {
-  position: relative;
-  z-index: 1;
   display: grid;
   gap: clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
 }
@@ -634,7 +725,11 @@
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  padding: clamp(1.25rem, 0.9rem + 1.6vw, 2rem);
+  padding: var(--panel-pad);
+}
+.panel,
+.audience-img {
+  --panel-pad: clamp(1.25rem, 0.9rem + 1.6vw, 2rem);
 }
 .panel--quiet {
   background: transparent;

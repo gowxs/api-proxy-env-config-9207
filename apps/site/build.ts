@@ -126,7 +126,13 @@ function headers(scripts: string[]): string {
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /*.png
+  Cache-Control: public, max-age=86400
+
+/*.jpg
   Cache-Control: public, max-age=86400
 
 /favicon.*
@@ -161,8 +167,28 @@ export function build(): { pages: string[] } {
     writeFileSync(join(DIST, 'fonts', hashed), data);
     fontNames[`/fonts/${name}.woff2`] = `/fonts/${hashed}`;
   }
+  // Illustrations too (src/images → /img/name.<hash>.webp).
+  const imageNames: Record<string, string> = {};
+  if (existsSync(join(SRC, 'images'))) {
+    mkdirSync(join(DIST, 'img'), { recursive: true });
+    for (const file of readdirSync(join(SRC, 'images')).filter((f) => f.endsWith('.webp'))) {
+      const data = readFileSync(join(SRC, 'images', file));
+      const hashed = file.replace(
+        /\.webp$/,
+        `.${createHash('sha256').update(data).digest('hex').slice(0, 10)}.webp`,
+      );
+      writeFileSync(join(DIST, 'img', hashed), data);
+      imageNames[`/img/${file}`] = `/img/${hashed}`;
+    }
+  }
   const withFonts = (text: string) =>
-    text.replace(/\/fonts\/manrope-latin(?:-ext)?\.woff2/g, (m) => fontNames[m] ?? m);
+    text
+      .replace(/\/fonts\/manrope-latin(?:-ext)?\.woff2/g, (m) => fontNames[m] ?? m)
+      .replace(/\/img\/[a-z0-9-]+\.webp/g, (m) => {
+        const hashed = imageNames[m];
+        if (!hashed) throw new Error(`unknown image ${m}`);
+        return hashed;
+      });
 
   const parts = partials();
   const layout = parts.layout!;
