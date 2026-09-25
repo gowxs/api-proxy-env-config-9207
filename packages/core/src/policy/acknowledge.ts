@@ -5,15 +5,15 @@ import type { PolicyDecision, PolicyInput, TenantMode } from './decide.ts';
  * Mode 3 ("fully automatic"): a message Noctiv cannot answer from the knowledge
  * base gets this fixed acknowledgement while the owner is asked to reply.
  * Fixed text, never model output: it states no price, date or promise beyond
- * "a person will get back to you today" (founder-approved wording).
+ * "a person will get back to you as soon as possible" (founder-approved wording).
  */
 export const ACKNOWLEDGEMENTS: Record<SupportedLanguage, string> = {
-  en: "Thanks — I'll check this and get back to you today.",
-  de: 'Danke! Ich prüfe das und melde mich heute noch bei Ihnen.',
-  nl: 'Bedankt! Ik zoek dit uit en kom er vandaag nog bij u op terug.',
-  fr: "Merci ! Je vérifie cela et je reviens vers vous aujourd'hui.",
-  es: '¡Gracias! Lo reviso y le respondo hoy mismo.',
-  lv: 'Paldies! Es to pārbaudīšu un atbildēšu Jums vēl šodien.',
+  en: "Thanks — I'll check this and get back to you as soon as possible.",
+  de: 'Danke! Ich prüfe das und melde mich so schnell wie möglich bei Ihnen.',
+  nl: 'Bedankt! Ik zoek dit uit en kom er zo snel mogelijk bij u op terug.',
+  fr: 'Merci ! Je vérifie cela et je reviens vers vous dès que possible.',
+  es: '¡Gracias! Lo reviso y le respondo lo antes posible.',
+  lv: 'Paldies! Es to pārbaudīšu un atbildēšu Jums, cik ātri vien iespējams.',
 };
 
 export type AcknowledgementBlock =

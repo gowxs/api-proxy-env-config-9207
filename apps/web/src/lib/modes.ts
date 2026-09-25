@@ -18,7 +18,7 @@ export const MODES: { id: Mode; number: 1 | 2 | 3; title: string; line: string }
     id: 'full_auto',
     number: 3,
     title: 'Fully automatic',
-    line: 'Like mode 2, and questions it can’t answer get a short “I’ll check and get back to you today” while you’re notified.',
+    line: 'Like mode 2, and questions it can’t answer get a short “I’ll check and get back to you as soon as possible” while you’re notified.',
   },
 ];
 

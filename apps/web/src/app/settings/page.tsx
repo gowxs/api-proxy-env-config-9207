@@ -63,8 +63,8 @@ function AutoSendDialog({
           {target === 'full_auto' && (
             <li>
               When a question can&apos;t be answered from your knowledge base, the customer
-              immediately gets “Thanks — I&apos;ll check this and get back to you today.” (in their
-              language), and you get the email to answer yourself.
+              immediately gets “Thanks — I&apos;ll check this and get back to you as soon as
+              possible.” (in their language), and you get the email to answer yourself.
             </li>
           )}
           <li>
