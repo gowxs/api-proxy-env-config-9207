@@ -116,10 +116,12 @@ Navigation: How it works · Pricing · Contact · Sign in (→ `https://app.noct
 
 ## 6. Open items
 
-1. **Cloudflare API token and account ID:** not in `.env` yet.
+1. **Cloudflare API token and account ID:** in `.env` (verified: account, the noctiv.io zone, DNS and Pages readable). Write access is confirmed when the Pages project is created.
 2. **Legal details for Privacy and Terms:** the legal entity name, address, company/VAT number and governing law. The texts should get a lawyer's review before launch.
 3. **Copy vs. current setup** (content is approved; flagged so it stays true):
    - "Stored in the EU" / "a database in Frankfurt": the database is in Frankfurt, but the worker currently runs temporarily in London.
    - "Replies within minutes": the free AI tier is rate-limited. Fine once on the paid EU tier.
 4. **Trial CTA:** the approved pricing button is `mailto:contact@noctiv.io`, while app sign-up is invite-only. Keep the mailto until self-serve sign-up opens.
-5. **E-mail authentication:** add a DMARC record so Brevo counts noctiv.io as authenticated (for example `_dmarc TXT "v=DMARC1; p=none; rua=mailto:contact@noctiv.io"`). Without it, Brevo may rewrite the sender to its own domain; this likely explains the `brevosend.com` sender seen on the password-reset e-mail.
+5. **E-mail authentication:**
+   - DMARC exists (`p=none`, reports to Brevo; added 24 Sep 18:10 UTC).
+   - The three Hostinger DKIM records (`hostingermail-a/b/c._domainkey`) are **proxied** CNAMEs in Cloudflare, so their keys can't be looked up and DKIM fails for mail sent from contact@noctiv.io. They should be DNS-only; waiting for approval, since it changes mail DNS.
