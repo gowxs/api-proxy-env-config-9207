@@ -70,6 +70,13 @@ function partials(): Record<string, string> {
   for (const f of readdirSync(join(SRC, 'partials'))) {
     out[f.replace(/\.html$/, '')] = read(join(SRC, 'partials', f));
   }
+  // The logo comes from the brand kit (packages/brand/svg), inlined: the
+  // horizontal lockup for night backgrounds. The link around it carries the name.
+  out.logo = read(join(ROOT, '../../packages/brand/svg/horizontal-on-dark.svg'))
+    .trim()
+    .replace(/<title>.*?<\/title>/, '')
+    .replace(/ (width|height|role|aria-label)="[^"]*"/g, '')
+    .replace('<svg ', '<svg aria-hidden="true" focusable="false" ');
   return out;
 }
 

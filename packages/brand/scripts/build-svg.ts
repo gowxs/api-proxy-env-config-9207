@@ -32,7 +32,14 @@ export interface MarkParams {
 }
 export const MARK: MarkParams = { off: 4.2, r2: 9.0, rf: 1.5, tail: [162, 110, 137, 6.4] };
 
-export function markPath(p: MarkParams = MARK): { d: string; box: number } {
+/**
+ * `withTail: false` is the small mark (favicons, anything under 24 px): the
+ * crescent alone, scaled up to use the space the tail would take.
+ */
+export function markPath(
+  p: MarkParams = MARK,
+  { withTail = true }: { withTail?: boolean } = {},
+): { d: string; box: number } {
   type Pt = { x: number; y: number };
   const C1 = { x: 16, y: 16, r: 12 };
   // The bite: offset up and to the right; this radius keeps the crescent's
@@ -81,18 +88,24 @@ export function markPath(p: MarkParams = MARK): { d: string; box: number } {
     y: C1.y + (C1.r + p.tail[3]) * Math.sin(ang),
   };
   // Centre the ink in the 32 box.
-  const xs = [apex.x, C1.x - C1.r, rightOuter.x + RF];
-  const ys = [topOuter.y - RF, apex.y, C1.y + C1.r];
-  const ox = 16 - (Math.min(...xs) + Math.max(...xs)) / 2;
-  const oy = 16 - (Math.min(...ys) + Math.max(...ys)) / 2;
-  const P = (p: Pt) => `${r2(p.x + ox)} ${r2(p.y + oy)}`;
+  const xs = [C1.x - C1.r, rightOuter.x + RF, ...(withTail ? [apex.x] : [])];
+  const ys = [topOuter.y - RF, C1.y + C1.r, ...(withTail ? [apex.y] : [])];
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  // With the tail the shape fills the grid as drawn; alone, the crescent is
+  // scaled so its larger side spans 29 of the 32 units.
+  const k = withTail
+    ? 1
+    : 29 / Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const P = (p: Pt) => `${r2((p.x - cx) * k + 16)} ${r2((p.y - cy) * k + 16)}`;
+  const R = (r: number) => r2(r * k);
   const body =
     `M${P(topOuter)}` +
-    `A${C1.r} ${C1.r} 0 1 0 ${P(rightOuter)}` + // the back, through the lower left
-    `A${RF} ${RF} 0 0 0 ${P(rightInner)}` + // rounded right tip
-    `A${C2.r} ${C2.r} 0 0 1 ${P(topInner)}` + // the bite
-    `A${RF} ${RF} 0 0 0 ${P(topOuter)}Z`; // rounded top tip
-  const tail = `M${P(t1)}L${P(apex)}L${P(t2)}Z`;
+    `A${R(C1.r)} ${R(C1.r)} 0 1 0 ${P(rightOuter)}` + // the back, through the lower left
+    `A${R(RF)} ${R(RF)} 0 0 0 ${P(rightInner)}` + // rounded right tip
+    `A${R(C2.r)} ${R(C2.r)} 0 0 1 ${P(topInner)}` + // the bite
+    `A${R(RF)} ${R(RF)} 0 0 0 ${P(topOuter)}Z`; // rounded top tip
+  const tail = withTail ? `M${P(t1)}L${P(apex)}L${P(t2)}Z` : '';
   return { d: body + tail, box: 32 };
 }
 
@@ -147,6 +160,7 @@ if (process.argv[1]?.endsWith('build-svg.ts')) writeAll();
 
 function writeAll() {
   const mark = markPath();
+  const small = markPath(MARK, { withTail: false });
   const SIZE = 100; // wordmark font size in the lockups (units)
   const wm = wordmark(SIZE);
   const bb = font
@@ -154,10 +168,14 @@ function writeAll() {
     .getBoundingBox();
 
   for (const v of VARIANTS) {
-    // Mark only: the 32 grid.
+    // Mark only: the 32 grid. The small mark (no tail) is for under 24 px.
     writeFileSync(
       join(OUT, `mark-${v.name}.svg`),
       svg(32, 32, `<path fill="${v.mark}" d="${mark.d}"/>`),
+    );
+    writeFileSync(
+      join(OUT, `mark-small-${v.name}.svg`),
+      svg(32, 32, `<path fill="${v.mark}" d="${small.d}"/>`),
     );
 
     // Horizontal: mark 1.55× cap height, centred on the cap height; gap 0.24× mark.
@@ -195,5 +213,5 @@ function writeAll() {
       writeFileSync(join(OUT, `stacked-${v.name}.svg`), svg(width, height, body));
     }
   }
-  console.log('svg written:', VARIANTS.length * 3, 'files');
+  console.log('svg written:', VARIANTS.length * 4, 'files');
 }

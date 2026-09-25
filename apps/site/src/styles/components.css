@@ -85,19 +85,17 @@
   gap: var(--s-4);
   height: 3.75rem;
 }
+/* The horizontal lockup from packages/brand; 26 px tall keeps the full mark
+   (the tail) above its 24 px minimum. */
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  color: var(--night-text);
   text-decoration: none;
-  font-weight: 800;
-  font-size: 1.3125rem;
-  letter-spacing: -0.03em;
 }
 .logo svg {
-  width: 1.375rem;
-  height: 1.375rem;
+  display: block;
+  width: auto;
+  height: 1.625rem;
 }
 .nav-links {
   display: none;

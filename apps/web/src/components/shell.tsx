@@ -7,6 +7,7 @@ import { signOut } from '@/lib/auth';
 import { BillingProvider } from '@/lib/billing';
 import { SessionProvider, useSession } from '@/lib/session';
 import { BillingBanner, TrialCountdown } from './billing';
+import { Logo } from './logo';
 import { cx } from './ui';
 
 const NAV = [
@@ -30,8 +31,8 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
       <div className="min-h-screen bg-neutral-50 pb-20 md:pb-0">
         <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-5xl items-center gap-4 px-4">
-            <Link href="/" className="font-semibold text-indigo-800">
-              Noctiv
+            <Link href="/" className="shrink-0" aria-label="Noctiv, home">
+              <Logo height={24} />
             </Link>
             <span className="hidden min-w-0 truncate text-sm text-neutral-500 sm:inline">
               {tenant?.name}

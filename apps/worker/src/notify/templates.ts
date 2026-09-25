@@ -94,16 +94,22 @@ function render(subject: string, b: Block): RenderedEmail {
   const buttons = (b.buttons ?? [])
     .map(
       ([k, u]) =>
-        `<a href="${escapeHtml(u)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 16px;border-radius:6px;background:#1f3a5f;color:#fff;text-decoration:none">${escapeHtml(k)}</a>`,
+        `<a href="${escapeHtml(u)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 16px;border-radius:6px;background:#3B2FD0;color:#fff;text-decoration:none;font-weight:600">${escapeHtml(k)}</a>`,
     )
     .join('');
-  const html = `<!doctype html><html><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;color:#1a1a1a;max-width:600px">
-<p style="font-size:17px;font-weight:600">${escapeHtml(b.heading)}</p>
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#F5F6FA">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F6FA"><tr><td align="center" style="padding:16px 8px">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:10px;overflow:hidden">
+<tr><td style="background:#0B1026"><img src="${EMAIL_HEADER_URL}" width="600" height="80" alt="Noctiv" style="display:block;width:100%;max-width:600px;height:auto;border:0;color:#EEF1FA;font:800 22px system-ui,sans-serif"></td></tr>
+<tr><td style="padding:20px 24px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#131A2E">
+<p style="font-size:17px;font-weight:600;margin-top:0">${escapeHtml(b.heading)}</p>
 <table style="border-collapse:collapse">${rows}</table>
 ${b.note ? `<p>${escapeHtml(b.note)}</p>` : ''}
 ${b.quote ? `<p style="color:#555;margin-bottom:4px">${escapeHtml(b.quote.label)}:</p><pre style="white-space:pre-wrap;font-family:inherit;border-left:3px solid #ccc;padding-left:10px;margin-top:0">${escapeHtml(b.quote.text)}</pre>` : ''}
 ${buttons ? `<p>${buttons}</p>` : ''}
-<p style="color:#777;font-size:13px">${escapeHtml(b.footer)}</p>
+<p style="color:#646C8A;font-size:13px;margin-bottom:0">${escapeHtml(b.footer)}</p>
+</td></tr></table>
+</td></tr></table>
 </body></html>`;
   return { subject: headerText(subject, 150), text, html };
 }
@@ -118,6 +124,9 @@ export function formatEnd(d: Date, timeZone: string): string {
     return fmt('UTC');
   }
 }
+
+/** The brand header (packages/brand exports, served by the site). */
+const EMAIL_HEADER_URL = 'https://noctiv.io/brand/email-header.png';
 
 const FOOTER =
   'Sent by Noctiv, your email assistant. You get this because you own this Noctiv account.';

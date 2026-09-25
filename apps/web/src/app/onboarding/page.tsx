@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { KnowledgeAdd, SourceList, type KbSource } from '@/components/knowledge';
+import { Logo } from '@/components/logo';
 import { MailboxForm } from '@/components/mailbox-form';
 import {
   Button,
@@ -192,7 +193,9 @@ function Wizard() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-6">
-      <p className="text-sm font-semibold text-indigo-800">Noctiv setup</p>
+      <p className="flex items-center gap-2 text-sm font-semibold text-neutral-500">
+        <Logo height={24} /> <span>setup</span>
+      </p>
       <ol className="my-4 grid grid-cols-4 gap-2">
         {STEPS.map((s, i) => (
           <li key={s} className="text-center">

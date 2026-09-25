@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
+import { Logo } from '@/components/logo';
 import { Button, ErrorText, Field, inputClass, Notice } from '@/components/ui';
 import { DEV_LOGIN, devLogin, SUPABASE_ENABLED, supabase } from '@/lib/auth';
 
@@ -56,8 +57,10 @@ function LoginForm() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
-      <h1 className="text-2xl font-semibold text-indigo-800">Noctiv</h1>
-      <p className="mb-6 text-sm text-neutral-600">Your AI employee for email.</p>
+      <h1>
+        <Logo height={40} />
+      </h1>
+      <p className="mt-3 mb-6 text-sm text-neutral-600">Your AI employee for email.</p>
       {params.get('deleted') && (
         <div className="mb-6">
           <Notice>

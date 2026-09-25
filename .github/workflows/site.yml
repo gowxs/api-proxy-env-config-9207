@@ -10,6 +10,7 @@ on:
     branches: [main, claude/noctiv-phase-1-plan-09rtlv]
     paths:
       - 'apps/site/**'
+      - 'packages/brand/svg/**'
       - '.github/workflows/site.yml'
   workflow_dispatch:
 
