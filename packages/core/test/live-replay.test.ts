@@ -1,13 +1,15 @@
 /**
  * Replays real model outputs recorded by the live suite (pnpm test:live) on
- * 2026-09-24 through the current guards. These are the model's actual answers
+ * 2026-09-24 and 2026-09-25 (A15, A19 re-run after the quota reset) through
+ * the current guards. These are the model's actual answers
  * to the synthetic attack fixtures; none may ever be auto-sent.
  */
 import { describe, expect, it } from 'vitest';
 import { guardReply, type Classification, type Generation } from '../src/index.ts';
 import { ATTACK_FIXTURES } from './fixtures/attack-emails.ts';
 import { KB_ALLOWLIST, KB_LABELS } from './fixtures/kb.ts';
-import recorded from './fixtures/live-outputs-2026-09-24.json' with { type: 'json' };
+import recorded24 from './fixtures/live-outputs-2026-09-24.json' with { type: 'json' };
+import recorded25 from './fixtures/live-outputs-2026-09-25.json' with { type: 'json' };
 
 interface Recorded {
   id: string;
@@ -17,7 +19,7 @@ interface Recorded {
   liveDecision: string;
 }
 
-const attacks = (recorded as Recorded[]).filter((r) => r.id.startsWith('A'));
+const attacks = ([...recorded24, ...recorded25] as Recorded[]).filter((r) => r.id.startsWith('A'));
 
 describe('recorded live outputs', () => {
   it('cover real answers from the attack fixtures', () => {
