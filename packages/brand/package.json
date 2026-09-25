@@ -1,0 +1,24 @@
+{
+  "name": "@noctiv/brand",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Noctiv brand kit: the mark, wordmark lockups and exported icons. SVG is the source of truth.",
+  "exports": {
+    "./svg/*": "./svg/*",
+    "./exports/*": "./exports/*",
+    "./tokens": "./src/tokens.ts"
+  },
+  "scripts": {
+    "svg": "node scripts/build-svg.ts",
+    "export": "node scripts/export.ts",
+    "preview": "node scripts/preview.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@fontsource/manrope": "^5.2.8",
+    "@types/opentype.js": "^1.3.10",
+    "opentype.js": "^1.3.4",
+    "playwright-core": "^1.63.0"
+  }
+}
