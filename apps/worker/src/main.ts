@@ -120,14 +120,16 @@ const refreshTimer = setInterval(
   60_000,
 );
 // Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
-// old health checks removed, a health check per connected mailbox, and
-// the retention purge (idempotent; content past retention_days is removed).
+// old health checks removed, a health check per connected mailbox, the
+// retention purge (idempotent; content past retention_days is removed) and
+// trial reminder e-mails (7 days and 1 day before the trial ends).
 const hourly = () =>
   Promise.all([
     db.sql`select * from app.housekeeping()`,
     db.sql`select * from app.hourly_maintenance()`,
     scanHealthChecks(db.sql),
     purgeExpiredContent(db.sql),
+    db.sql`select app.queue_trial_reminders()`,
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();

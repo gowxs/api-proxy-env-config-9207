@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { signOut } from '@/lib/auth';
 import { BillingProvider } from '@/lib/billing';
 import { SessionProvider, useSession } from '@/lib/session';
-import { BillingBanner } from './billing';
+import { BillingBanner, TrialCountdown } from './billing';
 import { cx } from './ui';
 
 const NAV = [
@@ -33,7 +33,10 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
             <Link href="/" className="font-semibold text-indigo-800">
               Noctiv
             </Link>
-            <span className="truncate text-sm text-neutral-500">{tenant?.name}</span>
+            <span className="hidden min-w-0 truncate text-sm text-neutral-500 sm:inline">
+              {tenant?.name}
+            </span>
+            <TrialCountdown />
             <nav className="ml-auto hidden gap-1 md:flex">
               {NAV.map((n) => (
                 <Link
@@ -51,7 +54,7 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
               ))}
             </nav>
             <button
-              className="ml-auto text-sm text-neutral-500 md:ml-2"
+              className="ml-auto text-sm whitespace-nowrap text-neutral-500 md:ml-2"
               onClick={() => void signOut().then(() => router.replace('/login'))}
             >
               Sign out

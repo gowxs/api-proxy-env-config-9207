@@ -37,6 +37,7 @@ interface BillingRow {
   paddle_customer_id: string | null;
   paddle_subscription_id: string | null;
   entitled: boolean;
+  timezone: string;
 }
 
 const tenantParams = z.object({ tenantId: z.uuid() });
@@ -57,7 +58,8 @@ export function billingRoutes(app: FastifyInstance, deps: BillingDeps): void {
       tenantId,
       (tx) => tx<BillingRow[]>`
         select billing_status, trial_ends_at, billing_period_ends_at, billing_cancels_at, paddle_customer_id,
-               paddle_subscription_id, app.billing_entitled(billing_status, trial_ends_at) as entitled
+               paddle_subscription_id, app.billing_entitled(billing_status, trial_ends_at) as entitled,
+               timezone
         from public.tenants`,
     );
     if (!row) throw new HttpError(404, 'not found');
@@ -72,6 +74,8 @@ export function billingRoutes(app: FastifyInstance, deps: BillingDeps): void {
       status: r.billing_status,
       entitled: r.entitled,
       trialEndsAt: r.trial_ends_at,
+      /** The business's time zone, for showing the exact end. */
+      timezone: r.timezone,
       trialDaysLeft:
         r.billing_status === 'trial'
           ? Math.max(0, Math.ceil((r.trial_ends_at.getTime() - Date.now()) / DAY))

@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import {
+  daysLeftText,
   fmtDate,
+  fmtEnd,
   openCheckout,
   useBilling,
   waitForSubscription,
   type Billing,
 } from '@/lib/billing';
 import { useSession } from '@/lib/session';
-import { Badge, Button, Card, ErrorText, useAction } from './ui';
+import { Badge, Button, Card, cx, ErrorText, useAction } from './ui';
 
 export const PRICE_LINE = '$79/month, plus VAT where applicable';
 
@@ -169,47 +171,69 @@ export function BillingCard({ showPortal = false }: { showPortal?: boolean }) {
   if (!billing) return null;
   const s = STATUS[billing.status];
   return (
-    <Card title="Plan">
-      <div className="flex items-center gap-2 text-sm">
-        <span className="font-medium">Noctiv</span>
-        <Badge tone={billing.entitled ? s.tone : 'red'}>
-          {billing.status === 'trial' && !billing.entitled ? 'Trial ended' : s.text}
-        </Badge>
-      </div>
-      <p className="mt-2 text-sm text-neutral-600">
-        {billing.status === 'trial' &&
-          (billing.entitled
-            ? `Free trial until ${fmtDate(billing.trialEndsAt)} (${billing.trialDaysLeft} ${billing.trialDaysLeft === 1 ? 'day' : 'days'} left). No card needed.`
-            : `The free trial ended on ${fmtDate(billing.trialEndsAt)}.`)}
-        {(billing.status === 'active' || billing.status === 'trialing') &&
-          (billing.cancelsAt
-            ? `Cancelled; Noctiv keeps working until ${fmtDate(billing.cancelsAt)}.`
-            : `${PRICE_LINE}. Next payment ${fmtDate(billing.periodEndsAt)}.`)}
-        {billing.status === 'past_due' &&
-          'The last payment failed; Paddle retries it. Update your card below.'}
-        {billing.status === 'canceled' &&
-          'The subscription was cancelled. Subscribe again at any time.'}
-        {billing.status === 'paused' && 'The subscription is paused.'}
-        {billing.status === 'comped' && 'This account is free of charge.'}
-      </p>
-      {billing.status === 'trial' && (
-        <p className="mt-1 text-xs text-neutral-500">
-          {PRICE_LINE}. Billing starts the day you subscribe. Cancel any time.{' '}
-          <Link className="underline" href="https://noctiv.io/refunds/">
-            Refund policy
-          </Link>
+    <div id="plan" className="scroll-mt-20">
+      <Card title="Plan">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-medium">Noctiv</span>
+          <Badge tone={billing.entitled ? s.tone : 'red'}>
+            {billing.status === 'trial' && !billing.entitled ? 'Trial ended' : s.text}
+          </Badge>
+        </div>
+        <p className="mt-2 text-sm text-neutral-600">
+          {billing.status === 'trial' &&
+            (billing.entitled
+              ? `Free trial — ${daysLeftText(billing.trialDaysLeft ?? 0)}. It ends on ${fmtEnd(billing.trialEndsAt, billing.timezone)}. No card needed.`
+              : `The free trial ended on ${fmtEnd(billing.trialEndsAt, billing.timezone)}.`)}
+          {(billing.status === 'active' || billing.status === 'trialing') &&
+            (billing.cancelsAt
+              ? `Cancelled; Noctiv keeps working until ${fmtDate(billing.cancelsAt)}.`
+              : `${PRICE_LINE}. Next payment ${fmtDate(billing.periodEndsAt)}.`)}
+          {billing.status === 'past_due' &&
+            'The last payment failed; Paddle retries it. Update your card below.'}
+          {billing.status === 'canceled' &&
+            'The subscription was cancelled. Subscribe again at any time.'}
+          {billing.status === 'paused' && 'The subscription is paused.'}
+          {billing.status === 'comped' && 'This account is free of charge.'}
         </p>
+        {billing.status === 'trial' && (
+          <p className="mt-1 text-xs text-neutral-500">
+            {PRICE_LINE}. Billing starts the day you subscribe. Cancel any time.{' '}
+            <Link className="underline" href="https://noctiv.io/refunds/">
+              Refund policy
+            </Link>
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(billing.status === 'trial' || billing.status === 'canceled') && <SubscribeButton />}
+          {showPortal && billing.portalAvailable && billing.status !== 'comped' && <PortalButton />}
+        </div>
+        {showPortal && billing.portalAvailable && (
+          <p className="mt-2 text-xs text-neutral-500">
+            Card changes, invoices and cancellation are handled by Paddle, our reseller and merchant
+            of record.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** Header countdown, on every page for the whole trial. */
+export function TrialCountdown() {
+  const { billing } = useBilling();
+  if (!billing || billing.status !== 'trial' || !billing.entitled || billing.trialDaysLeft === null)
+    return null;
+  const urgent = billing.trialDaysLeft <= 3;
+  return (
+    <Link
+      href="/#plan"
+      title={`Free trial ends on ${fmtEnd(billing.trialEndsAt, billing.timezone)}`}
+      className={cx(
+        'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
+        urgent ? 'bg-amber-100 text-amber-900' : 'bg-indigo-50 text-indigo-800',
       )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(billing.status === 'trial' || billing.status === 'canceled') && <SubscribeButton />}
-        {showPortal && billing.portalAvailable && billing.status !== 'comped' && <PortalButton />}
-      </div>
-      {showPortal && billing.portalAvailable && (
-        <p className="mt-2 text-xs text-neutral-500">
-          Card changes, invoices and cancellation are handled by Paddle, our reseller and merchant
-          of record.
-        </p>
-      )}
-    </Card>
+    >
+      Free trial — {daysLeftText(billing.trialDaysLeft)}
+    </Link>
   );
 }

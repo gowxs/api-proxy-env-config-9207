@@ -118,6 +118,7 @@ describe('billing state', () => {
       entitled: true,
       hasSubscription: false,
       portalAvailable: false,
+      timezone: expect.any(String),
       checkout: { env: 'sandbox', clientToken: 'test_client_token', priceId: 'pri_01test' },
     });
     expect(r.json.trialDaysLeft).toBeGreaterThanOrEqual(13);

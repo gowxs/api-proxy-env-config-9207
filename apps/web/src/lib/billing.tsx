@@ -11,6 +11,8 @@ export interface Billing {
   /** In the free trial or subscribed: Noctiv reads and answers mail. */
   entitled: boolean;
   trialEndsAt: string;
+  /** The business's time zone (Settings). */
+  timezone: string;
   trialDaysLeft: number | null;
   periodEndsAt: string | null;
   cancelsAt: string | null;
@@ -148,6 +150,20 @@ export async function waitForSubscription(
   }
   return false;
 }
+
+/** "Thursday, 8 October 2026 at 15:30 (Europe/Riga)" in the business's time zone. */
+export function fmtEnd(iso: string, timeZone: string): string {
+  const d = new Date(iso);
+  const fmt = (tz: string) =>
+    `${d.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })} (${tz})`;
+  try {
+    return fmt(timeZone || 'UTC');
+  } catch {
+    return fmt('UTC');
+  }
+}
+
+export const daysLeftText = (n: number) => (n === 1 ? '1 day left' : `${n} days left`);
 
 export const fmtDate = (iso: string | null) =>
   iso

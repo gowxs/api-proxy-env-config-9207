@@ -108,6 +108,17 @@ ${buttons ? `<p>${buttons}</p>` : ''}
   return { subject: headerText(subject, 150), text, html };
 }
 
+/** "Thursday, 8 October 2026 at 15:30 (Europe/Riga)"; UTC when the zone is unknown. */
+export function formatEnd(d: Date, timeZone: string): string {
+  const fmt = (tz: string) =>
+    `${d.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} at ${d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false })} (${tz})`;
+  try {
+    return fmt(timeZone || 'UTC');
+  } catch {
+    return fmt('UTC');
+  }
+}
+
 const FOOTER =
   'Sent by Noctiv, your email assistant. You get this because you own this Noctiv account.';
 
@@ -242,6 +253,31 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         note: 'Details: public.jobs.last_error for this job id. One alert per tenant, queue and day.',
         footer: 'Noctiv admin alert.',
       });
+    case 'trial_ending': {
+      const endsAt = new Date(str(p.endsAt));
+      const days = typeof p.daysLeft === 'number' ? p.daysLeft : Number(p.daysLeft);
+      const when = Number.isNaN(endsAt.getTime()) ? 'soon' : formatEnd(endsAt, str(p.timezone));
+      const lastDay = p.stage === 1 || days <= 1;
+      const left = lastDay ? 'less than a day' : `${days} days`;
+      return render(
+        lastDay
+          ? 'Last day of your Noctiv free trial'
+          : `Your Noctiv free trial ends in ${days} days`,
+        {
+          heading: `Your free trial ends in ${left}, on ${when}.`,
+          lines: [
+            ['Account', n.tenantName],
+            ['Price', '$79/month, plus VAT where applicable. Cancel any time.'],
+          ],
+          note:
+            'Subscribe in your dashboard to keep Noctiv reading and answering your email. ' +
+            'If you don’t, it stops when the trial ends; your data, drafts and settings are kept, ' +
+            'and you can subscribe later.',
+          buttons: [['Subscribe in dashboard', n.links.dashboard]],
+          footer: FOOTER,
+        },
+      );
+    }
     case 'test':
       return render('Noctiv test notification', {
         heading: 'Your Noctiv email notifications work.',
