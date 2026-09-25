@@ -11,15 +11,17 @@
   "dependencies": {
     "@noctiv/core": "workspace:*",
     "@noctiv/db": "workspace:*",
-    "zod": "^4.6.5",
-    "@noctiv/llm": "workspace:*",
-    "postgres": "^3.4.9",
     "@noctiv/kb": "workspace:*",
+    "@noctiv/llm": "workspace:*",
     "@noctiv/mail": "workspace:*",
     "imapflow": "^2.0.6",
-    "nodemailer": "^10.0.10"
+    "nodemailer": "^10.0.10",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/nodemailer": "^8.0.2"
+    "@types/mailparser": "^3.4.6",
+    "@types/nodemailer": "^8.0.2",
+    "mailparser": "^3.9.28"
   }
 }

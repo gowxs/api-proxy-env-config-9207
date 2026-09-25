@@ -3,6 +3,7 @@ import { nextFollowupAt } from '@noctiv/core';
 import { JobError, type Job } from '@noctiv/db';
 import { GREENMAIL_USERS, seedTenant, type SeededTenant } from '@noctiv/db/testing';
 import { buildOutboundMessage } from '@noctiv/mail';
+import { simpleParser } from 'mailparser';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { mailSendHandler } from '../src/jobs/mail-send.ts';
@@ -281,6 +282,45 @@ describe('auto-send safety re-checked at send time', () => {
     expect(await inboxWith(d.tag)).toHaveLength(0);
     const approved = await makeDraft({ tenantId: t.tenantId, connectionId: conn });
     expect(await send(job(t.tenantId, approved.draftId))).toEqual({ status: 'sent' });
+  });
+});
+
+describe('e-mail design', () => {
+  it('sends the tenant design as multipart/alternative with a full text part', async () => {
+    const t = await seedTenant(owner, 'send-design', { embeddingAxis: 75 });
+    await owner`update public.tenants set email_template = 'branded', reply_signature = 'Liga — Lumen Studio',
+                brand_company_name = 'Lumen Studio', brand_logo_url = 'https://lumen.test/logo.png',
+                brand_color = '#2A3566', brand_website = 'https://lumen.test', brand_phone = '+371 2000 0000'
+                where id = ${t.tenantId}`;
+    await owner`insert into public.kb_allowlist (tenant_id, source_id, kind, value)
+                values (${t.tenantId}, ${t.sourceId}, 'domain', 'lumen.test')`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const d = await makeDraft({ tenantId: t.tenantId, connectionId: conn });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    const [m] = await inboxWith(d.tag);
+    const parsed = await simpleParser(m!.raw);
+    expect(m!.raw).toMatch(/Content-Type: multipart\/alternative/);
+    // The company name is left out: the signature already has it.
+    expect(parsed.text?.trimEnd()).toBe(
+      'Yes, lavender candles are in stock.\n\nLiga — Lumen Studio\n\nhttps://lumen.test\n+371 2000 0000',
+    );
+    expect(parsed.html).toContain('Yes, lavender candles are in stock.');
+    expect(parsed.html).toContain('<img src="https://lumen.test/logo.png"');
+    expect(parsed.html).toContain('background:#2A3566');
+  });
+
+  it('the default (plain) design sends text only', async () => {
+    const d = await makeDraft({});
+    expect(await send(job(T.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    const [m] = await inboxWith(d.tag);
+    expect(m!.raw).not.toMatch(/multipart|text\/html/);
+    expect((await simpleParser(m!.raw)).text?.trimEnd()).toBe(
+      'Yes, lavender candles are in stock.\n\nLiga — Lumen Studio',
+    );
   });
 });
 

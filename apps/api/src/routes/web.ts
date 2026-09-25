@@ -1,5 +1,13 @@
-import { budgetStateFor, TENANT_MODES, type TenantMode } from '@noctiv/core';
+import {
+  budgetStateFor,
+  EMAIL_TEMPLATES,
+  logoAllowed,
+  renderReplyEmail,
+  TENANT_MODES,
+  type TenantMode,
+} from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
+import { loadAllowlist } from '@noctiv/kb';
 import {
   BlockedUrlError,
   createFileSource,
@@ -50,6 +58,54 @@ export class HttpError extends Error {
 /** 1 approve everything, 2 auto-reply to grounded questions, 3 fully automatic. */
 const modeRank = (m: TenantMode) => TENANT_MODES.indexOf(m);
 
+/** E-mail design fields (Settings → E-mail design). Empty strings clear a field. */
+const httpUrl = z
+  .string()
+  .trim()
+  .max(300)
+  .regex(/^https?:\/\/[^\s"'<>]+$/, 'must start with http:// or https://');
+const optional = <T extends z.ZodTypeAny>(t: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), t.nullable());
+const designShape = {
+  emailTemplate: z.enum(EMAIL_TEMPLATES),
+  brandCompanyName: optional(z.string().trim().max(120)),
+  brandLogoUrl: optional(
+    z
+      .string()
+      .trim()
+      .max(500)
+      .regex(/^https:\/\/[^\s"'<>]+$/, 'must be an https:// address'),
+  ),
+  brandColor: optional(z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'must be a colour like #3B2FD0')),
+  brandWebsite: optional(httpUrl),
+  brandPhone: optional(z.string().trim().max(40)),
+  brandAddress: optional(z.string().trim().max(300)),
+  brandSocialLinks: z.array(httpUrl).max(3),
+};
+const designBody = z.object(designShape).partial().strict();
+type Design = z.infer<typeof designBody>;
+
+const LOGO_NOT_ALLOWED =
+  'Use a logo from your own website: the image address must be on a site in your knowledge base.';
+
+/** Design fields → tenant columns; the logo must come from the knowledge-base allowlist. */
+async function designColumns(tx: TransactionSql, b: Design): Promise<Record<string, unknown>> {
+  const cols: Record<string, unknown> = {};
+  if (b.emailTemplate !== undefined) cols.email_template = b.emailTemplate;
+  if (b.brandCompanyName !== undefined) cols.brand_company_name = b.brandCompanyName;
+  if (b.brandLogoUrl !== undefined) {
+    if (b.brandLogoUrl && !logoAllowed(b.brandLogoUrl, await loadAllowlist(tx)))
+      throw new HttpError(400, LOGO_NOT_ALLOWED);
+    cols.brand_logo_url = b.brandLogoUrl;
+  }
+  if (b.brandColor !== undefined) cols.brand_color = b.brandColor?.toUpperCase() ?? null;
+  if (b.brandWebsite !== undefined) cols.brand_website = b.brandWebsite;
+  if (b.brandPhone !== undefined) cols.brand_phone = b.brandPhone;
+  if (b.brandAddress !== undefined) cols.brand_address = b.brandAddress;
+  if (b.brandSocialLinks !== undefined) cols.brand_social_links = b.brandSocialLinks;
+  return cols;
+}
+
 const settingsBody = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -69,9 +125,14 @@ const settingsBody = z
     retentionDays: z.number().int().min(1).max(3650),
     replySignature: z.string().max(1000).nullable(),
     onboardingCompleted: z.literal(true),
+    ...designShape,
   })
   .partial()
   .strict();
+
+/** The sample reply shown in the Settings preview. */
+export const PREVIEW_REPLY =
+  'Hi Anna,\n\nThanks for your message. Yes, the lavender candle is in stock and costs 24 EUR; delivery within Latvia takes 2–3 business days.\n\nWould you like me to reserve one for you?';
 
 const draftBody = z.object({ body: z.string().trim().min(1).max(20_000) }).strict();
 const approveBody = z.object({ body: z.string().trim().min(1).max(20_000).optional() }).strict();
@@ -114,7 +175,9 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const [t] = await tx`
         select id, name, website_url, timezone, mode, notify_full_text, budget_state, daily_token_budget,
                max_replies_per_hour, max_ai_replies_per_sender_24h, followup_after_days, followup_max,
-               retention_days, reply_signature, onboarding_completed_at, created_at
+               retention_days, reply_signature, onboarding_completed_at, created_at,
+               email_template, brand_company_name, brand_logo_url, brand_color, brand_website,
+               brand_phone, brand_address, brand_social_links
         from public.tenants`;
       return t;
     }),
@@ -146,6 +209,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
+      Object.assign(cols, await designColumns(tx, b));
       if (Object.keys(cols).length) {
         await tx`update public.tenants set ${tx(cols)} where id = ${tenantId}`;
         await audit(tx, tenantId, req.user!.userId, 'settings.updated', 'tenant', tenantId, {
@@ -154,6 +218,58 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         });
       }
       return { ok: true };
+    }),
+  );
+
+  // ----------------------------------------------------------- e-mail design
+  /**
+   * Live preview: the sample reply in the chosen design, with unsaved form
+   * values over the saved ones. Rendered by the same code the worker sends with.
+   */
+  app.post('/v1/tenants/:tenantId/email-design/preview', (req) =>
+    tenantTx(req, async (tx) => {
+      const b = designBody
+        .extend({ replySignature: z.string().max(1000).nullable() })
+        .partial()
+        .strict()
+        .parse(req.body ?? {});
+      const [t] = await tx<
+        {
+          name: string;
+          reply_signature: string | null;
+          email_template: (typeof EMAIL_TEMPLATES)[number];
+          brand_company_name: string | null;
+          brand_logo_url: string | null;
+          brand_color: string | null;
+          brand_website: string | null;
+          brand_phone: string | null;
+          brand_address: string | null;
+          brand_social_links: string[];
+        }[]
+      >`select name, reply_signature, email_template, brand_company_name, brand_logo_url, brand_color,
+               brand_website, brand_phone, brand_address, brand_social_links from public.tenants`;
+      const pick = <K extends keyof Design>(k: K, saved: Design[K]) =>
+        b[k] !== undefined ? b[k] : saved;
+      const r = renderReplyEmail({
+        template: pick('emailTemplate', t!.email_template)!,
+        body: PREVIEW_REPLY,
+        signature: b.replySignature !== undefined ? b.replySignature : t!.reply_signature,
+        brand: {
+          companyName: pick('brandCompanyName', t!.brand_company_name) ?? t!.name,
+          logoUrl: pick('brandLogoUrl', t!.brand_logo_url) ?? null,
+          color: pick('brandColor', t!.brand_color) ?? null,
+          website: pick('brandWebsite', t!.brand_website) ?? null,
+          phone: pick('brandPhone', t!.brand_phone) ?? null,
+          address: pick('brandAddress', t!.brand_address) ?? null,
+          socialLinks: pick('brandSocialLinks', t!.brand_social_links) ?? [],
+        },
+        allowlist: await loadAllowlist(tx),
+      });
+      return {
+        ...r,
+        ...(r.logo === 'blocked' ? { logoMessage: LOGO_NOT_ALLOWED } : {}),
+        htmlBytes: r.html ? Buffer.byteLength(r.html) : 0,
+      };
     }),
   );
 

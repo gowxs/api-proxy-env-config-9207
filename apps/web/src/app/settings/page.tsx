@@ -17,6 +17,7 @@ import {
   useLoad,
 } from '@/components/ui';
 import { api } from '@/lib/api';
+import { designInfo } from '@/lib/email-design';
 import { MODES, modeInfo, modeRank, type Mode } from '@/lib/modes';
 import { signOut } from '@/lib/auth';
 import { useTenantId } from '@/lib/session';
@@ -33,6 +34,7 @@ interface Tenant {
   followup_max: number;
   retention_days: number;
   reply_signature: string | null;
+  email_template: string;
 }
 
 function AutoSendDialog({
@@ -198,6 +200,15 @@ function SettingsForm({
       <Card title="Mailbox">
         <Link className="text-sm text-indigo-700" href="/settings/mailboxes">
           Manage connected mailboxes →
+        </Link>
+      </Card>
+
+      <Card title="E-mail design">
+        <p className="text-sm text-neutral-600">
+          {designInfo(t.email_template).title}: {designInfo(t.email_template).line}
+        </p>
+        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/email-design">
+          Choose a design and preview it →
         </Link>
       </Card>
 

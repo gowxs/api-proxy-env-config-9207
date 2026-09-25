@@ -1,11 +1,15 @@
 import {
+  emptyAllowlist,
   hostOf,
   isAutomaticMode,
   nextFollowupAt,
   ownerNotificationPayload,
+  renderReplyEmail,
+  type EmailTemplate,
   type Logger,
   type TenantMode,
 } from '@noctiv/core';
+import { loadAllowlist } from '@noctiv/kb';
 
 type DraftKind = 'reply' | 'followup' | 'acknowledgement';
 import { JobError, withTenant, type Job } from '@noctiv/db';
@@ -52,7 +56,15 @@ interface Outbound {
 interface SendPlan {
   recover: boolean;
   outbound: Outbound;
-  draft: { id: string; kind: DraftKind; to: string; subject: string; text: string };
+  draft: {
+    id: string;
+    kind: DraftKind;
+    to: string;
+    subject: string;
+    text: string;
+    /** The tenant's e-mail design (null: text only). */
+    html: string | null;
+  };
   threadId: string;
   leadId: string | null;
   sourceMessageId: string | null;
@@ -134,6 +146,7 @@ export function mailSendHandler(deps: MailSendDeps) {
       to: plan.draft.to,
       subject: plan.draft.subject,
       text: plan.draft.text,
+      html: plan.draft.html,
       messageId: plan.outbound.messageId,
       inReplyTo: plan.inReplyTo,
       references: plan.references,
@@ -215,6 +228,14 @@ async function planSend(
       entitled: boolean;
       mode: string;
       reply_signature: string | null;
+      email_template: EmailTemplate;
+      brand_company_name: string | null;
+      brand_logo_url: string | null;
+      brand_color: string | null;
+      brand_website: string | null;
+      brand_phone: string | null;
+      brand_address: string | null;
+      brand_social_links: string[];
       tenant_name: string;
       timezone: string;
       followup_after_days: number;
@@ -226,6 +247,8 @@ async function planSend(
     select d.id, d.status, d.kind, d.to_address, d.subject, d.body, d.decided_by, d.thread_id, d.source_message_id,
            th.connection_id, th.lead_id, th.followups_sent, th.status as thread_status, th.last_outbound_at,
            t.status as tenant_status, app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
+           t.email_template, t.brand_company_name, t.brand_logo_url, t.brand_color, t.brand_website,
+           t.brand_phone, t.brand_address, t.brand_social_links,
            t.followup_after_days, t.followup_max, t.max_replies_per_hour, t.max_ai_replies_per_sender_24h
     from public.drafts d
     join public.threads th on th.id = d.thread_id
@@ -338,7 +361,22 @@ async function planSend(
     outbound = { ...outbound, id: row!.id, messageId };
   }
 
-  const signature = d.reply_signature?.trim();
+  // The tenant's e-mail design frames the reply; the reply text is unchanged.
+  const rendered = renderReplyEmail({
+    template: d.email_template,
+    body: d.body,
+    signature: d.reply_signature,
+    brand: {
+      companyName: d.brand_company_name ?? d.tenant_name,
+      logoUrl: d.brand_logo_url,
+      color: d.brand_color,
+      website: d.brand_website,
+      phone: d.brand_phone,
+      address: d.brand_address,
+      socialLinks: d.brand_social_links,
+    },
+    allowlist: d.email_template === 'plain' ? emptyAllowlist() : await loadAllowlist(tx),
+  });
   return {
     plan: {
       recover,
@@ -348,7 +386,8 @@ async function planSend(
         kind: d.kind,
         to: d.to_address,
         subject: d.subject,
-        text: `${d.body.trimEnd()}${signature ? `\n\n${signature}` : ''}\n`,
+        text: rendered.text,
+        html: rendered.html,
       },
       threadId: d.thread_id,
       leadId: d.lead_id,

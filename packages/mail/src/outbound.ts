@@ -33,6 +33,8 @@ export interface OutboundInput {
   to: string;
   subject: string;
   text: string;
+  /** Optional HTML alternative (the tenant's e-mail design); the text part is always complete. */
+  html?: string | null;
   messageId: string;
   inReplyTo?: string | null;
   references?: string[];
@@ -43,7 +45,8 @@ export interface OutboundInput {
 
 /**
  * Builds the complete RFC 5322 message once; the same bytes are sent over
- * SMTP and appended to the Sent folder. Plain text only.
+ * SMTP and appended to the Sent folder. Text only, or multipart/alternative
+ * (text first, then HTML) when an HTML design is given.
  */
 export async function buildOutboundMessage(i: OutboundInput): Promise<Buffer> {
   const refs = [...(i.references ?? []), ...(i.inReplyTo ? [i.inReplyTo] : [])]
@@ -58,6 +61,7 @@ export async function buildOutboundMessage(i: OutboundInput): Promise<Buffer> {
     to: i.to,
     subject: headerText(i.subject),
     text: i.text,
+    ...(i.html ? { html: i.html } : {}),
     messageId: i.messageId,
     date: i.date ?? new Date(),
     ...(i.inReplyTo ? { inReplyTo: i.inReplyTo } : {}),
