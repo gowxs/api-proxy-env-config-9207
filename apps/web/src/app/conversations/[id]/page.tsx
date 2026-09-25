@@ -35,7 +35,7 @@ interface Message {
 }
 interface Draft {
   id: string;
-  kind: 'reply' | 'followup';
+  kind: 'reply' | 'followup' | 'acknowledgement';
   status: string;
   to_address: string;
   subject: string;
@@ -115,7 +115,11 @@ function DraftCard({
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-sm font-semibold">
-          {draft.kind === 'followup' ? 'Follow-up draft' : 'Reply draft'}
+          {draft.kind === 'followup'
+            ? 'Follow-up draft'
+            : draft.kind === 'acknowledgement'
+              ? 'Acknowledgement (sent automatically)'
+              : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}

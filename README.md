@@ -117,7 +117,8 @@ every request; the browser never reads the database directly.
 
 - **Onboarding:** business + time zone (+ invite code) → mailbox (provider, App Password
   guide with screenshot placeholders, live test with the exact error) → knowledge (website,
-  files, notes) → summary. Every business starts in draft-only mode.
+  files, notes) → summary. Every business starts in mode 1 (approve everything); modes 2
+  (auto-reply to grounded questions) and 3 (fully automatic) are chosen in Settings.
 - **Dashboard:** mailbox health, today's counts in the tenant's time zone, AI budget, open items.
 - **Inbox:** "Needs you" / all; a conversation shows messages, reasons, and drafts to approve, edit or reject. Escalations are marked done.
 - **Leads:** stage filter, stage changes (recorded), name and notes.
@@ -183,7 +184,8 @@ Pure functions with no I/O. The pipeline in step 8 calls them in this order:
 | `safety/injection.ts`      | Heuristic injection signals (EN/DE/NL/FR/ES/LV); any signal blocks auto-send                                                                |
 | `safety/sanitize-reply.ts` | Removes links and addresses that aren't in the knowledge base, plus invisible characters                                                    |
 | `claims/*`                 | Detects prices, percentages, durations, dates, times, weekdays and commitment wording in 6 languages; checks each against the cited sources |
-| `policy/decide.ts`         | Final action: escalate > draft > auto_send                                                                                                  |
+| `policy/decide.ts`         | Final action: escalate > draft > auto_send; the three sending modes                                                                         |
+| `policy/acknowledge.ts`    | Mode 3: the fixed per-language acknowledgement for messages that can't be grounded, and its safety gates                                    |
 | `guard/guard-reply.ts`     | Runs all of the above on one model output; builds the recipient and threading headers from the original email only                          |
 | `crypto/sealed-box.ts`     | X25519 + HKDF + AES-256-GCM credential sealing bound to tenant and connection                                                               |
 
@@ -276,7 +278,7 @@ To ingest one source by hand (until step 7 adds the job queue):
    in privacy mode.
 4. **Send (worker, `mail.send`).** The draft is locked. Auto-sends re-check the tenant
    mode and rate caps; if either now fails, the reply goes back to the owner for
-   approval. The outbound email is recorded with its Message-ID before the SMTP send,
+   approval (a mode-3 acknowledgement is cancelled instead). The outbound email is recorded with its Message-ID before the SMTP send,
    so a double approval or a repeated job can't send twice. Replies carry
    `In-Reply-To`/`References` and the tenant signature. Only auto-sends carry
    `Auto-Submitted: auto-replied`. After sending: the message is appended to Sent

@@ -5,9 +5,10 @@ import { AppPage } from '@/components/shell';
 import { Badge, Card, ErrorText, Loading, timeAgo, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useTenantId } from '@/lib/session';
+import { modeInfo, type Mode } from '@/lib/modes';
 
 interface Dashboard {
-  mode: 'draft_only' | 'auto_send';
+  mode: Mode;
   timezone: string;
   connections: {
     id: string;
@@ -124,14 +125,12 @@ function DashboardView() {
 
       <Card title="Mode">
         <div className="flex items-center gap-2">
-          <Badge tone={data.mode === 'auto_send' ? 'blue' : 'gray'}>
-            {data.mode === 'auto_send' ? 'Automatic sending' : 'Draft-only'}
+          <Badge tone={data.mode === 'draft_only' ? 'gray' : 'blue'}>
+            {modeInfo(data.mode).number}. {modeInfo(data.mode).title}
           </Badge>
         </div>
         <p className="mt-2 text-sm text-neutral-600">
-          {data.mode === 'auto_send'
-            ? 'Replies that pass every safety check are sent automatically; everything else waits for you.'
-            : 'Every reply waits for your approval.'}{' '}
+          {modeInfo(data.mode).line}{' '}
           <Link className="text-indigo-700" href="/settings">
             Change
           </Link>
@@ -157,7 +156,7 @@ function DashboardView() {
               <Badge tone="red">
                 {data.budget.state === 'halted'
                   ? 'Paused until tomorrow'
-                  : 'Draft-only until tomorrow'}
+                  : 'Approval only until tomorrow'}
               </Badge>
             )}
           </span>

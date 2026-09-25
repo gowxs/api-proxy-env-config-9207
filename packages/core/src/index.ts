@@ -20,6 +20,7 @@ export * from './llm/json-schema.ts';
 export * from './llm/generate-json.ts';
 export * from './prompt/build.ts';
 export * from './policy/decide.ts';
+export * from './policy/acknowledge.ts';
 export * from './policy/budget.ts';
 export * from './guard/guard-reply.ts';
 export * from './crypto/sealed-box.ts';

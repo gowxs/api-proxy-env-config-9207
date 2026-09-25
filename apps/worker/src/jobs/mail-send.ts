@@ -1,4 +1,13 @@
-import { hostOf, nextFollowupAt, ownerNotificationPayload, type Logger } from '@noctiv/core';
+import {
+  hostOf,
+  isAutomaticMode,
+  nextFollowupAt,
+  ownerNotificationPayload,
+  type Logger,
+  type TenantMode,
+} from '@noctiv/core';
+
+type DraftKind = 'reply' | 'followup' | 'acknowledgement';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -43,7 +52,7 @@ interface Outbound {
 interface SendPlan {
   recover: boolean;
   outbound: Outbound;
-  draft: { id: string; kind: 'reply' | 'followup'; to: string; subject: string; text: string };
+  draft: { id: string; kind: DraftKind; to: string; subject: string; text: string };
   threadId: string;
   leadId: string | null;
   sourceMessageId: string | null;
@@ -190,7 +199,7 @@ async function planSend(
     {
       id: string;
       status: string;
-      kind: 'reply' | 'followup';
+      kind: DraftKind;
       to_address: string;
       subject: string;
       body: string | null;
@@ -288,10 +297,18 @@ async function planSend(
              count(*) filter (where created_at > now() - interval '1 hour')::int as hour
       from public.outbound_emails where sent_via = 'auto' and status <> 'failed'`;
     const reasons: string[] = [];
-    if (d.mode !== 'auto_send') reasons.push('mode_changed_to_draft_only');
+    const isAck = d.kind === 'acknowledgement';
+    // Acknowledgements are a mode-3 feature; replies go out in either automatic mode.
+    if (isAck ? d.mode !== 'full_auto' : !isAutomaticMode(d.mode as TenantMode))
+      reasons.push(isAck ? 'mode_changed' : 'mode_changed_to_draft_only');
     if (caps!.sender >= d.max_ai_replies_per_sender_24h) reasons.push('sender_cap_reached');
     if (caps!.hour >= d.max_replies_per_hour) reasons.push('tenant_hour_cap_reached');
     if (reasons.length) {
+      if (isAck) {
+        // Not a reply the owner should approve: the escalation already asks them to answer.
+        await tx`update public.drafts set status = 'superseded' where id = ${d.id}`;
+        return { done: { skipped: 'acknowledgement_cancelled', reasons } };
+      }
       await downgradeToApproval(tx, tenantId, d.id, d.source_message_id, reasons);
       return { done: { status: 'downgraded', reasons } };
     }
@@ -415,6 +432,15 @@ async function finalizeSent(
             ${[plan.draft.to]}, ${plan.draft.subject}, ${plan.draft.text}, ${now})
     on conflict (connection_id, message_id_header) do nothing`;
 
+  if (plan.draft.kind === 'acknowledgement') {
+    // The customer was told a person will answer: the conversation stays with the
+    // owner (escalated), no follow-up is scheduled and the lead stage is unchanged.
+    await tx`update public.threads set last_outbound_at = ${now} where id = ${plan.threadId}`;
+    await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
+             values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
+                     ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'acknowledgement' })})`;
+    return;
+  }
   const isFollowup = plan.draft.kind === 'followup';
   const sentCount = isFollowup ? plan.followupsSent + 1 : 0;
   const more = sentCount < plan.tenant.followupMax;
@@ -456,10 +482,14 @@ async function finalizeFailed(
     await tx`update public.outbound_emails set status = 'failed', error = ${detail ? `${code}: ${detail}` : code}
              where id = ${outboundId}`;
   }
-  const [d] = await tx<{ subject: string; to_address: string }[]>`
+  const [d] = await tx<{ subject: string; to_address: string; kind: DraftKind }[]>`
     update public.drafts set status = 'send_failed' where id = ${draftId} and status <> 'sent'
-    returning subject, to_address`;
+    returning subject, to_address, kind`;
   if (!d) return;
+  await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
+           values (${tenantId}, 'system', 'email.send_failed', 'draft', ${draftId}, ${tx.json({ code })})`;
+  // A failed acknowledgement needs no alert: the owner already has the escalation.
+  if (d.kind === 'acknowledgement') return;
   const payload = {
     draftId,
     code,
@@ -470,8 +500,6 @@ async function finalizeFailed(
     insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
     values (${tenantId}, 'email_owner', 'send_failed', ${`send_failed:${draftId}`}, ${tx.json(payload)})
     on conflict (tenant_id, dedupe_key) do nothing`;
-  await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
-           values (${tenantId}, 'system', 'email.send_failed', 'draft', ${draftId}, ${tx.json({ code })})`;
 }
 
 /**

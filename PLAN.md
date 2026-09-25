@@ -90,7 +90,7 @@ Conventions: every table has `tenant_id uuid not null` (FK → `tenants.id` `on 
 | name | text | business name |
 | website_url | text null | |
 | timezone | text not null | IANA zone, **no default** — required in the onboarding wizard; used for follow-up send windows |
-| mode | enum `draft_only`\|`auto_send` | **default `draft_only`** |
+| mode | enum `draft_only`\|`auto_send`\|`full_auto` (modes 1–3, §4.3) | **default `draft_only`** |
 | budget_state | enum `ok`\|`draft_forced`\|`halted` | set by budget enforcer, reset daily |
 | daily_token_budget | int | default from env |
 | max_replies_per_hour | int | default 20 |
@@ -270,7 +270,8 @@ Wizard → `POST /connections/test` (API seals creds) → enqueues `connection.t
 ### 4.3 Policy engine (most restrictive result wins)
 **Escalate** if any: category/sentiment/urgency in hard list · `confidence < 0.8` · model chose `escalate` · invalid JSON after retry · cited source not in retrieved set · **claim detector** finds a price / currency / percentage / date / deadline / duration / availability / discount / guarantee term in the reply that is not literally backed by a cited chunk (numbers normalised, e.g. `1 200,00 €` ≡ `1200.00 EUR`) · a claim present with `sources = []` · empty reply.
 **Draft** if any (and not escalated): tenant `mode = draft_only` · `budget_state ≠ ok` · per-sender or per-hour cap reached · sanitizer stripped something · reply language ≠ detected inbound language · injection heuristic fired · Reply-To/From domain mismatch · model chose `draft` · (optional) grounding verifier failed (Q6).
-**Auto-send** only if the model chose `auto_send` and none of the above fired.
+**Auto-send** only if the model chose `auto_send` and none of the above fired, in mode 2 (`auto_send`) or mode 3 (`full_auto`).
+**Acknowledgement (mode 3 only):** an escalation for uncertainty (not the hard list) also sends a fixed, per-language text ("Thanks — I'll check this and get back to you today", `core/policy/acknowledge.ts`), never model output, under the same gates as an auto-send (budget ok, per-sender and per-hour caps, no injection signal, Reply-To = From, supported language). The owner gets the escalation with the text quoted; the thread stays escalated, no follow-up is scheduled. At send time it goes out only if the tenant is still in mode 3, else it is cancelled.
 Every downgrade reason is stored in `downgrade_reasons` and shown in the dashboard.
 
 ### 4.4 Telegram approvals
@@ -337,7 +338,7 @@ interface EmbeddingProvider {
 - **Conversations**: list with status, downgrade/escalation reasons, draft approve/edit/reject.
 - **Leads**: table + stage filter (kanban optional), stage change, notes.
 - **Knowledge base**: sources, status, re-crawl, delete.
-- **Settings**: auto-send toggle (with explicit confirmation text), follow-up days/max, rate limits, retention days, signature, **Delete all data** (type business name to confirm).
+- **Settings**: sending mode, three options (1 approve everything, 2 auto-reply to grounded questions, 3 fully automatic); moving to a more automatic mode needs the confirmation dialog, follow-up days/max, rate limits, retention days, signature, **Delete all data** (type business name to confirm).
 
 ---
 
@@ -601,4 +602,13 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Found while deploying:** (1) the worker's `nodemailer` was a dev dependency (tests hid it); (2) Netlify needs the Next.js plugin declared explicitly for a monorepo base directory; (3) from Northflank, the Supabase key set came back gzip-compressed without a `Content-Encoding` header when requested with `Accept: application/json`, which broke `jose`'s fetcher; the API now loads the key set itself (no Accept header, gzip-tolerant, cached, reload on key rotation, fail closed), with tests.
 - **Live check:** sign-in → `/v1/me` → wrong invite refused → business created (draft-only) → dashboard → "Delete all data" → the worker erased the business and the Supabase login. Database left empty except one erasure-proof row.
 - **Pending for real use:** Brevo SMTP (owner emails and Supabase Auth emails), an EU host for api + worker, Vertex AI (paid) for non-test mailboxes.
+
+## 18. Three sending modes, one plan (founder decision 2026-09-25)
+
+- **Plan:** one plan, $79 per month per business, 14-day free trial, no card. All modes included.
+- **Modes** (per tenant, owner chooses, default 1): 1 `draft_only` approve everything; 2 `auto_send` grounded replies go out, everything else waits; 3 `full_auto` as 2, plus a fixed acknowledgement for messages that can't be grounded while the owner is notified (§4.3).
+- **Unchanged in every mode:** the hard list (complaints, refunds, legal, discounts, angry, urgent) always goes to the owner with no automatic reply; the no-invented-facts checks and the verifier; rate caps.
+- **Confirmation:** moving 1 → 2, 1 → 3 or 2 → 3 needs the dialog and `confirmAutoSend: true`; moving back needs none.
+- **Data:** migration `20260925000100_modes.sql` allows `full_auto` and a new draft kind `acknowledgement`.
+- **Tests:** `core/test/modes.test.ts` (policy and acknowledgement gates, every mode), worker pipeline and send tests for mode 3, API test for the confirmation rules.
 

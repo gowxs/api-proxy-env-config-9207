@@ -9,6 +9,22 @@ import {
 
 export const CONFIDENCE_THRESHOLD = 0.8;
 
+/**
+ * Sending modes (one plan, owner's choice, default draft_only):
+ *  - draft_only: every reply waits for approval.
+ *  - auto_send: replies fully backed by the knowledge base go out; the rest waits.
+ *  - full_auto: as auto_send; a message that cannot be answered from the knowledge
+ *    base also gets a fixed acknowledgement (see acknowledge.ts) and goes to the owner.
+ * The no-invented-facts rules and the hard list apply identically in every mode.
+ */
+export const TENANT_MODES = ['draft_only', 'auto_send', 'full_auto'] as const;
+export type TenantMode = (typeof TENANT_MODES)[number];
+
+/** Modes in which grounded replies may be sent without approval. */
+export function isAutomaticMode(mode: TenantMode): boolean {
+  return mode === 'auto_send' || mode === 'full_auto';
+}
+
 export type EscalateReason =
   | `hard_list:${'complaint' | 'refund' | 'legal_contract' | 'discount_request' | 'angry' | 'urgent'}`
   | 'invalid_output'
@@ -51,7 +67,7 @@ export function hardEscalationReasons(
 }
 
 export interface PolicyInput {
-  tenant: { mode: 'draft_only' | 'auto_send'; budgetState: 'ok' | 'draft_forced' | 'halted' };
+  tenant: { mode: TenantMode; budgetState: 'ok' | 'draft_forced' | 'halted' };
   classification: Pick<Classification, 'category' | 'sentiment' | 'urgency' | 'language'>;
   /** null when the model output failed validation (after the retry). */
   generation: Generation | null;
@@ -130,7 +146,7 @@ export function decideAction(input: PolicyInput): PolicyDecision {
   // From here on g is a valid, grounded reply.
   const reply = g!;
   const draft: DraftReason[] = [];
-  if (input.tenant.mode !== 'auto_send') draft.push('tenant_draft_only');
+  if (!isAutomaticMode(input.tenant.mode)) draft.push('tenant_draft_only');
   if (input.tenant.budgetState !== 'ok') draft.push('budget_limited');
   if (input.caps.senderRepliesLast24h >= input.caps.maxPerSender24h)
     draft.push('sender_cap_reached');

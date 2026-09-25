@@ -1,10 +1,10 @@
 /** Owner-facing wording for policy reasons (same meaning as the notification emails). */
 const REASONS: Record<string, string> = {
-  tenant_draft_only: 'Draft-only mode',
+  tenant_draft_only: 'Mode 1: approve everything',
   budget_limited: 'AI budget nearly used up',
   sender_cap_reached: 'Automatic-reply limit for this customer reached',
   tenant_hour_cap_reached: 'Hourly automatic-reply limit reached',
-  mode_changed_to_draft_only: 'You switched to draft-only',
+  mode_changed_to_draft_only: 'You switched to approving everything',
   content_removed: 'Something was removed from the reply (e.g. a link)',
   unsupported_language: 'Language not supported for automatic replies',
   language_mismatch: 'Reply language differs from the customer’s',
@@ -19,6 +19,7 @@ const REASONS: Record<string, string> = {
   unknown_source: 'Cited something outside your knowledge base',
   claim_without_sources: 'Stated facts without a source',
   verifier_failed: 'Fact check failed',
+  acknowledgement_sent: 'Customer got a short acknowledgement (mode 3)',
   unreadable_message: 'Message too large to read',
   budget_halted: 'AI budget used up for today',
   free_tier_refused: 'Not a test mailbox (free AI tier)',

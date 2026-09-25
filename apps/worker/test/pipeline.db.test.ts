@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { GenerateRequest } from '@noctiv/core';
+import { ACKNOWLEDGEMENTS, type GenerateRequest } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import { GREENMAIL_USERS, seedTenant, type SeededTenant } from '@noctiv/db/testing';
 import { createNoteSource, createSafeFetcher, ingestSource } from '@noctiv/kb';
@@ -83,7 +83,7 @@ const calls = (p: FakeProvider, kind: Kind) => p.calls.filter((c) => kindOf(c) =
 
 async function tenantWithKb(
   label: string,
-  mode: 'draft_only' | 'auto_send' = 'draft_only',
+  mode: 'draft_only' | 'auto_send' | 'full_auto' = 'draft_only',
 ): Promise<SeededTenant> {
   const t = await seedTenant(owner, label, { embeddingAxis: 50 });
   await owner`update public.tenants set mode = ${mode}, name = 'Nordlicht Candles' where id = ${t.tenantId}`;
@@ -403,6 +403,90 @@ describe('pipeline: auto-send tenant', () => {
     const id = await receive(B, inbound({}));
     expect(await run(B, llm, id)).toEqual({ status: 'skipped', reason: 'budget_halted' });
     expect(llm.calls).toHaveLength(0);
+  });
+});
+
+describe('pipeline: fully automatic tenant (mode 3)', () => {
+  let T: SeededTenant;
+  beforeAll(async () => {
+    T = await tenantWithKb('pipe-full', 'full_auto');
+  });
+  const draftsOf = (messageId: string) =>
+    owner<{ id: string; kind: string; status: string; decided_by: string | null; body: string }[]>`
+      select id, kind, status, decided_by, body from public.drafts
+      where source_message_id = ${messageId} order by kind`;
+
+  it('sends a grounded reply on its own, like mode 2', async () => {
+    const id = await receive(T, inbound({ from: 'oskars@example-mail.test' }));
+    expect(await run(T, scripted({}), id)).toEqual({ status: 'auto_send', reasons: [] });
+    expect((await draftsOf(id)).map((d) => d.kind)).toEqual(['reply']);
+  });
+
+  it('acknowledges what it cannot ground, in the customer language, and asks the owner', async () => {
+    const llm = scripted({
+      classify: cls({ language: 'de', summary: 'Kunde fragt nach Sonderanfertigung.' }),
+      generate: (req) =>
+        gen({
+          language: 'de',
+          reply: 'Hallo, das kostet 24 EUR.',
+          sources: [labelOf(req, 'cost 24 EUR')],
+        }),
+      verify: '{"supported":false,"unsupported_claims":["Sonderanfertigung"]}',
+    });
+    const id = await receive(
+      T,
+      inbound({ from: 'jonas@example-mail.test', text: 'Machen Sie Sonderanfertigungen?' }),
+    );
+    expect(await run(T, llm, id)).toEqual({
+      status: 'escalated',
+      reasons: ['verifier_failed', 'acknowledgement_sent'],
+    });
+    const [ack, suggestion] = await draftsOf(id);
+    expect(ack).toMatchObject({
+      kind: 'acknowledgement',
+      status: 'approved',
+      decided_by: 'auto',
+      body: ACKNOWLEDGEMENTS.de,
+    });
+    // The AI reply itself is never sent: it stays an unverified suggestion for the owner.
+    expect(suggestion).toMatchObject({ kind: 'reply', status: 'suggestion' });
+    const job = one(
+      await owner<{ payload: Record<string, unknown> }[]>`
+        select payload from public.jobs where tenant_id = ${T.tenantId} and queue = ${QUEUES.mailSend}
+        and payload->>'draftId' = ${ack!.id}`,
+    );
+    expect(job.payload).toEqual({ draftId: ack!.id, sentVia: 'auto' });
+    const note = one(
+      await owner<{ kind: string; payload: Record<string, unknown> }[]>`
+        select kind, payload from public.notifications where payload->>'messageId' = ${id}`,
+    );
+    expect(note.kind).toBe('escalation');
+    expect(note.payload.acknowledgement).toBe(ACKNOWLEDGEMENTS.de);
+  });
+
+  it('never acknowledges hard-list cases: the owner answers those', async () => {
+    const llm = scripted({ classify: cls({ category: 'refund' }) });
+    const id = await receive(
+      T,
+      inbound({ from: 'refund@example-mail.test', text: 'I want my money back.' }),
+    );
+    const r = await run(T, llm, id);
+    expect(r).toMatchObject({ status: 'escalated', reasons: ['hard_list:refund'] });
+    expect(await draftsOf(id)).toEqual([]);
+  });
+
+  it('sends nothing automatic in a language without a fixed acknowledgement', async () => {
+    // Low confidence: the reply can't be grounded, so it escalates (a supported
+    // language would get the acknowledgement here).
+    const llm = scripted({
+      classify: cls({ language: 'ja' }),
+      generate: (req) => gen({ confidence: 0.3, sources: [labelOf(req, 'cost 24 EUR')] }),
+    });
+    const id = await receive(T, inbound({ from: 'kenji@example-mail.test' }));
+    const r = await run(T, llm, id);
+    expect(r.status).toBe('escalated');
+    expect((r as { reasons: string[] }).reasons).not.toContain('acknowledgement_sent');
+    expect((await draftsOf(id)).map((d) => d.kind)).not.toContain('acknowledgement');
   });
 });
 

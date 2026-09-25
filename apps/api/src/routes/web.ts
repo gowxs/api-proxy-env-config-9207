@@ -1,4 +1,4 @@
-import { budgetStateFor } from '@noctiv/core';
+import { budgetStateFor, TENANT_MODES, type TenantMode } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
 import {
   BlockedUrlError,
@@ -47,13 +47,19 @@ export class HttpError extends Error {
   }
 }
 
+/** 1 approve everything, 2 auto-reply to grounded questions, 3 fully automatic. */
+const modeRank = (m: TenantMode) => TENANT_MODES.indexOf(m);
+
 const settingsBody = z
   .object({
     name: z.string().trim().min(1).max(200),
     websiteUrl: z.url().max(500).nullable(),
     timezone: z.string().refine(isTimezone, 'unknown time zone'),
-    mode: z.enum(['draft_only', 'auto_send']),
-    /** Required, and true, to switch auto-send on (explicit confirmation in the UI). */
+    mode: z.enum(TENANT_MODES),
+    /**
+     * Required, and true, to move to a more automatic mode (1 → 2, 1 → 3, 2 → 3):
+     * the explicit confirmation in the UI. Moving back needs none.
+     */
     confirmAutoSend: z.literal(true).optional(),
     notifyFullText: z.boolean(),
     followupAfterDays: z.number().int().min(1).max(30),
@@ -117,13 +123,14 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.patch('/v1/tenants/:tenantId', (req) =>
     tenantTx(req, async (tx, tenantId) => {
       const b = settingsBody.parse(req.body);
-      const [cur] = await tx<{ mode: string }[]>`select mode from public.tenants for update`;
-      if (b.mode === 'auto_send' && cur!.mode !== 'auto_send') {
+      const [cur] = await tx<{ mode: TenantMode }[]>`select mode from public.tenants for update`;
+      if (b.mode && modeRank(b.mode) > modeRank(cur!.mode)) {
         if (b.confirmAutoSend !== true)
-          throw new HttpError(400, 'switching on auto-send needs explicit confirmation');
+          throw new HttpError(400, 'switching to automatic sending needs explicit confirmation');
         const conn =
           await tx`select 1 from public.email_connections where status = 'connected' limit 1`;
-        if (!conn.length) throw new HttpError(409, 'connect a mailbox before enabling auto-send');
+        if (!conn.length)
+          throw new HttpError(409, 'connect a mailbox before enabling automatic sending');
       }
       const cols: Record<string, unknown> = {};
       if (b.name !== undefined) cols.name = b.name;

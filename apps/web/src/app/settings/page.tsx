@@ -16,6 +16,7 @@ import {
   useLoad,
 } from '@/components/ui';
 import { api } from '@/lib/api';
+import { MODES, modeInfo, modeRank, type Mode } from '@/lib/modes';
 import { signOut } from '@/lib/auth';
 import { useTenantId } from '@/lib/session';
 
@@ -23,7 +24,7 @@ interface Tenant {
   name: string;
   website_url: string | null;
   timezone: string;
-  mode: 'draft_only' | 'auto_send';
+  mode: Mode;
   notify_full_text: boolean;
   max_replies_per_hour: number;
   max_ai_replies_per_sender_24h: number;
@@ -34,36 +35,49 @@ interface Tenant {
 }
 
 function AutoSendDialog({
+  target,
   onConfirm,
   onCancel,
   busy,
 }: {
+  target: Mode;
   onConfirm: () => void;
   onCancel: () => void;
   busy: boolean;
 }) {
   const [ok, setOk] = useState(false);
+  const info = modeInfo(target);
   return (
     <div
       className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 p-4 sm:items-center"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="mode-dialog-title"
     >
       <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5">
-        <h2 className="text-lg font-semibold">Send replies automatically?</h2>
+        <h2 id="mode-dialog-title" className="text-lg font-semibold">
+          Switch to mode {info.number}: {info.title}?
+        </h2>
         <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-700">
           <li>Replies that pass every safety check are sent without asking you.</li>
+          {target === 'full_auto' && (
+            <li>
+              When a question can&apos;t be answered from your knowledge base, the customer
+              immediately gets “Thanks — I&apos;ll check this and get back to you today.” (in their
+              language), and you get the email to answer yourself.
+            </li>
+          )}
           <li>
             Complaints, refunds, legal questions, discount requests, angry or urgent emails always
-            come to you.
+            come to you, with no automatic reply.
           </li>
           <li>
             A reply is only sent automatically if every fact in it is in your knowledge base and a
-            second check confirms it.
+            second check confirms it. No prices, dates or promises are ever invented.
           </li>
           <li>
             The per-hour and per-customer limits in these settings apply. You can switch back to
-            draft-only at any time.
+            approving everything at any time.
           </li>
         </ul>
         <label className="flex items-start gap-2 text-sm">
@@ -74,7 +88,9 @@ function AutoSendDialog({
             onChange={(e) => setOk(e.target.checked)}
           />
           <span>
-            I have reviewed Noctiv&apos;s drafts and want safe replies to be sent automatically.
+            I have reviewed Noctiv&apos;s drafts and want{' '}
+            {target === 'full_auto' ? 'safe replies and acknowledgements' : 'safe replies'} to be
+            sent automatically.
           </span>
         </label>
         <div className="flex justify-end gap-2">
@@ -100,7 +116,7 @@ function SettingsForm({
   reload: () => Promise<void>;
 }) {
   const [form, setForm] = useState(t);
-  const [dialog, setDialog] = useState(false);
+  const [dialog, setDialog] = useState<Mode | null>(null);
   const [saved, setSaved] = useState(false);
   const mode = useAction();
   const save = useAction();
@@ -116,42 +132,62 @@ function SettingsForm({
         method: 'PATCH',
         body: { mode: m, ...(confirm ? { confirmAutoSend: true } : {}) },
       });
-      setDialog(false);
+      setDialog(null);
       await reload();
     });
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card title="Sending mode">
-        <div className="flex items-center gap-2">
-          <Badge tone={t.mode === 'auto_send' ? 'blue' : 'gray'}>
-            {t.mode === 'auto_send' ? 'Automatic sending' : 'Draft-only'}
-          </Badge>
-        </div>
-        <p className="mt-2 text-sm text-neutral-600">
-          {t.mode === 'auto_send'
-            ? 'Safe replies go out automatically; everything else waits for you.'
-            : 'Nothing is sent until you approve it.'}
+        <p className="text-sm text-neutral-600">
+          All three modes are included in your plan. The fact checks and the list of emails that
+          always come to you are the same in every mode.
         </p>
+        <fieldset className="mt-3 space-y-2" disabled={mode.busy}>
+          <legend className="sr-only">Sending mode</legend>
+          {MODES.map((m) => {
+            const current = t.mode === m.id;
+            return (
+              <label
+                key={m.id}
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                  current ? 'border-indigo-600 bg-indigo-50/60' : 'border-neutral-200'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="mode"
+                  className="mt-1 h-5 w-5 accent-indigo-600"
+                  checked={current}
+                  onChange={() => {
+                    if (current) return;
+                    // More automatic needs the confirmation; more cautious applies at once.
+                    if (modeRank(m.id) > modeRank(t.mode)) setDialog(m.id);
+                    else void setMode(m.id);
+                  }}
+                />
+                <span>
+                  <span className="block text-sm font-semibold">
+                    {m.number}. {m.title}
+                    {current && (
+                      <span className="ml-2 align-middle">
+                        <Badge tone={m.id === 'draft_only' ? 'gray' : 'blue'}>Current</Badge>
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-sm text-neutral-600">{m.line}</span>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
         <ErrorText>{mode.error}</ErrorText>
-        <div className="mt-3">
-          {t.mode === 'auto_send' ? (
-            <Button
-              variant="secondary"
-              disabled={mode.busy}
-              onClick={() => void setMode('draft_only')}
-            >
-              Switch to draft-only
-            </Button>
-          ) : (
-            <Button onClick={() => setDialog(true)}>Switch on automatic sending…</Button>
-          )}
-        </div>
         {dialog && (
           <AutoSendDialog
+            target={dialog}
             busy={mode.busy}
-            onCancel={() => setDialog(false)}
-            onConfirm={() => void setMode('auto_send', true)}
+            onCancel={() => setDialog(null)}
+            onConfirm={() => void setMode(dialog, true)}
           />
         )}
       </Card>

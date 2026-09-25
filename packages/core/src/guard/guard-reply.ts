@@ -42,6 +42,8 @@ export interface GuardedReply {
   claims: Claim[];
   unsupportedClaims: Claim[];
   injection: InjectionCheck;
+  /** Reply-To points somewhere other than From (a hijack signal); blocks every automatic send. */
+  replyToMismatch: boolean;
 }
 
 /**
@@ -105,5 +107,6 @@ export function guardReply(input: GuardInput): GuardedReply {
     claims: verification.claims,
     unsupportedClaims: verification.unsupported,
     injection,
+    replyToMismatch: recipient.replyToMismatch,
   };
 }

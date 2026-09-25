@@ -155,9 +155,10 @@ function SummaryStep({ tenantId, onFinish }: { tenantId: string; onFinish: () =>
         </li>
       </ul>
       <Notice>
-        You start in <strong>draft-only mode</strong>: Noctiv writes replies, but nothing is sent
-        until you approve it. You get an email for every draft, with Approve and Reject buttons.
-        After you have reviewed some drafts you can switch on automatic sending in Settings.
+        You start in <strong>mode 1, Approve everything</strong>: Noctiv writes replies, but nothing
+        is sent until you approve it. You get an email for every draft, with Approve and Reject
+        buttons. After you have reviewed some drafts you can choose mode 2 (auto-reply to grounded
+        questions) or mode 3 (fully automatic) in Settings.
       </Notice>
       <ErrorText>{error}</ErrorText>
       <Button

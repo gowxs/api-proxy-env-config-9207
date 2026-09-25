@@ -113,7 +113,7 @@ describe('owner email notifications (GreenMail as the system mailer sink)', () =
     expect(mail.text).toContain('someone at example-mail.test');
     expect(mail.text).toContain('[link removed]');
     expect(mail.text).not.toContain('evil.example');
-    expect(mail.text).toContain('your account is in draft-only mode');
+    expect(mail.text).toContain('your account is set to approve everything');
     expect(mail.text).toContain('privacy mode keeps it out of email');
     expect(mail.raw).toContain('Lavender candles &lt;b&gt;now&lt;/b&gt;');
 

@@ -14,6 +14,7 @@ import {
   stripQuotedText,
   VerifierSchema,
   ZERO_USAGE,
+  type TenantMode,
   type TokenUsage,
 } from '@noctiv/core';
 import { currentBudget, enqueue, recordUsage, withTenant } from '@noctiv/db';
@@ -60,7 +61,7 @@ interface ThreadState {
   last_outbound_at: Date | null;
   lead_stage: string | null;
   tenant_name: string;
-  mode: 'draft_only' | 'auto_send';
+  mode: TenantMode;
   timezone: string;
   followup_max: number;
   tenant_status: string;

@@ -8,11 +8,11 @@ export interface RenderedEmail {
 }
 
 const REASONS: Record<string, string> = {
-  tenant_draft_only: 'your account is in draft-only mode',
+  tenant_draft_only: 'your account is set to approve everything',
   budget_limited: 'the daily AI budget is nearly used up',
   sender_cap_reached: 'this customer already got the maximum number of automatic replies today',
   tenant_hour_cap_reached: 'the hourly limit for automatic replies was reached',
-  mode_changed_to_draft_only: 'you switched to draft-only mode',
+  mode_changed_to_draft_only: 'you switched to approving everything',
   content_removed: 'something was removed from the reply (for example a link)',
   unsupported_language: 'the language is not supported for automatic replies',
   language_mismatch: 'the reply language differs from the customer’s',
@@ -27,6 +27,7 @@ const REASONS: Record<string, string> = {
   unknown_source: 'the reply cited something outside your knowledge base',
   claim_without_sources: 'the reply stated facts without a source',
   verifier_failed: 'a fact check found statements not backed by your knowledge base',
+  acknowledgement_sent: 'the customer got a short acknowledgement (fully automatic mode)',
 };
 
 export function describeReason(code: string): string {
@@ -148,6 +149,9 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
           ['Subject', subjectLine],
           ['Summary', untrusted(p.summary)],
           ...(reasons ? ([['Reason', reasons]] as [string, string][]) : []),
+          ...(str(p.acknowledgement)
+            ? ([['Customer was told', `“${str(p.acknowledgement)}”`]] as [string, string][])
+            : []),
         ],
         ...(str(p.draftText)
           ? { quote: { label: 'AI suggestion, unverified', text: str(p.draftText) } }

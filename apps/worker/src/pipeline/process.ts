@@ -5,6 +5,7 @@ import {
   buildVerifierPrompt,
   checkLoop,
   ClassificationSchema,
+  decideAcknowledgement,
   generateJson,
   GenerationSchema,
   guardReply,
@@ -23,6 +24,7 @@ import {
   type HeaderMap,
   type LlmProvider,
   type Logger,
+  type TenantMode,
   type TokenUsage,
 } from '@noctiv/core';
 import { currentBudget, enqueue, recordUsage, withTenant } from '@noctiv/db';
@@ -63,7 +65,7 @@ interface Loaded {
   ownAddresses: string[];
   tenant: {
     name: string;
-    mode: 'draft_only' | 'auto_send';
+    mode: TenantMode;
     notifyFullText: boolean;
     maxPerSender24h: number;
     maxPerHour: number;
@@ -89,7 +91,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       html_hidden_text: boolean;
       is_test_mailbox: boolean;
       tenant_name: string;
-      mode: 'draft_only' | 'auto_send';
+      mode: TenantMode;
       notify_full_text: boolean;
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
@@ -392,6 +394,16 @@ export async function processMessage(
 
   const d = guarded.decision;
   if (d.action === 'escalate') {
+    // Mode 3: a message that could not be grounded also gets a fixed acknowledgement.
+    const ack = decideAcknowledgement({
+      mode: l.tenant.mode,
+      decision: d,
+      budgetState: budget.state,
+      language: classification.language,
+      caps: guardInput.caps,
+      injectionSuspected: guarded.injection.suspected,
+      replyToMismatch: guarded.replyToMismatch,
+    });
     return escalate(
       deps,
       tenantId,
@@ -399,9 +411,10 @@ export async function processMessage(
       leadId,
       {
         category: d.escalation ?? 'uncertain',
-        reasons: d.reasons,
+        reasons: ack.send ? [...d.reasons, 'acknowledgement_sent'] : d.reasons,
         summary: classification.summary,
         classification,
+        ...(ack.send ? { acknowledgement: { text: ack.text, envelope: guarded.envelope } } : {}),
       },
       usage,
       llmCalls,
@@ -497,6 +510,8 @@ async function notifyOwner(
     draftText: string | null;
     unverifiedSuggestion: boolean;
     ref: Record<string, string>;
+    /** Mode 3: the acknowledgement that was sent to the customer. */
+    acknowledgement?: string;
   },
 ) {
   const payload = {
@@ -513,6 +528,7 @@ async function notifyOwner(
       unverifiedSuggestion: n.unverifiedSuggestion,
     }),
     ...n.ref,
+    ...(n.acknowledgement ? { acknowledgement: n.acknowledgement } : {}),
   };
   await tx`
     insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
@@ -535,6 +551,8 @@ async function escalate(
     reasons: string[];
     summary: string;
     classification?: Classification;
+    /** Mode 3: fixed text sent to the customer while the owner answers. */
+    acknowledgement?: { text: string; envelope: GuardedReply['envelope'] };
   },
   usage: TokenUsage,
   llmCalls: number,
@@ -559,6 +577,21 @@ async function escalate(
       values (${tenantId}, ${m.id}, ${m.threadId}, ${e.category}, ${e.reasons.join(', ')}, ${e.summary}, ${suggestionId})
       returning id`;
     await tx`update public.threads set status = 'escalated' where id = ${m.threadId}`;
+    if (e.acknowledgement) {
+      const a = e.acknowledgement;
+      const [ackDraft] = await tx<{ id: string }[]>`
+        insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body,
+                                   status, decided_by, decided_at)
+        values (${tenantId}, ${m.threadId}, ${m.id}, 'acknowledgement', ${a.envelope.to}, ${a.envelope.subject}, ${a.text},
+                'approved', 'auto', now())
+        returning id`;
+      await enqueue(tx, {
+        tenantId,
+        queue: QUEUES.mailSend,
+        payload: { draftId: ackDraft!.id, sentVia: 'auto' },
+        singletonKey: ackDraft!.id,
+      });
+    }
     await writeProcessing(
       tx,
       m.id,
@@ -580,6 +613,7 @@ async function escalate(
       reasons: e.reasons,
       draftText: suggestion,
       unverifiedSuggestion: Boolean(suggestion),
+      ...(e.acknowledgement ? { acknowledgement: e.acknowledgement.text } : {}),
       ref: {
         escalationId: esc!.id,
         messageId: m.id,

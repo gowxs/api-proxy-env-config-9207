@@ -137,6 +137,22 @@ describe('settings', () => {
     ).toBe(409);
   });
 
+  it('three modes: each step towards automatic needs confirmation, each step back none', async () => {
+    const mode = async () => (await call('GET', t(A), A.userId)).json.mode;
+    const patch = (body: Record<string, unknown>) => call('PATCH', t(A), A.userId, body);
+    expect((await patch({ mode: 'draft_only' })).status).toBe(200);
+    // 1 → 3 and 2 → 3 need the confirmation, like 1 → 2.
+    expect((await patch({ mode: 'full_auto' })).status).toBe(400);
+    expect(await mode()).toBe('draft_only');
+    expect((await patch({ mode: 'full_auto', confirmAutoSend: true })).status).toBe(200);
+    expect(await mode()).toBe('full_auto');
+    expect((await patch({ mode: 'auto_send' })).status).toBe(200); // 3 → 2: safer
+    expect((await patch({ mode: 'full_auto' })).status).toBe(400);
+    expect((await patch({ mode: 'full_auto', confirmAutoSend: true })).status).toBe(200);
+    expect((await patch({ mode: 'draft_only' })).status).toBe(200); // 3 → 1: safer
+    expect((await patch({ mode: 'send_everything', confirmAutoSend: true })).status).toBe(400);
+  });
+
   it('validates limits and ignores unknown fields', async () => {
     expect((await call('PATCH', t(A), A.userId, { followupMax: 5 })).status).toBe(400);
     expect((await call('PATCH', t(A), A.userId, { budgetState: 'ok' })).status).toBe(400);

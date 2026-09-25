@@ -46,6 +46,7 @@ async function makeDraft(opts: {
   body?: string;
   to?: string;
   subject?: string;
+  kind?: 'reply' | 'followup' | 'acknowledgement';
 }) {
   const tenantId = opts.tenantId ?? T.tenantId;
   const conn = opts.connectionId ?? connectionId;
@@ -68,7 +69,7 @@ async function makeDraft(opts: {
               values (${tenantId}, ${msg!.id}, 'drafted', ${owner.json({ summary: 'Asks about lavender candles.' })})`;
   const [draft] = await owner<{ id: string }[]>`
     insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body, status, decided_by, decided_at)
-    values (${tenantId}, ${thread!.id}, ${msg!.id}, 'reply', ${to}, ${opts.subject ?? `Re: Candle order ${tag}`},
+    values (${tenantId}, ${thread!.id}, ${msg!.id}, ${opts.kind ?? 'reply'}, ${to}, ${opts.subject ?? `Re: Candle order ${tag}`},
             ${opts.body ?? 'Yes, lavender candles are in stock.'}, ${opts.status ?? 'approved'},
             ${opts.decidedBy === undefined ? 'owner' : opts.decidedBy}, now())
     returning id`;
@@ -262,6 +263,71 @@ describe('auto-send safety re-checked at send time', () => {
       reasons: ['mode_changed_to_draft_only'],
     });
     expect(await inboxWith(d.tag)).toHaveLength(0);
+  });
+});
+
+describe('mode 3: acknowledgements', () => {
+  async function fullAutoTenant(label: string, axis: number) {
+    const t = await seedTenant(owner, label, { embeddingAxis: axis });
+    await owner`update public.tenants set mode = 'full_auto', followup_after_days = 3, followup_max = 2
+                where id = ${t.tenantId}`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    return { t, conn };
+  }
+  /** An acknowledgement draft for a message the pipeline escalated. */
+  async function ackDraft(tenantId: string, conn: string) {
+    const d = await makeDraft({
+      tenantId,
+      connectionId: conn,
+      kind: 'acknowledgement',
+      decidedBy: 'auto',
+      body: "Thanks — I'll check this and get back to you today.",
+    });
+    await owner`update public.threads set status = 'escalated' where id = ${d.threadId}`;
+    await owner`update public.leads set stage = 'escalated' where id = ${d.leadId}`;
+    await owner`update public.message_processing set status = 'escalated' where message_id = ${d.messageId}`;
+    return d;
+  }
+
+  it('goes out, and the conversation stays with the owner (no follow-up, lead unchanged)', async () => {
+    const { t, conn } = await fullAutoTenant('send-ack', 74);
+    const d = await ackDraft(t.tenantId, conn);
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    expect(await inboxWith(d.tag)).toHaveLength(1);
+    expect((await outbound(d.draftId))[0]).toMatchObject({ status: 'sent', sent_via: 'auto' });
+    const [thread] = await owner<{ status: string; next_followup_at: Date | null }[]>`
+      select status, next_followup_at from public.threads where id = ${d.threadId}`;
+    expect(thread).toEqual({ status: 'escalated', next_followup_at: null });
+    const [lead] = await owner<
+      { stage: string }[]
+    >`select stage from public.leads where id = ${d.leadId}`;
+    expect(lead!.stage).toBe('escalated');
+    const [mp] = await owner<{ status: string }[]>`
+      select status from public.message_processing where message_id = ${d.messageId}`;
+    expect(mp!.status).toBe('escalated');
+  });
+
+  it('is cancelled, not turned into an approval, when the owner left mode 3 meanwhile', async () => {
+    const { t, conn } = await fullAutoTenant('send-ack-mode', 75);
+    const d = await ackDraft(t.tenantId, conn);
+    await owner`update public.tenants set mode = 'auto_send' where id = ${t.tenantId}`;
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({
+      skipped: 'acknowledgement_cancelled',
+      reasons: ['mode_changed'],
+    });
+    expect(await draftStatus(d.draftId)).toBe('superseded');
+    expect(await inboxWith(d.tag)).toHaveLength(0);
+    expect(await notifications(t.tenantId, 'draft_ready')).toHaveLength(0);
+  });
+
+  it('automatic replies go out in mode 3 as in mode 2', async () => {
+    const { t, conn } = await fullAutoTenant('send-full-reply', 76);
+    const d = await makeDraft({ tenantId: t.tenantId, connectionId: conn, decidedBy: 'auto' });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
   });
 });
 
