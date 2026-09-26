@@ -293,6 +293,42 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
     }),
   );
 
+  // ------------------------------------------------------------ navigation
+  /** Badges and chips for the app's navigation, on every page: kept to a few counts. */
+  app.get('/v1/tenants/:tenantId/nav', (req) =>
+    tenantTx(req, async (tx) => {
+      const [n] = await tx<
+        {
+          name: string;
+          mode: string;
+          quotes_enabled: boolean;
+          documents_enabled: boolean;
+          drafts: number;
+          escalations: number;
+          unpaid: number;
+          payments: number;
+        }[]
+      >`
+        select t.name, t.mode, t.quotes_enabled, t.documents_enabled,
+               (select count(*) from public.drafts where status = 'pending_approval')::int as drafts,
+               (select count(*) from public.escalations where resolved_at is null)::int as escalations,
+               (select count(*) from public.documents where payable and status in ('issued', 'sent'))::int as unpaid,
+               (select count(*) from public.payments where status in ('proposed', 'unmatched'))::int as payments
+        from public.tenants t`;
+      return {
+        name: n!.name,
+        mode: n!.mode,
+        modules: { quotes: n!.quotes_enabled, documents: n!.documents_enabled },
+        counts: {
+          drafts: n!.drafts,
+          escalations: n!.escalations,
+          unpaid: n!.unpaid,
+          payments: n!.payments,
+        },
+      };
+    }),
+  );
+
   // ------------------------------------------------------------- dashboard
   app.get('/v1/tenants/:tenantId/dashboard', (req) =>
     tenantTx(req, async (tx) => {
@@ -361,12 +397,15 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           unpaid_cents: number;
           currency: string;
           payments_to_review: number;
+          overdue: number;
         }[]
       >`
         select t.documents_enabled as enabled, t.quotes_currency as currency,
                (select count(*) from public.documents where status = 'draft')::int as drafts,
                (select count(*) from public.documents where payable and status in ('issued', 'sent'))::int as unpaid,
                (select count(*) from public.payments where status in ('proposed', 'unmatched'))::int as payments_to_review,
+               (select count(*) from public.documents where payable and status = 'sent'
+                 and due_date < (now() at time zone t.timezone)::date)::int as overdue,
                (select coalesce(sum(total_cents), 0) from public.documents
                  where payable and status in ('issued', 'sent'))::int as unpaid_cents
         from public.tenants t`;
@@ -399,6 +438,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           unpaidCents: docs!.unpaid_cents,
           currency: docs!.currency,
           paymentsToReview: docs!.payments_to_review,
+          overdue: docs!.overdue,
         },
       };
     }),

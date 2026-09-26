@@ -1,11 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { ModuleBar, ModuleOff, Tabs, useModuleToggle, useTab } from '@/components/module';
+import { Imports, PriceList, QuoteSettingsCard } from '@/components/quote-setup';
 import { AppPage } from '@/components/shell';
 import { Badge, cx, ErrorText, Loading, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
-import { money, QUOTE_STATUS, shortDate, type Quote, type QuoteStatus } from '@/lib/quotes';
+import {
+  money,
+  QUOTE_STATUS,
+  shortDate,
+  type Quote,
+  type QuoteSettings,
+  type QuoteStatus,
+} from '@/lib/quotes';
 import { useTenantId } from '@/lib/session';
 
 const FILTERS: { id: string; label: string; statuses: QuoteStatus[] | null }[] = [
@@ -104,10 +113,75 @@ function QuoteList() {
   );
 }
 
+const TABS = ['quotes', 'prices', 'setup'] as const;
+const TAB_LABELS = { quotes: 'Quotes', prices: 'Price list', setup: 'Setup' };
+
+function QuotesModule() {
+  const tenantId = useTenantId();
+  const t = useLoad(() => api<QuoteSettings>(`/v1/tenants/${tenantId}`), [tenantId]);
+  const toggle = useModuleToggle(tenantId, 'quotesEnabled', t.reload);
+  const [tab, setTab] = useTab(TABS);
+  const [listKey, setListKey] = useState(0);
+  if (t.error) return <ErrorText>{t.error}</ErrorText>;
+  if (!t.data) return <Loading />;
+  const s = t.data;
+  if (!s.quotes_enabled)
+    return (
+      <ModuleOff
+        name="Quotes"
+        lead="Answer price requests with a quote from your own price list."
+        points={[
+          {
+            title: 'Your price list',
+            text: 'Add items by hand or import a CSV or spreadsheet. Only these prices are ever used.',
+          },
+          {
+            title: 'A quote, not a guess',
+            text: 'When a customer asks what something costs, Noctiv drafts a quote with a PDF.',
+          },
+          {
+            title: 'One-click accept',
+            text: 'You approve it; the customer accepts it from a link and you are notified.',
+          },
+        ]}
+        note="Nothing is sent without your approval."
+        onEnable={() => toggle.set(true)}
+        busy={toggle.busy}
+        error={toggle.error}
+      />
+    );
+  return (
+    <>
+      <ModuleBar
+        name="Quotes"
+        line="Price requests get a quote from your price list, with a PDF and an approve link."
+        onDisable={() => toggle.set(false)}
+        busy={toggle.busy}
+        error={toggle.error}
+      />
+      <Tabs tabs={TABS} labels={TAB_LABELS} tab={tab} onChange={setTab} />
+      {tab === 'quotes' && <QuoteList />}
+      {tab === 'prices' && (
+        <div className="space-y-4">
+          <PriceList key={listKey} tenantId={tenantId} currency={s.quotes_currency} />
+          <Imports
+            tenantId={tenantId}
+            currency={s.quotes_currency}
+            onImported={() => setListKey((k) => k + 1)}
+          />
+        </div>
+      )}
+      {tab === 'setup' && <QuoteSettingsCard s={s} tenantId={tenantId} reload={t.reload} />}
+    </>
+  );
+}
+
 export default function QuotesPage() {
   return (
     <AppPage title="Quotes">
-      <QuoteList />
+      <Suspense fallback={<Loading />}>
+        <QuotesModule />
+      </Suspense>
     </AppPage>
   );
 }

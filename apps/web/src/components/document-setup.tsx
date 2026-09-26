@@ -1,24 +1,14 @@
 'use client';
 
+/** Documents setup: business details and bank senders (on the Documents page). */
+
 import Link from 'next/link';
 import { useState } from 'react';
-import { AppPage } from '@/components/shell';
-import {
-  Button,
-  Card,
-  ErrorText,
-  Field,
-  inputClass,
-  Loading,
-  Notice,
-  useAction,
-  useLoad,
-} from '@/components/ui';
+import { Button, Card, ErrorText, Field, inputClass, useAction, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
 import { VAT_LABEL, type VatMode } from '@/lib/quotes';
-import { useTenantId } from '@/lib/session';
 
-interface DocSettings {
+export interface DocSettings {
   name: string;
   documents_enabled: boolean;
   seller_legal_name: string | null;
@@ -51,7 +41,7 @@ const FIELDS: [keyof DocSettings, string, string, string?][] = [
   ['seller_bic', 'sellerBic', 'BIC / SWIFT'],
 ];
 
-function SellerCard({
+export function SellerCard({
   s,
   tenantId,
   reload,
@@ -160,8 +150,8 @@ function SellerCard({
           VAT: {VAT_LABEL[s.quotes_vat_mode]}
           {s.quotes_vat_mode !== 'none' && `, ${s.quotes_vat_rate}%`} · {s.quotes_currency}. Shared
           with quotes;{' '}
-          <Link className="text-indigo-700" href="/settings/quotes">
-            change it in Settings → Quotes
+          <Link className="text-indigo-700" href="/quotes?tab=setup">
+            change it in Quotes → Setup
           </Link>
           .
         </p>
@@ -182,7 +172,7 @@ interface BankSender {
   domain: string;
 }
 
-function BankSendersCard({ tenantId }: { tenantId: string }) {
+export function BankSendersCard({ tenantId }: { tenantId: string }) {
   const list = useLoad(() => api<BankSender[]>(`/v1/tenants/${tenantId}/bank-senders`), [tenantId]);
   const [domain, setDomain] = useState('');
   const a = useAction();
@@ -247,63 +237,5 @@ function BankSendersCard({ tenantId }: { tenantId: string }) {
       </p>
       <ErrorText>{a.error ?? list.error}</ErrorText>
     </Card>
-  );
-}
-
-function DocumentsSettings() {
-  const tenantId = useTenantId();
-  const t = useLoad(() => api<DocSettings>(`/v1/tenants/${tenantId}`), [tenantId]);
-  const toggle = useAction();
-  if (t.error) return <ErrorText>{t.error}</ErrorText>;
-  if (!t.data) return <Loading />;
-  const s = t.data;
-  return (
-    <div className="space-y-4">
-      <Card title="Documents (beta)">
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-1 h-5 w-5"
-            checked={s.documents_enabled}
-            disabled={toggle.busy}
-            onChange={(e) =>
-              void toggle.run(async () => {
-                await api(`/v1/tenants/${tenantId}`, {
-                  method: 'PATCH',
-                  body: { documentsEnabled: e.target.checked },
-                });
-                await t.reload();
-              })
-            }
-          />
-          <span className="text-sm">
-            <span className="font-medium">Invoices, delivery notes and CMR</span>
-            <span className="block text-neutral-600">
-              Create them from a quote, an invoice or a customer&apos;s e-mail, check every field,
-              and send the PDF with your reply. Nothing is sent without you.
-            </span>
-          </span>
-        </label>
-        <ErrorText>{toggle.error}</ErrorText>
-        {s.documents_enabled && (
-          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/documents">
-            See all documents →
-          </Link>
-        )}
-      </Card>
-      {!s.documents_enabled && (
-        <Notice>Documents are off. You can fill in your business details now.</Notice>
-      )}
-      <SellerCard s={s} tenantId={tenantId} reload={t.reload} />
-      <BankSendersCard tenantId={tenantId} />
-    </div>
-  );
-}
-
-export default function DocumentsSettingsPage() {
-  return (
-    <AppPage title="Documents">
-      <DocumentsSettings />
-    </AppPage>
   );
 }

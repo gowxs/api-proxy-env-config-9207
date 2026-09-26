@@ -12,6 +12,14 @@ const config: NextConfig = {
   devIndicators: false,
   // Local review from a phone on the same network (pnpm dev:stack).
   allowedDevOrigins: ['*.local', '192.168.*.*', '10.*.*.*'],
+  // Module setup moved from Settings to each module's own page.
+  async redirects() {
+    return [
+      { source: '/settings/quotes', destination: '/quotes?tab=setup', permanent: false },
+      { source: '/settings/documents', destination: '/documents?tab=setup', permanent: false },
+      { source: '/settings/integrations', destination: '/integrations', permanent: false },
+    ];
+  },
   async rewrites() {
     return [{ source: '/api/:path*', destination: `${API_INTERNAL_URL}/:path*` }];
   },

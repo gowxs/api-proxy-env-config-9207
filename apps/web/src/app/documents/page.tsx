@@ -1,8 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { BankSendersCard, SellerCard, type DocSettings } from '@/components/document-setup';
+import { ModuleBar, ModuleOff, Tabs, useModuleToggle, useTab } from '@/components/module';
 import { AppPage } from '@/components/shell';
 import { Badge, Button, cx, ErrorText, Loading, useAction, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -25,10 +27,15 @@ function DocumentList() {
     [tenantId],
   );
   const [tab, setTab] = useState<DocType | 'all'>('all');
+  const unpaidOnly = useSearchParams().get('status') === 'unpaid';
   const a = useAction();
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
-  const shown = data.filter((d) => tab === 'all' || d.type === tab);
+  const shown = data.filter(
+    (d) =>
+      (tab === 'all' || d.type === tab) &&
+      (!unpaidOnly || (d.payable && (d.status === 'issued' || d.status === 'sent'))),
+  );
   // Invoices and delivery notes with prices (pavadzīme-rēķins) ask for payment.
   const invoices = data.filter((d) => d.payable);
   const currency = invoices[0]?.currency ?? 'EUR';
@@ -68,9 +75,16 @@ function DocumentList() {
           New CMR
         </Button>
       </div>
-      <Link className="inline-block text-sm text-indigo-700" href="/payments">
-        Incoming payments →
-      </Link>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        <Link className="text-indigo-700" href="/payments">
+          Incoming payments →
+        </Link>
+        {unpaidOnly && (
+          <Link className="text-indigo-700" href="/documents">
+            Showing unpaid only · show all
+          </Link>
+        )}
+      </div>
       <ErrorText>{a.error}</ErrorText>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
         {TABS.map((x) => (
@@ -130,10 +144,69 @@ function DocumentList() {
   );
 }
 
+const MODULE_TABS = ['documents', 'setup'] as const;
+const TAB_LABELS = { documents: 'Documents', setup: 'Setup' };
+
+function DocumentsModule() {
+  const tenantId = useTenantId();
+  const t = useLoad(() => api<DocSettings>(`/v1/tenants/${tenantId}`), [tenantId]);
+  const toggle = useModuleToggle(tenantId, 'documentsEnabled', t.reload);
+  const [tab, setTab] = useTab(MODULE_TABS);
+  if (t.error) return <ErrorText>{t.error}</ErrorText>;
+  if (!t.data) return <Loading />;
+  const s = t.data;
+  if (!s.documents_enabled)
+    return (
+      <ModuleOff
+        name="Documents"
+        lead="Invoices, delivery notes and CMR notes, made from the conversation."
+        points={[
+          {
+            title: 'From what you already have',
+            text: 'Start from an accepted quote, an invoice or a customer’s e-mail, or by hand.',
+          },
+          {
+            title: 'Checked and numbered',
+            text: 'Every field is checked; numbers run per type and restart each year.',
+          },
+          {
+            title: 'Sent and followed up',
+            text: 'The PDF goes with your reply; bank payment notifications mark invoices paid.',
+          },
+        ]}
+        note="Nothing is sent without you."
+        onEnable={() => toggle.set(true)}
+        busy={toggle.busy}
+        error={toggle.error}
+      />
+    );
+  return (
+    <>
+      <ModuleBar
+        name="Documents"
+        line="Invoices, delivery notes and CMR notes, sent as PDFs with your replies."
+        onDisable={() => toggle.set(false)}
+        busy={toggle.busy}
+        error={toggle.error}
+      />
+      <Tabs tabs={MODULE_TABS} labels={TAB_LABELS} tab={tab} onChange={setTab} />
+      {tab === 'documents' && <DocumentList />}
+      {tab === 'setup' && (
+        <div className="space-y-4">
+          <SellerCard s={s} tenantId={tenantId} reload={t.reload} />
+          <BankSendersCard tenantId={tenantId} />
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function DocumentsPage() {
   return (
     <AppPage title="Documents">
-      <DocumentList />
+      <Suspense fallback={<Loading />}>
+        <DocumentsModule />
+      </Suspense>
     </AppPage>
   );
 }

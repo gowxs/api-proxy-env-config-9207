@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
+/** Quotes setup: price list, import and quote settings (on the Quotes page). */
+
 import { useState } from 'react';
-import { AppPage } from '@/components/shell';
 import {
   Badge,
   Button,
@@ -12,7 +12,6 @@ import {
   Field,
   inputClass,
   Loading,
-  Notice,
   useAction,
   useLoad,
 } from '@/components/ui';
@@ -26,7 +25,6 @@ import {
   type QuoteSettings,
   type VatMode,
 } from '@/lib/quotes';
-import { useTenantId } from '@/lib/session';
 
 const toPrice = (cents: number) => (cents / 100).toFixed(2);
 
@@ -162,7 +160,7 @@ function ItemEditor({
   );
 }
 
-function PriceList({ tenantId, currency }: { tenantId: string; currency: string }) {
+export function PriceList({ tenantId, currency }: { tenantId: string; currency: string }) {
   const base = `/v1/tenants/${tenantId}/price-items`;
   const { data, error, reload } = useLoad(() => api<PriceItem[]>(base), [tenantId]);
   const [query, setQuery] = useState('');
@@ -337,7 +335,7 @@ interface CsvResult {
   imported: number;
 }
 
-function Imports({
+export function Imports({
   tenantId,
   currency,
   onImported,
@@ -468,7 +466,7 @@ function Imports({
   );
 }
 
-function QuoteSettingsCard({
+export function QuoteSettingsCard({
   s,
   tenantId,
   reload,
@@ -575,74 +573,5 @@ function QuoteSettingsCard({
         </div>
       </form>
     </Card>
-  );
-}
-
-function Quotes() {
-  const tenantId = useTenantId();
-  const t = useLoad(() => api<QuoteSettings>(`/v1/tenants/${tenantId}`), [tenantId]);
-  const [listKey, setListKey] = useState(0);
-  const toggle = useAction();
-  if (t.error) return <ErrorText>{t.error}</ErrorText>;
-  if (!t.data) return <Loading />;
-  const s = t.data;
-  return (
-    <div className="space-y-4">
-      <Card title="Quotes (beta)">
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-1 h-5 w-5"
-            checked={s.quotes_enabled}
-            disabled={toggle.busy}
-            onChange={(e) =>
-              void toggle.run(async () => {
-                await api(`/v1/tenants/${tenantId}`, {
-                  method: 'PATCH',
-                  body: { quotesEnabled: e.target.checked },
-                });
-                await t.reload();
-              })
-            }
-          />
-          <span className="text-sm">
-            <span className="font-medium">Draft quotes for price requests</span>
-            <span className="block text-neutral-600">
-              When a customer asks what things on your price list would cost, Noctiv prepares a
-              quote with a PDF and an “Approve quote” link instead of a plain reply.
-            </span>
-          </span>
-        </label>
-        <ErrorText>{toggle.error}</ErrorText>
-        {s.quotes_enabled && (
-          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/quotes">
-            See all quotes →
-          </Link>
-        )}
-      </Card>
-      {!s.quotes_enabled && (
-        <Notice>
-          Quotes are off. You can prepare your price list now and switch them on when it is ready.
-        </Notice>
-      )}
-      <PriceList key={listKey} tenantId={tenantId} currency={s.quotes_currency} />
-      <Imports
-        tenantId={tenantId}
-        currency={s.quotes_currency}
-        onImported={() => setListKey((k) => k + 1)}
-      />
-      <QuoteSettingsCard s={s} tenantId={tenantId} reload={t.reload} />
-    </div>
-  );
-}
-
-export default function QuotesSettingsPage() {
-  return (
-    <AppPage title="Quotes">
-      <Link className="mb-3 inline-block text-sm text-indigo-700" href="/settings">
-        ← Settings
-      </Link>
-      <Quotes />
-    </AppPage>
   );
 }

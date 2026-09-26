@@ -99,6 +99,7 @@ describe('account and onboarding', () => {
     for (const path of [
       '',
       '/dashboard',
+      '/nav',
       '/conversations',
       '/leads',
       '/kb/sources',
@@ -178,6 +179,17 @@ describe('dashboard and conversations', () => {
     expect(d.open).toMatchObject({ awaiting_approval: 1, open_escalations: 1 });
     expect(d.budget).toMatchObject({ state: 'ok', dailyTokens: 200000 });
     expect(JSON.stringify(d)).not.toMatch(/ciphertext/);
+  });
+
+  it('navigation: business, mode, modules and badge counts', async () => {
+    const n = (await call('GET', t(A, '/nav'), A.userId)).json;
+    expect(n).toMatchObject({
+      modules: { quotes: false, documents: false },
+      // The seed has one unmatched payment (packages/db/src/testing.ts).
+      counts: { drafts: 1, escalations: 1, unpaid: 0, payments: 1 },
+    });
+    expect(typeof n.name).toBe('string');
+    expect(typeof n.mode).toBe('string');
   });
 
   it('lists threads that need action and shows one with its messages and drafts', async () => {

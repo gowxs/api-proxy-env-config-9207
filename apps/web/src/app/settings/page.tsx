@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { BillingCard } from '@/components/billing';
 import { AppPage } from '@/components/shell';
 import {
@@ -20,7 +20,7 @@ import { api } from '@/lib/api';
 import { designInfo } from '@/lib/email-design';
 import { MODES, modeInfo, modeRank, type Mode } from '@/lib/modes';
 import { signOut } from '@/lib/auth';
-import { useTenantId } from '@/lib/session';
+import { useSession, useTenantId } from '@/lib/session';
 
 interface Tenant {
   name: string;
@@ -35,8 +35,48 @@ interface Tenant {
   retention_days: number;
   reply_signature: string | null;
   email_template: string;
-  quotes_enabled: boolean;
-  documents_enabled?: boolean;
+}
+
+const SECTIONS = [
+  { id: 'business', label: 'Business' },
+  { id: 'mailboxes', label: 'Mailboxes' },
+  { id: 'reply-mode', label: 'Reply mode' },
+  { id: 'email-design', label: 'E-mail design' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'account', label: 'Account' },
+];
+
+function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section
+      id={id}
+      aria-labelledby={`${id}-title`}
+      className="scroll-mt-20 space-y-3 lg:scroll-mt-6"
+    >
+      <h2 id={`${id}-title`} className="text-base font-semibold text-neutral-900">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function SignedIn() {
+  const router = useRouter();
+  const { me } = useSession();
+  return (
+    <Card title="Signed in">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="min-w-0 flex-1 truncate text-neutral-700">{me.email ?? 'Signed in'}</span>
+        <Button
+          variant="secondary"
+          onClick={() => void signOut().then(() => router.replace('/login'))}
+        >
+          Sign out
+        </Button>
+      </div>
+    </Card>
+  );
 }
 
 function AutoSendDialog({
@@ -122,12 +162,12 @@ function SettingsForm({
 }) {
   const [form, setForm] = useState(t);
   const [dialog, setDialog] = useState<Mode | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
   const mode = useAction();
   const save = useAction();
   useEffect(() => setForm(t), [t]);
   const set = <K extends keyof Tenant>(k: K, v: Tenant[K]) => {
-    setSaved(false);
+    setSaved(null);
     setForm((f) => ({ ...f, [k]: v }));
   };
 
@@ -141,267 +181,272 @@ function SettingsForm({
       await reload();
     });
 
+  const submit = (section: string) => (e: FormEvent) => {
+    e.preventDefault();
+    void save.run(async () => {
+      await api(`/v1/tenants/${tenantId}`, {
+        method: 'PATCH',
+        body: {
+          name: form.name,
+          websiteUrl: form.website_url || null,
+          timezone: form.timezone,
+          notifyFullText: form.notify_full_text,
+          followupAfterDays: form.followup_after_days,
+          followupMax: form.followup_max,
+          maxRepliesPerHour: form.max_replies_per_hour,
+          maxAiRepliesPerSender24h: form.max_ai_replies_per_sender_24h,
+          retentionDays: form.retention_days,
+          replySignature: form.reply_signature || null,
+        },
+      });
+      await reload();
+      setSaved(section);
+    });
+  };
+  const saveRow = (section: string) => (
+    <div className="mt-4 flex items-center gap-3">
+      <Button type="submit" disabled={save.busy}>
+        Save
+      </Button>
+      {saved === section && <span className="text-sm text-green-800">✓ Saved</span>}
+    </div>
+  );
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card title="Sending mode">
-        <p className="text-sm text-neutral-600">
-          All three modes are included in your plan. The fact checks and the list of emails that
-          always come to you are the same in every mode.
-        </p>
-        <fieldset className="mt-3 space-y-2" disabled={mode.busy}>
-          <legend className="sr-only">Sending mode</legend>
-          {MODES.map((m) => {
-            const current = t.mode === m.id;
-            return (
-              <label
-                key={m.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
-                  current ? 'border-indigo-600 bg-indigo-50/60' : 'border-neutral-200'
-                }`}
-              >
+    <div className="space-y-8">
+      <nav aria-label="Settings sections" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        {SECTIONS.map((x) => (
+          <a
+            key={x.id}
+            href={`#${x.id}`}
+            className="shrink-0 rounded-full bg-white px-3 py-1.5 text-sm text-neutral-700 ring-1 ring-neutral-200 hover:bg-neutral-100"
+          >
+            {x.label}
+          </a>
+        ))}
+      </nav>
+      <ErrorText>{save.error}</ErrorText>
+
+      <Section id="business" title="Business">
+        <form onSubmit={submit('business')}>
+          <Card>
+            <div className="space-y-3">
+              <Field label="Business name">
                 <input
-                  type="radio"
-                  name="mode"
-                  className="mt-1 h-5 w-5 accent-indigo-600"
-                  checked={current}
-                  onChange={() => {
-                    if (current) return;
-                    // More automatic needs the confirmation; more cautious applies at once.
-                    if (modeRank(m.id) > modeRank(t.mode)) setDialog(m.id);
-                    else void setMode(m.id);
-                  }}
+                  className={inputClass}
+                  required
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                />
+              </Field>
+              <Field label="Website">
+                <input
+                  className={inputClass}
+                  type="url"
+                  value={form.website_url ?? ''}
+                  onChange={(e) => set('website_url', e.target.value)}
+                />
+              </Field>
+              <Field label="Time zone" hint="Follow-ups go out Mon–Fri 09:00–17:00 in this zone.">
+                <select
+                  className={inputClass}
+                  value={form.timezone}
+                  onChange={(e) => set('timezone', e.target.value)}
+                >
+                  {Intl.supportedValuesOf('timeZone').map((z) => (
+                    <option key={z}>{z}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Signature" hint="Added below every reply.">
+                <textarea
+                  className={`${inputClass} min-h-20`}
+                  maxLength={1000}
+                  value={form.reply_signature ?? ''}
+                  onChange={(e) => set('reply_signature', e.target.value)}
+                />
+              </Field>
+            </div>
+            {saveRow('business')}
+          </Card>
+        </form>
+      </Section>
+
+      <Section id="mailboxes" title="Mailboxes">
+        <Card>
+          <p className="text-sm text-neutral-600">
+            The mailbox Noctiv reads and replies from, its connection health and test mailboxes.
+          </p>
+          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/mailboxes">
+            Manage connected mailboxes →
+          </Link>
+        </Card>
+      </Section>
+
+      <Section id="reply-mode" title="Reply mode">
+        <Card title="Sending mode">
+          <p className="text-sm text-neutral-600">
+            All three modes are included in your plan. The fact checks and the list of emails that
+            always come to you are the same in every mode.
+          </p>
+          <fieldset className="mt-3 space-y-2" disabled={mode.busy}>
+            <legend className="sr-only">Sending mode</legend>
+            {MODES.map((m) => {
+              const current = t.mode === m.id;
+              return (
+                <label
+                  key={m.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${
+                    current ? 'border-indigo-600 bg-indigo-50/60' : 'border-neutral-200'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="mode"
+                    className="mt-1 h-5 w-5 accent-indigo-600"
+                    checked={current}
+                    onChange={() => {
+                      if (current) return;
+                      // More automatic needs the confirmation; more cautious applies at once.
+                      if (modeRank(m.id) > modeRank(t.mode)) setDialog(m.id);
+                      else void setMode(m.id);
+                    }}
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold">
+                      {m.number}. {m.title}
+                      {current && (
+                        <span className="ml-2 align-middle">
+                          <Badge tone={m.id === 'draft_only' ? 'gray' : 'blue'}>Current</Badge>
+                        </span>
+                      )}
+                    </span>
+                    <span className="block text-sm text-neutral-600">{m.line}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
+          <ErrorText>{mode.error}</ErrorText>
+          {dialog && (
+            <AutoSendDialog
+              target={dialog}
+              busy={mode.busy}
+              onCancel={() => setDialog(null)}
+              onConfirm={() => void setMode(dialog, true)}
+            />
+          )}
+        </Card>
+
+        <form onSubmit={submit('reply-mode')}>
+          <Card title="Follow-ups and limits">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Follow up after (business days)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={form.followup_after_days}
+                  onChange={(e) => set('followup_after_days', Number(e.target.value))}
+                />
+              </Field>
+              <Field label="Follow-ups per conversation">
+                <select
+                  className={inputClass}
+                  value={form.followup_max}
+                  onChange={(e) => set('followup_max', Number(e.target.value))}
+                >
+                  {[0, 1, 2].map((n) => (
+                    <option key={n} value={n}>
+                      {n === 0 ? 'None' : n}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Automatic replies per hour">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={form.max_replies_per_hour}
+                  onChange={(e) => set('max_replies_per_hour', Number(e.target.value))}
+                />
+              </Field>
+              <Field label="Automatic replies per customer / 24 h">
+                <select
+                  className={inputClass}
+                  value={form.max_ai_replies_per_sender_24h}
+                  onChange={(e) => set('max_ai_replies_per_sender_24h', Number(e.target.value))}
+                >
+                  {[0, 1, 2].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {saveRow('reply-mode')}
+          </Card>
+        </form>
+      </Section>
+
+      <Section id="email-design" title="E-mail design">
+        <Card>
+          <p className="text-sm text-neutral-600">
+            {designInfo(t.email_template).title}: {designInfo(t.email_template).line}
+          </p>
+          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/email-design">
+            Choose a design and preview it →
+          </Link>
+        </Card>
+      </Section>
+
+      <Section id="billing" title="Billing">
+        <BillingCard showPortal />
+      </Section>
+
+      <Section id="account" title="Account">
+        <form onSubmit={submit('account')}>
+          <Card title="Privacy">
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-5 w-5"
+                  checked={form.notify_full_text}
+                  onChange={(e) => set('notify_full_text', e.target.checked)}
                 />
                 <span>
-                  <span className="block text-sm font-semibold">
-                    {m.number}. {m.title}
-                    {current && (
-                      <span className="ml-2 align-middle">
-                        <Badge tone={m.id === 'draft_only' ? 'gray' : 'blue'}>Current</Badge>
-                      </span>
-                    )}
+                  Include the customer&apos;s name and the full draft in notification emails.
+                  <span className="block text-xs text-neutral-500">
+                    Off by default: emails then show only the sender&apos;s domain, the subject and
+                    a short summary.
                   </span>
-                  <span className="block text-sm text-neutral-600">{m.line}</span>
                 </span>
               </label>
-            );
-          })}
-        </fieldset>
-        <ErrorText>{mode.error}</ErrorText>
-        {dialog && (
-          <AutoSendDialog
-            target={dialog}
-            busy={mode.busy}
-            onCancel={() => setDialog(null)}
-            onConfirm={() => void setMode(dialog, true)}
-          />
-        )}
-      </Card>
-
-      <BillingCard showPortal />
-
-      <Card title="Mailbox">
-        <Link className="text-sm text-indigo-700" href="/settings/mailboxes">
-          Manage connected mailboxes →
-        </Link>
-      </Card>
-
-      <Card title="Quotes (beta)">
-        <p className="text-sm text-neutral-600">
-          {t.quotes_enabled
-            ? 'On: price requests get a quote from your price list, with a PDF and an approve link.'
-            : 'Off. Turn it on to answer price requests with quotes from your price list.'}
-        </p>
-        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/quotes">
-          {t.quotes_enabled ? 'Price list and quote settings →' : 'Set up quotes →'}
-        </Link>
-      </Card>
-
-      <Card title="Documents (beta)">
-        <p className="text-sm text-neutral-600">
-          {t.documents_enabled
-            ? 'On: invoices, delivery notes and CMR notes, sent as PDFs with your replies.'
-            : 'Off. Turn it on to create invoices, delivery notes and CMR notes.'}
-        </p>
-        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/documents">
-          {t.documents_enabled ? 'Business details and documents →' : 'Set up documents →'}
-        </Link>
-      </Card>
-
-      <Card title="Integrations">
-        <p className="text-sm text-neutral-600">
-          What Noctiv does today, and accounting and online-store connections coming next.
-        </p>
-        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/integrations">
-          Integrations →
-        </Link>
-      </Card>
-
-      <Card title="E-mail design">
-        <p className="text-sm text-neutral-600">
-          {designInfo(t.email_template).title}: {designInfo(t.email_template).line}
-        </p>
-        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/email-design">
-          Choose a design and preview it →
-        </Link>
-      </Card>
-
-      <form
-        className="contents"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void save.run(async () => {
-            await api(`/v1/tenants/${tenantId}`, {
-              method: 'PATCH',
-              body: {
-                name: form.name,
-                websiteUrl: form.website_url || null,
-                timezone: form.timezone,
-                notifyFullText: form.notify_full_text,
-                followupAfterDays: form.followup_after_days,
-                followupMax: form.followup_max,
-                maxRepliesPerHour: form.max_replies_per_hour,
-                maxAiRepliesPerSender24h: form.max_ai_replies_per_sender_24h,
-                retentionDays: form.retention_days,
-                replySignature: form.reply_signature || null,
-              },
-            });
-            await reload();
-            setSaved(true);
-          });
-        }}
-      >
-        <Card title="Business">
-          <div className="space-y-3">
-            <Field label="Business name">
-              <input
-                className={inputClass}
-                required
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-              />
-            </Field>
-            <Field label="Website">
-              <input
-                className={inputClass}
-                type="url"
-                value={form.website_url ?? ''}
-                onChange={(e) => set('website_url', e.target.value)}
-              />
-            </Field>
-            <Field label="Time zone" hint="Follow-ups go out Mon–Fri 09:00–17:00 in this zone.">
-              <select
-                className={inputClass}
-                value={form.timezone}
-                onChange={(e) => set('timezone', e.target.value)}
+              <Field
+                label="Keep email text for (days)"
+                hint="After this, message and draft text is deleted; statistics stay."
               >
-                {Intl.supportedValuesOf('timeZone').map((z) => (
-                  <option key={z}>{z}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Signature" hint="Added below every reply.">
-              <textarea
-                className={`${inputClass} min-h-20`}
-                maxLength={1000}
-                value={form.reply_signature ?? ''}
-                onChange={(e) => set('reply_signature', e.target.value)}
-              />
-            </Field>
-          </div>
-        </Card>
-
-        <Card title="Follow-ups and limits">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Follow up after (business days)">
-              <input
-                className={inputClass}
-                type="number"
-                min={1}
-                max={30}
-                value={form.followup_after_days}
-                onChange={(e) => set('followup_after_days', Number(e.target.value))}
-              />
-            </Field>
-            <Field label="Follow-ups per conversation">
-              <select
-                className={inputClass}
-                value={form.followup_max}
-                onChange={(e) => set('followup_max', Number(e.target.value))}
-              >
-                {[0, 1, 2].map((n) => (
-                  <option key={n} value={n}>
-                    {n === 0 ? 'None' : n}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Automatic replies per hour">
-              <input
-                className={inputClass}
-                type="number"
-                min={1}
-                max={500}
-                value={form.max_replies_per_hour}
-                onChange={(e) => set('max_replies_per_hour', Number(e.target.value))}
-              />
-            </Field>
-            <Field label="Automatic replies per customer / 24 h">
-              <select
-                className={inputClass}
-                value={form.max_ai_replies_per_sender_24h}
-                onChange={(e) => set('max_ai_replies_per_sender_24h', Number(e.target.value))}
-              >
-                {[0, 1, 2].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-        </Card>
-
-        <Card title="Privacy">
-          <div className="space-y-3">
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1 h-5 w-5"
-                checked={form.notify_full_text}
-                onChange={(e) => set('notify_full_text', e.target.checked)}
-              />
-              <span>
-                Include the customer&apos;s name and the full draft in notification emails.
-                <span className="block text-xs text-neutral-500">
-                  Off by default: emails then show only the sender&apos;s domain, the subject and a
-                  short summary.
-                </span>
-              </span>
-            </label>
-            <Field
-              label="Keep email text for (days)"
-              hint="After this, message and draft text is deleted; statistics stay."
-            >
-              <input
-                className={inputClass}
-                type="number"
-                min={1}
-                max={3650}
-                value={form.retention_days}
-                onChange={(e) => set('retention_days', Number(e.target.value))}
-              />
-            </Field>
-          </div>
-        </Card>
-
-        <div className="space-y-2 md:col-span-2">
-          <ErrorText>{save.error}</ErrorText>
-          <Button type="submit" disabled={save.busy} className="w-full sm:w-auto">
-            Save settings
-          </Button>
-          {saved && <span className="ml-3 text-sm text-green-800">✓ Saved</span>}
-        </div>
-      </form>
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={form.retention_days}
+                  onChange={(e) => set('retention_days', Number(e.target.value))}
+                />
+              </Field>
+            </div>
+            {saveRow('account')}
+          </Card>
+        </form>
+        <SignedIn />
+        <DeleteAccount tenantId={tenantId} name={t.name} />
+      </Section>
     </div>
   );
 }
@@ -457,12 +502,7 @@ function Settings() {
   const { data, error, reload } = useLoad(() => api<Tenant>(`/v1/tenants/${tenantId}`), [tenantId]);
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
-  return (
-    <div className="space-y-4">
-      <SettingsForm t={data} tenantId={tenantId} reload={reload} />
-      <DeleteAccount tenantId={tenantId} name={data.name} />
-    </div>
-  );
+  return <SettingsForm t={data} tenantId={tenantId} reload={reload} />;
 }
 
 export default function SettingsPage() {

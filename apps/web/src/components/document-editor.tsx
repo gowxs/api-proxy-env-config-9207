@@ -222,7 +222,7 @@ function SellerCard({ doc }: { doc: Doc }) {
             : 'Supplier (you)'
       }
       action={
-        <Link className="text-sm text-indigo-700" href="/settings/documents">
+        <Link className="text-sm text-indigo-700" href="/documents?tab=setup">
           Edit
         </Link>
       }

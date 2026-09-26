@@ -13,7 +13,7 @@ const NOW: { title: string; beta?: boolean; line: string; href: string; link: st
   {
     title: 'E-mail replies & follow-ups',
     line: 'Answers customers in their language from your own facts, and follows up when a conversation goes quiet.',
-    href: '/settings',
+    href: '/settings#reply-mode',
     link: 'Sending mode →',
   },
   {
@@ -26,15 +26,15 @@ const NOW: { title: string; beta?: boolean; line: string; href: string; link: st
     title: 'Quotes',
     beta: true,
     line: 'A price request becomes a quote from your price list, as a PDF the customer accepts with one click.',
-    href: '/settings/quotes',
-    link: 'Quote settings →',
+    href: '/quotes',
+    link: 'Open quotes →',
   },
   {
     title: 'Invoices, delivery notes and CMR',
     beta: true,
     line: 'Issued from the conversation and sent as PDFs; bank payment notifications are matched to open invoices.',
-    href: '/settings/documents',
-    link: 'Document settings →',
+    href: '/documents',
+    link: 'Open documents →',
   },
 ];
 

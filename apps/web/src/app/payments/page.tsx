@@ -118,8 +118,8 @@ function Payments() {
         <Notice>
           No payments yet. They appear here when your bank&apos;s notification e-mails arrive: add
           your bank in{' '}
-          <Link className="underline" href="/settings/documents">
-            Settings → Documents
+          <Link className="underline" href="/documents?tab=setup">
+            Documents → Setup
           </Link>
           .
         </Notice>

@@ -218,22 +218,41 @@ export function BillingCard({ showPortal = false }: { showPortal?: boolean }) {
   );
 }
 
-/** Header countdown, on every page for the whole trial. */
-export function TrialCountdown() {
+/** Plan chip for the navigation: trial days left, or the subscription state. */
+export function PlanChip({ className }: { className?: string }) {
   const { billing } = useBilling();
-  if (!billing || billing.status !== 'trial' || !billing.entitled || billing.trialDaysLeft === null)
-    return null;
-  const urgent = billing.trialDaysLeft <= 3;
+  if (!billing) return null;
+  const s = STATUS[billing.status];
+  const trial = billing.status === 'trial';
+  const text = !billing.entitled
+    ? trial
+      ? 'Trial ended'
+      : s.text
+    : trial && billing.trialDaysLeft !== null
+      ? `Trial · ${daysLeftText(billing.trialDaysLeft)}`
+      : s.text;
+  const tone = !billing.entitled
+    ? 'bg-red-100 text-red-900'
+    : trial && (billing.trialDaysLeft ?? 99) <= 3
+      ? 'bg-amber-100 text-amber-900'
+      : s.tone === 'green'
+        ? 'bg-green-100 text-green-900'
+        : s.tone === 'amber'
+          ? 'bg-amber-100 text-amber-900'
+          : 'bg-indigo-50 text-indigo-800';
   return (
     <Link
-      href="/#plan"
-      title={`Free trial ends on ${fmtEnd(billing.trialEndsAt, billing.timezone)}`}
+      href="/settings#billing"
+      title={
+        trial ? `Free trial ends on ${fmtEnd(billing.trialEndsAt, billing.timezone)}` : undefined
+      }
       className={cx(
-        'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
-        urgent ? 'bg-amber-100 text-amber-900' : 'bg-indigo-50 text-indigo-800',
+        'inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
+        tone,
+        className,
       )}
     >
-      Free trial — {daysLeftText(billing.trialDaysLeft)}
+      {text}
     </Link>
   );
 }
