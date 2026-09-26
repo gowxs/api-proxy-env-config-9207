@@ -28,6 +28,9 @@ export interface DocSettings {
   quotes_currency: string;
   quotes_vat_mode: VatMode;
   quotes_vat_rate: number;
+  quotes_auto_send_limit_cents: number;
+  auto_invoice_on_accept: boolean;
+  auto_delivery_note_after_payment: boolean;
 }
 
 const FIELDS: [keyof DocSettings, string, string, string?][] = [
@@ -236,6 +239,72 @@ export function BankSendersCard({ tenantId }: { tenantId: string }) {
         are read; anything else claiming to be your bank is ignored.
       </p>
       <ErrorText>{a.error ?? list.error}</ErrorText>
+    </Card>
+  );
+}
+
+/** Documents automation (PLAN.md §22.11–§22.12): two switches, saved at once. */
+export function AutomationCard({
+  s,
+  tenantId,
+  reload,
+}: {
+  s: DocSettings;
+  tenantId: string;
+  reload: () => Promise<void>;
+}) {
+  const a = useAction();
+  const set = (field: 'autoInvoiceOnAccept' | 'autoDeliveryNoteAfterPayment', on: boolean) =>
+    void a.run(async () => {
+      await api(`/v1/tenants/${tenantId}`, { method: 'PATCH', body: { [field]: on } });
+      await reload();
+    });
+  const limit = new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: s.quotes_currency,
+  }).format(s.quotes_auto_send_limit_cents / 100);
+  const row = (
+    field: 'autoInvoiceOnAccept' | 'autoDeliveryNoteAfterPayment',
+    checked: boolean,
+    title: string,
+    text: string,
+  ) => (
+    <label className="flex cursor-pointer items-start gap-3 py-2">
+      <input
+        type="checkbox"
+        role="switch"
+        className="mt-1 h-5 w-5 shrink-0 accent-indigo-700"
+        checked={checked}
+        disabled={a.busy}
+        onChange={(e) => set(field, e.target.checked)}
+      />
+      <span className="text-sm">
+        <span className="block font-medium">{title}</span>
+        <span className="block text-neutral-600">{text}</span>
+      </span>
+    </label>
+  );
+  return (
+    <Card title="Automation">
+      <div className="divide-y divide-neutral-100">
+        {row(
+          'autoInvoiceOnAccept',
+          s.auto_invoice_on_accept,
+          'Invoice when a quote is accepted',
+          `The invoice is made from the quote, numbered, and a reply “Thank you — invoice attached” is prepared. Mode 1: waits for your approval. Modes 2 and 3: sent if the total is up to ${limit} (your quote auto-send limit).`,
+        )}
+        {row(
+          'autoDeliveryNoteAfterPayment',
+          s.auto_delivery_note_after_payment,
+          'Delivery note after payment',
+          'When an invoice is marked paid, the delivery note is made from it and a reply is prepared. Mode 1: waits for your approval. Modes 2 and 3: sent.',
+        )}
+      </div>
+      <p className="mt-2 text-xs text-neutral-500">
+        If a detail is missing (for example the buyer’s address), nothing is sent: the document
+        waits for you and you get an e-mail.
+      </p>
+      <ErrorText>{a.error}</ErrorText>
     </Card>
   );
 }

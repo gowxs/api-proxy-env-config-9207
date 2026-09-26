@@ -1,7 +1,12 @@
 import { formatMoney, quoteLocale, type VatMode } from '@noctiv/quotes';
 import type { TransactionSql } from 'postgres';
 import { documentProblems, type Seller } from './checks.ts';
-import { documentCoverText, paymentReminderText } from './cover.ts';
+import {
+  acceptedInvoiceText,
+  documentCoverText,
+  paidDeliveryNoteText,
+  paymentReminderText,
+} from './cover.ts';
 import { docLabels } from './labels.ts';
 import { renderCmrPdf } from './pdf/cmr.ts';
 import { dateText, type DocBrand } from './pdf/common.ts';
@@ -71,6 +76,8 @@ export interface DocumentRecord {
   draftId: string | null;
   /** The overdue reminder's draft, once queued. */
   reminderDraftId: string | null;
+  /** Made by the documents automation (after a quote was accepted / an invoice was paid). */
+  autoSource: 'quote_accepted' | 'invoice_paid' | null;
   data: DocData;
   prefill: Record<string, { source: string }> | null;
   prefillStatus: 'pending' | 'done' | 'failed' | null;
@@ -112,6 +119,7 @@ interface Row {
   source_message_id: string | null;
   draft_id: string | null;
   reminder_draft_id: string | null;
+  auto_source: 'quote_accepted' | 'invoice_paid' | null;
   data: unknown;
   prefill: Record<string, { source: string }> | null;
   prefill_status: 'pending' | 'done' | 'failed' | null;
@@ -163,6 +171,7 @@ const toRecord = (r: Row): DocumentRecord => ({
   sourceMessageId: r.source_message_id,
   draftId: r.draft_id,
   reminderDraftId: r.reminder_draft_id,
+  autoSource: r.auto_source,
   data: parseData(r.type, r.data),
   prefill: r.prefill && Object.keys(r.prefill).length ? r.prefill : null,
   prefillStatus: r.prefill_status,
@@ -205,7 +214,7 @@ const toRecord = (r: Row): DocumentRecord => ({
 
 const SELECT = (tx: TransactionSql) => tx`
   select d.id, d.tenant_id, d.type, d.number, d.status, d.language, d.thread_id, d.lead_id, d.quote_id,
-         d.source_document_id, d.source_message_id, d.draft_id, d.reminder_draft_id, d.data, d.prefill, d.prefill_status, d.payable,
+         d.source_document_id, d.source_message_id, d.draft_id, d.reminder_draft_id, d.auto_source, d.data, d.prefill, d.prefill_status, d.payable,
          d.currency, d.vat_mode, d.vat_rate::float8 as vat_rate, d.subtotal_cents, d.vat_cents,
          d.total_cents, d.counterparty_name, d.issue_date::text as issue_date,
          d.due_date::text as due_date, d.created_at, d.issued_at, d.sent_at, d.paid_at,
@@ -259,6 +268,7 @@ export function documentJson(d: DocumentRecord) {
     source_document_id: d.sourceDocumentId,
     draft_id: d.draftId,
     reminder_draft_id: d.reminderDraftId,
+    auto_source: d.autoSource,
     data: d.data,
     prefill: d.prefill,
     prefill_status: d.prefillStatus,
@@ -576,6 +586,36 @@ export function documentCover(d: DocumentRecord, customerName: string | null): s
     total: formatMoney(d.totalCents, d.currency, locale),
     due: dateText(d.dueDate, d.language),
     priced: d.type === 'delivery_note' && (d.data as DeliveryNoteData).withPrices,
+  });
+}
+
+/** The reply carrying an invoice made from an accepted quote. */
+export function acceptedInvoiceCover(
+  d: DocumentRecord,
+  customerName: string | null,
+  quoteNumber: string,
+): string {
+  return acceptedInvoiceText({
+    language: d.language,
+    customerName,
+    quoteNumber,
+    number: d.number ?? '',
+    total: formatMoney(d.totalCents, d.currency, quoteLocale(d.language)),
+    due: dateText(d.dueDate, d.language),
+  });
+}
+
+/** The reply carrying a delivery note made after its invoice was paid. */
+export function paidDeliveryNoteCover(
+  d: DocumentRecord,
+  customerName: string | null,
+  invoiceNumber: string,
+): string {
+  return paidDeliveryNoteText({
+    language: d.language,
+    customerName,
+    invoiceNumber,
+    number: d.number ?? '',
   });
 }
 

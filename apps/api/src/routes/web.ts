@@ -187,7 +187,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                quotes_validity_days, quotes_auto_send_limit_cents,
                documents_enabled, seller_legal_name, seller_legal_address, seller_reg_no, seller_vat_no,
                seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days,
-               doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify
+               doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify,
+               auto_invoice_on_accept, auto_delivery_note_after_payment
         from public.tenants`;
       return { ...t, doc_prefix_locks: await prefixLocks(tx) };
     }),

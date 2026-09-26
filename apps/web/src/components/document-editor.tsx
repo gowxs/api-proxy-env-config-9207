@@ -797,6 +797,13 @@ export function DocumentEditor({
             {DOC_TYPE[doc.type].name} {doc.number ?? ''}
           </h2>
           <Badge tone={st.tone}>{st.text}</Badge>
+          {doc.auto_source && (
+            <Badge tone="blue">
+              {doc.auto_source === 'quote_accepted'
+                ? 'Made automatically: quote accepted'
+                : 'Made automatically: invoice paid'}
+            </Badge>
+          )}
         </div>
         <p className="mt-1 text-sm text-neutral-500">
           {doc.counterparty_name ?? 'No customer yet'}

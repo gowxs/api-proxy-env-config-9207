@@ -11,6 +11,8 @@ import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { quotesImportHandler } from './jobs/quotes-import.ts';
+import { composeAssistHandler } from './jobs/compose-assist.ts';
+import { documentsAutomationHandler } from './jobs/documents-automation.ts';
 import { documentsPrefillHandler } from './jobs/documents-prefill.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { alertDeadJob } from './ops/alerts.ts';
@@ -71,6 +73,12 @@ const runner = new JobRunner({
     }),
     [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsPrefill]: documentsPrefillHandler({ sql: db.sql, llm: providers.llm }),
+    [QUEUES.documentsAutomation]: documentsAutomationHandler({ sql: db.sql }),
+    [QUEUES.composeAssist]: composeAssistHandler({
+      sql: db.sql,
+      llm: providers.llm,
+      embeddings: providers.embeddings,
+    }),
     [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
     [QUEUES.healthCheck]: healthCheckHandler({
       sql: db.sql,

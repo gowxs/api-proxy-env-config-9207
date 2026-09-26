@@ -163,6 +163,13 @@ function links(
       };
     case 'payment_proposed':
       return { dashboard: `${app}/payments` };
+    case 'document_needs_you':
+      return {
+        dashboard:
+          typeof p.documentId === 'string'
+            ? `${app}/documents/${p.documentId}`
+            : `${app}/documents`,
+      };
     case 'quote_accepted':
     case 'quote_needs_you':
       return {

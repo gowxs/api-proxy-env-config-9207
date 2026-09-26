@@ -62,13 +62,29 @@ export async function openDocuments(tx: TransactionSql): Promise<OpenDocument[]>
   }));
 }
 
-/** Marks a document paid; a payment reminder that has not gone out yet is dropped. */
+/** Queue name of the documents automation job (apps/worker/src/jobs/documents-automation.ts). */
+export const DOCUMENTS_AUTOMATION_QUEUE = 'documents.automation';
+
+/**
+ * Marks a document paid; a payment reminder that has not gone out yet is
+ * dropped. A paid invoice starts the "delivery note after payment"
+ * automation when the tenant switched it on (PLAN.md §22.12).
+ */
 export async function markDocumentPaid(tx: TransactionSql, documentId: string): Promise<boolean> {
-  const [d] = await tx<{ reminder_draft_id: string | null }[]>`
+  const [d] = await tx<{ reminder_draft_id: string | null; tenant_id: string; type: string }[]>`
     update public.documents set status = 'paid', paid_at = now()
     where id = ${documentId} and payable and status in ('issued', 'sent')
-    returning reminder_draft_id`;
+    returning reminder_draft_id, tenant_id, type`;
   if (!d) return false;
+  if (d.type === 'invoice')
+    await tx`
+      insert into public.jobs (tenant_id, queue, payload, singleton_key)
+      select t.id, ${DOCUMENTS_AUTOMATION_QUEUE}, ${tx.json({ event: 'invoice_paid', documentId })},
+             ${`auto:paid:${documentId}`}
+      from public.tenants t
+      where t.id = ${d.tenant_id} and t.documents_enabled and t.auto_delivery_note_after_payment
+      on conflict (queue, singleton_key) where singleton_key is not null and status in ('queued', 'running')
+      do nothing`;
   if (d.reminder_draft_id)
     await tx`update public.drafts set status = 'superseded'
              where id = ${d.reminder_draft_id} and status in ('pending_approval', 'approved')

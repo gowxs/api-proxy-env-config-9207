@@ -13,6 +13,7 @@ import { connectionRoutes } from './routes/connections.ts';
 import { meRoutes } from './routes/me.ts';
 import { quoteLinkRoutes } from './routes/quote-link.ts';
 import { quoteRoutes } from './routes/quotes.ts';
+import { composeRoutes } from './routes/compose.ts';
 import { documentRoutes } from './routes/documents.ts';
 import { HttpError, webRoutes } from './routes/web.ts';
 
@@ -137,6 +138,7 @@ export function buildApp(
   webRoutes(app, full);
   quoteRoutes(app, { ...full, publicApiUrl: publicApiUrl(deps) });
   documentRoutes(app, full);
+  composeRoutes(app, full);
   billingRoutes(app, {
     sql: deps.sql,
     billing: deps.billing ?? { env: 'sandbox' },

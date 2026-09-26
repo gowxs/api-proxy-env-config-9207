@@ -34,18 +34,28 @@ function List() {
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1 text-sm sm:w-80">
-        {(['needs_action', 'all'] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() =>
-              router.replace(f === 'all' ? '/conversations' : '/conversations?filter=needs_action')
-            }
-            className={`min-h-10 rounded-md ${filter === f ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
-          >
-            {f === 'needs_action' ? 'Needs you' : 'All'}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="grid flex-1 grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1 text-sm sm:w-80 sm:flex-none">
+          {(['needs_action', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() =>
+                router.replace(
+                  f === 'all' ? '/conversations' : '/conversations?filter=needs_action',
+                )
+              }
+              className={`min-h-10 rounded-md ${filter === f ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
+            >
+              {f === 'needs_action' ? 'Needs you' : 'All'}
+            </button>
+          ))}
+        </div>
+        <Link
+          href="/conversations/new"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-indigo-700 px-4 text-sm font-medium text-white hover:bg-indigo-800 sm:ml-auto"
+        >
+          <span aria-hidden>＋</span> New e-mail
+        </Link>
       </div>
       <ErrorText>{error}</ErrorText>
       {!data ? (

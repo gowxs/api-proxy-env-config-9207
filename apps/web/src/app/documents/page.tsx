@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
-import { BankSendersCard, SellerCard, type DocSettings } from '@/components/document-setup';
+import {
+  AutomationCard,
+  BankSendersCard,
+  SellerCard,
+  type DocSettings,
+} from '@/components/document-setup';
 import { ModuleBar, ModuleOff, Tabs, useModuleToggle, useTab } from '@/components/module';
 import { AppPage } from '@/components/shell';
 import { Badge, Button, cx, ErrorText, Loading, useAction, useLoad } from '@/components/ui';
@@ -193,6 +198,7 @@ function DocumentsModule() {
       {tab === 'documents' && <DocumentList />}
       {tab === 'setup' && (
         <div className="space-y-4">
+          <AutomationCard s={s} tenantId={tenantId} reload={t.reload} />
           <SellerCard s={s} tenantId={tenantId} reload={t.reload} />
           <BankSendersCard tenantId={tenantId} />
         </div>

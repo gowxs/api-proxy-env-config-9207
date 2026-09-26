@@ -126,8 +126,8 @@ describe('what is missing before issuing', () => {
       o,
     );
     expect(p).toEqual([
-      'Your VAT number is missing (Settings → Documents)',
-      'Your IBAN is not valid (Settings → Documents)',
+      'Your VAT number is missing (Documents → Setup)',
+      'Your IBAN is not valid (Documents → Setup)',
       'Buyer: name is missing',
       'Buyer: address is missing',
       'Line 1: item is missing',
@@ -176,7 +176,7 @@ describe('what is missing before issuing', () => {
       lines: [{ name: 'Candle', unit: 'pcs', qty: 2, unitPriceCents: null }],
     };
     expect(documentProblems('delivery_note', d, { ...seller, vatNo: null }, o)).toEqual([
-      'Your VAT number is missing (Settings → Documents)',
+      'Your VAT number is missing (Documents → Setup)',
       'Line 1: price is missing',
     ]);
   });

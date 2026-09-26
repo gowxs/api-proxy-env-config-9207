@@ -10,4 +10,6 @@ export const QUEUES = {
   tenantDelete: 'tenant.delete',
   quotesImport: 'quotes.import',
   documentsPrefill: 'documents.prefill',
+  documentsAutomation: 'documents.automation',
+  composeAssist: 'compose.assist',
 } as const;

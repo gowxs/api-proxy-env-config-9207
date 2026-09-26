@@ -39,7 +39,14 @@ interface Message {
 }
 interface Draft {
   id: string;
-  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document' | 'payment_reminder';
+  kind:
+    | 'reply'
+    | 'followup'
+    | 'acknowledgement'
+    | 'quote'
+    | 'document'
+    | 'payment_reminder'
+    | 'compose';
   status: string;
   to_address: string;
   subject: string;
@@ -136,11 +143,13 @@ function DraftCard({
               ? 'Reply with document'
               : draft.kind === 'payment_reminder'
                 ? 'Payment reminder'
-                : draft.kind === 'followup'
-                  ? 'Follow-up draft'
-                  : draft.kind === 'acknowledgement'
-                    ? 'Acknowledgement (sent automatically)'
-                    : 'Reply draft'}
+                : draft.kind === 'compose'
+                  ? 'New e-mail'
+                  : draft.kind === 'followup'
+                    ? 'Follow-up draft'
+                    : draft.kind === 'acknowledgement'
+                      ? 'Acknowledgement (sent automatically)'
+                      : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}

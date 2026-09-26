@@ -794,6 +794,42 @@ Forced RLS and isolation policies like every table. Documents are business recor
 - **Mode rules:** in mode 1 the reminder waits for approval; in modes 2 and 3 it is sent.
 - **If paid first:** a payment recorded before the reminder is sent supersedes it.
 
+### 22.11 Invoice when a quote is accepted (founder request 2026-09-26)
+
+- Per-tenant switch `auto_invoice_on_accept`, on by default; it only acts while Documents is on. It lives in Documents → Setup → Automation.
+- The customer's Accept click queues `documents.automation` (`quote_accepted`). The worker runs it once per quote; it does nothing if the owner already made an invoice from that quote.
+- **Invoice:** made from the quote (lines, VAT, currency, language).
+  - Buyer details are copied from this e-mail address's latest issued invoice. These are details the owner already confirmed, so nothing is invented.
+  - The invoice is issued ("Ready", numbered). The reply reads "Thank you for accepting quote Q-… Invoice INV-… for … is attached, due …", in six languages.
+- **Mode rules:**
+  - Mode 1: the reply waits for approval and the owner gets a `draft_ready` e-mail.
+  - Modes 2 and 3: the reply is sent if the invoice total is within the quote auto-send limit; otherwise it waits (`invoice_over_limit`).
+  - At send time the limit, the Documents switch and the usual automatic-send caps are checked again.
+- **Missing details** (for example no buyer address for a new customer): the invoice stays a draft, nothing is sent, and the owner gets a `document_needs_you` e-mail listing what is missing.
+
+### 22.12 Delivery note after payment
+
+- Per-tenant switch `auto_delivery_note_after_payment`, off by default.
+- **Trigger:** any path that marks an invoice paid (owner click, payment confirmed, exact bank match) queues `invoice_paid`. It runs once per invoice.
+- **Delivery note:** made from the invoice (receiver, delivery address, lines) and issued. The reply reads "Thank you for your payment of invoice … Delivery note … is attached."
+- **Mode rules:** mode 1 waits for approval; modes 2 and 3 send. Missing details are handled as in §22.11.
+
+### 22.13 New e-mail (Inbox)
+
+- **Screen:** Inbox → "New e-mail", with To, Subject and Message, plus up to 5 ready documents attached as PDFs.
+- **Sending:**
+  - The e-mail goes from the tenant's connected mailbox.
+  - It starts a new conversation (thread), with a lead for the address; an existing lead is reused.
+  - The owner writes it, so it is approved on send (`compose` draft, `owner_approval`).
+- **After sending:**
+  - Attached documents become "sent".
+  - The conversation waits for the customer, with follow-ups as for any reply.
+- **"Write with AI":**
+  - The owner describes what to say, and the worker (`compose.assist`) drafts from those notes and the knowledge base (cited excerpts shown).
+  - Numbers found in neither the notes nor a cited excerpt are pointed out.
+  - The owner edits before sending.
+  - Budget and free-tier rules apply: the free tier is refused unless every connected mailbox is a test mailbox.
+
 ## 23. Integrations page and waitlist (founder request 2026-09-26)
 
 - **Site:**

@@ -33,6 +33,10 @@ export const GREENMAIL_USERS = {
   docCustomer: { address: 'karlis@example-mail.test', password: 'karlis-pass' },
   payShop: { address: 'accounts@lumen-studio.test', password: 'app-pass-p' },
   payCustomer: { address: 'liga@example-mail.test', password: 'liga-pass' },
+  autoShop: { address: 'sales@lumen-studio.test', password: 'app-pass-s' },
+  autoCustomer: { address: 'edgars@example-mail.test', password: 'edgars-pass' },
+  composeShop: { address: 'team@lumen-studio.test', password: 'app-pass-t' },
+  composeCustomer: { address: 'ruta@example-mail.test', password: 'ruta-pass' },
   /** Owner login email for notification tests. */
   owner: { address: 'owner@lumen-studio.test', password: 'owner-pass' },
   admin: { address: 'admin@noctiv.test', password: 'admin-pass' },

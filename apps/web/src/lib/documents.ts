@@ -109,6 +109,8 @@ interface DocBase {
   draft_id: string | null;
   /** The overdue reminder's draft, once queued. */
   reminder_draft_id: string | null;
+  /** Made by the documents automation. */
+  auto_source?: 'quote_accepted' | 'invoice_paid' | null;
   /** Fields the AI filled from the e-mail, with the text they were copied from. */
   prefill: Record<string, { source: string }> | null;
   prefill_status: 'pending' | 'done' | 'failed' | null;

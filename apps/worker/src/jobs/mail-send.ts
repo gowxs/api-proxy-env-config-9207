@@ -30,7 +30,14 @@ import {
 } from '@noctiv/documents';
 
 type DraftKind =
-  'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document' | 'payment_reminder';
+  | 'reply'
+  | 'followup'
+  | 'acknowledgement'
+  | 'quote'
+  | 'document'
+  | 'payment_reminder'
+  /** A new e-mail written in the Inbox (may carry ready documents). */
+  | 'compose';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -107,6 +114,10 @@ interface SendPlan {
   quote: { doc: QuoteDocument; logoAllowed: boolean } | null;
   /** A 'document' draft: the invoice, delivery note or CMR to attach. */
   document: { doc: DocumentRecord; logoAllowed: boolean } | null;
+  /** A 'compose' e-mail: the ready documents the owner attached. */
+  attachedDocuments: DocumentRecord[];
+  /** The tenant's logo may be fetched for those documents (allowlisted). */
+  attachLogos: boolean;
 }
 
 type PlanResult =
@@ -209,6 +220,20 @@ export function mailSendHandler(deps: MailSendDeps) {
           contentType: 'application/pdf',
         },
       ];
+    }
+    if (plan.attachedDocuments.length) {
+      attachments = [];
+      for (const doc of plan.attachedDocuments) {
+        const logo =
+          deps.fetchLogo && doc.brand.logoUrl && plan.attachLogos
+            ? await fetchQuoteLogo(deps.fetchLogo, doc.brand.logoUrl)
+            : null;
+        attachments.push({
+          filename: documentFileName(doc),
+          content: await renderDocumentPdf(doc, logo),
+          contentType: 'application/pdf',
+        });
+      }
     }
 
     const raw = await buildOutboundMessage({
@@ -431,10 +456,33 @@ async function planSend(
       await tx`update public.drafts set status = 'superseded' where id = ${d.id}`;
       return { done: { skipped: `reminder_document_${doc.status}` } };
     }
+    // Made and sent by the documents automation: re-check at send time
+    // (the owner may have lowered the limit or switched Documents off).
+    if (!existing && !reminder && outbound.sentVia === 'auto') {
+      const [t] = await tx<{ limit_cents: number; enabled: boolean }[]>`
+        select quotes_auto_send_limit_cents as limit_cents, documents_enabled as enabled
+        from public.tenants where id = ${tenantId}`;
+      if (doc.type === 'invoice' && doc.totalCents > t!.limit_cents)
+        quoteHold.push('invoice_over_limit');
+      if (!t!.enabled) quoteHold.push('documents_disabled');
+    }
     const logoOk = doc.brand.logoUrl
       ? logoAllowed(doc.brand.logoUrl, await loadAllowlist(tx))
       : false;
     document = { doc, logoAllowed: logoOk };
+  }
+
+  const attachedDocuments: DocumentRecord[] = [];
+  let attachLogos = false;
+  if (d.kind === 'compose') {
+    const ids = await tx<{ id: string }[]>`
+      select id from public.documents where draft_id = ${d.id} order by created_at`;
+    for (const { id } of ids) attachedDocuments.push((await loadDocument(tx, { id }))!);
+    // Cancelled (or back to a draft) since it was attached: the owner decides again.
+    if (!existing && attachedDocuments.some((x) => x.status === 'cancelled' || !x.number))
+      return { fail: { code: 'DOCUMENT_MISSING', outboundId: null } };
+    const logoUrl = attachedDocuments[0]?.brand.logoUrl;
+    attachLogos = logoUrl ? logoAllowed(logoUrl, await loadAllowlist(tx)) : false;
   }
 
   if (!existing && outbound.sentVia === 'auto') {
@@ -535,6 +583,8 @@ async function planSend(
       followupsSent: d.followups_sent,
       quote,
       document,
+      attachedDocuments,
+      attachLogos,
     },
   };
 }
@@ -628,6 +678,10 @@ async function finalizeSent(
              values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
                      ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'document', number: plan.document?.doc.number ?? null })})`;
     return;
+  }
+  if (plan.draft.kind === 'compose' && plan.attachedDocuments.length) {
+    await tx`update public.documents set status = 'sent', sent_at = ${now}
+             where draft_id = ${plan.draft.id} and status = 'issued'`;
   }
   const isQuote = plan.draft.kind === 'quote';
   if (isQuote) {

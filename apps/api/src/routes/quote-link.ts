@@ -1,6 +1,7 @@
 import { logoAllowed } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import { createSafeFetcher, loadAllowlist, type SafeFetch } from '@noctiv/kb';
+import { DOCUMENTS_AUTOMATION_QUEUE } from '@noctiv/documents';
 import {
   fetchQuoteLogo,
   formatDate,
@@ -236,6 +237,15 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
                  on conflict do nothing`;
         await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
                  values (${c.tenantId}, 'system', 'quote.accepted', 'quote', ${q.id}, ${tx.json({ via: 'customer_link' })})`;
+        // Documents automation (PLAN.md §22.11): the invoice follows on its own.
+        await tx`
+          insert into public.jobs (tenant_id, queue, payload, singleton_key)
+          select t.id, ${DOCUMENTS_AUTOMATION_QUEUE}, ${tx.json({ event: 'quote_accepted', quoteId: q.id })},
+                 ${`auto:quote:${q.id}`}
+          from public.tenants t
+          where t.id = ${c.tenantId} and t.documents_enabled and t.auto_invoice_on_accept
+          on conflict (queue, singleton_key) where singleton_key is not null and status in ('queued', 'running')
+          do nothing`;
       } else if (past?.past) {
         await tx`update public.quotes set status = 'expired', expired_at = now()
                  where id = ${c.quoteId} and status in ('sent', 'viewed')`;

@@ -76,7 +76,7 @@ const quotePatch = z
   .partial()
   .strict();
 
-/** Quote settings in Settings → Quotes (merged into PATCH /v1/tenants/:id). */
+/** Quote settings in Quotes → Setup (merged into PATCH /v1/tenants/:id). */
 export const quoteSettingsShape = {
   quotesEnabled: z.boolean(),
   quotesCurrency: z

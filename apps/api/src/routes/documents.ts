@@ -75,6 +75,9 @@ export const documentSettingsShape = {
   docPrefixInvoice: prefix,
   docPrefixDeliveryNote: prefix,
   docPrefixCmr: prefix,
+  /** Automation (PLAN.md §22.11–§22.12). */
+  autoInvoiceOnAccept: z.boolean(),
+  autoDeliveryNoteAfterPayment: z.boolean(),
 };
 type DocumentSettings = Partial<{
   [K in keyof typeof documentSettingsShape]: z.output<(typeof documentSettingsShape)[K]>;
@@ -95,6 +98,8 @@ export function documentSettingsColumns(b: DocumentSettings): Record<string, unk
     ['docPrefixInvoice', 'doc_prefix_invoice'],
     ['docPrefixDeliveryNote', 'doc_prefix_delivery_note'],
     ['docPrefixCmr', 'doc_prefix_cmr'],
+    ['autoInvoiceOnAccept', 'auto_invoice_on_accept'],
+    ['autoDeliveryNoteAfterPayment', 'auto_delivery_note_after_payment'],
   ];
   const cols: Record<string, unknown> = {};
   for (const [k, col] of map) {
@@ -229,7 +234,7 @@ export function documentRoutes(
       const [t] = await tx<{ documents_enabled: boolean }[]>`
         select documents_enabled from public.tenants`;
       if (!t?.documents_enabled)
-        throw new HttpError(409, 'Documents are switched off (Settings → Documents).');
+        throw new HttpError(409, 'Documents are switched off (Documents → Setup).');
       let id: string;
       try {
         id = await createDocument(tx, { tenantId, ...b });

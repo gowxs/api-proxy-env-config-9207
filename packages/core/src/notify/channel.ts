@@ -18,6 +18,8 @@ export type NotificationKind =
   /** Documents (beta): a bank credit matched an invoice (paid), or may match one (proposal). */
   | 'payment_matched'
   | 'payment_proposed'
+  /** Documents automation: an invoice / delivery note was made but needs the owner's details. */
+  | 'document_needs_you'
   /** One-off check that the system mailer reaches the owner (queued by an operator). */
   | 'test';
 

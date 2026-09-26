@@ -35,6 +35,8 @@ const REASONS: Record<string, string> = {
   quote_unmapped: 'some requested items are not on your price list',
   quote_empty: 'nothing in the request matched your price list',
   quotes_disabled: 'Quotes (beta) is switched off',
+  invoice_over_limit: 'the invoice total is above your automatic-send limit',
+  documents_disabled: 'Documents (beta) is switched off',
 };
 
 export function describeReason(code: string): string {
@@ -337,6 +339,26 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
           footer: FOOTER,
         },
       );
+    }
+    case 'document_needs_you': {
+      const what = str(p.type) === 'delivery_note' ? 'delivery note' : 'invoice';
+      const why =
+        str(p.event) === 'invoice_paid'
+          ? 'Your customer paid an invoice'
+          : 'Your customer accepted a quote';
+      const problems = Array.isArray(p.problems)
+        ? p.problems.map((x) => headerText(String(x), 120)).join('; ')
+        : '';
+      return render(`Finish the ${what}: a few details are missing`, {
+        heading: `${why}, so I prepared the ${what}. It needs a few details before it can be sent.`,
+        lines: [
+          ['Account', n.tenantName],
+          ...(problems ? ([['Missing', problems]] as [string, string][]) : []),
+        ],
+        note: `Nothing was sent. Add the details, then send the ${what} from the dashboard.`,
+        buttons: [[`Open the ${what}`, n.links.dashboard]],
+        footer: FOOTER,
+      });
     }
     case 'quote_needs_you': {
       const items = Array.isArray(p.unmapped)

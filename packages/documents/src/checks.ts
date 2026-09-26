@@ -38,7 +38,7 @@ export const formatIban = (raw: string) =>
 
 function sellerProblems(s: Seller, o: { needVat: boolean; needBank: boolean }): string[] {
   const p: string[] = [];
-  const where = ' (Settings → Documents)';
+  const where = ' (Documents → Setup)';
   if (blank(s.legalName)) p.push(`Your legal name is missing${where}`);
   if (blank(s.legalAddress)) p.push(`Your legal address is missing${where}`);
   if (o.needVat && blank(s.vatNo)) p.push(`Your VAT number is missing${where}`);

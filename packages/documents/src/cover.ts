@@ -120,3 +120,65 @@ export function paymentReminderText(i: {
     '\n',
   );
 }
+
+/**
+ * Automation (PLAN.md §22.11–§22.12): the reply that carries an invoice made
+ * from an accepted quote, and a delivery note made after payment.
+ */
+const AFTER_ACCEPT: Record<QuoteLanguage, (q: string, n: string, t: string, d: string) => string> =
+  {
+    en: (q, n, t, d) =>
+      `Thank you for accepting quote ${q}. Invoice ${n} for ${t} is attached, due ${d}. The payment details are on the invoice.`,
+    de: (q, n, t, d) =>
+      `vielen Dank für die Annahme des Angebots ${q}. Anbei die Rechnung ${n} über ${t}, fällig am ${d}. Die Zahlungsdetails finden Sie auf der Rechnung.`,
+    lv: (q, n, t, d) =>
+      `Paldies, ka apstiprinājāt piedāvājumu ${q}! Pielikumā ir rēķins ${n} par summu ${t}, apmaksas termiņš ${d}. Maksājuma rekvizīti ir norādīti rēķinā.`,
+    nl: (q, n, t, d) =>
+      `Hartelijk dank voor het accepteren van offerte ${q}. In de bijlage vindt u factuur ${n} van ${t}, te betalen vóór ${d}. De betaalgegevens staan op de factuur.`,
+    fr: (q, n, t, d) =>
+      `Merci d’avoir accepté le devis ${q}. Veuillez trouver ci-joint la facture ${n} d’un montant de ${t}, à régler avant le ${d}. Les coordonnées bancaires figurent sur la facture.`,
+    es: (q, n, t, d) =>
+      `Gracias por aceptar el presupuesto ${q}. Adjuntamos la factura ${n} por ${t}, con vencimiento el ${d}. Los datos de pago figuran en la factura.`,
+  };
+
+const AFTER_PAYMENT: Record<QuoteLanguage, (inv: string, n: string) => string> = {
+  en: (inv, n) => `Thank you for your payment of invoice ${inv}. Delivery note ${n} is attached.`,
+  de: (inv, n) =>
+    `vielen Dank für die Bezahlung der Rechnung ${inv}. Anbei erhalten Sie den Lieferschein ${n}.`,
+  lv: (inv, n) => `Paldies par rēķina ${inv} apmaksu! Pielikumā ir preču pavadzīme ${n}.`,
+  nl: (inv, n) =>
+    `Hartelijk dank voor de betaling van factuur ${inv}. In de bijlage vindt u pakbon ${n}.`,
+  fr: (inv, n) =>
+    `Merci pour le règlement de la facture ${inv}. Veuillez trouver ci-joint le bon de livraison ${n}.`,
+  es: (inv, n) => `Gracias por el pago de la factura ${inv}. Adjuntamos el albarán ${n}.`,
+};
+
+export function acceptedInvoiceText(i: {
+  language: string | null;
+  customerName: string | null;
+  quoteNumber: string;
+  number: string;
+  total: string;
+  due: string;
+}): string {
+  const l = quoteLang(i.language);
+  return [
+    HELLO[l](greetingName(i.customerName)),
+    '',
+    AFTER_ACCEPT[l](i.quoteNumber, i.number, i.total, i.due),
+  ].join('\n');
+}
+
+export function paidDeliveryNoteText(i: {
+  language: string | null;
+  customerName: string | null;
+  invoiceNumber: string;
+  number: string;
+}): string {
+  const l = quoteLang(i.language);
+  return [
+    HELLO[l](greetingName(i.customerName)),
+    '',
+    AFTER_PAYMENT[l](i.invoiceNumber, i.number),
+  ].join('\n');
+}

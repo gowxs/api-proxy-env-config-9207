@@ -275,12 +275,20 @@ describe('price list', () => {
       >`select status from public.quotes where id = ${quoteId}`;
       expect(q!.status).toBe('viewed');
 
+      // With Documents on, accepting queues the invoice automation (PLAN.md §22.11).
+      await owner`update public.tenants set documents_enabled = true where id = ${A.tenantId}`;
       const accept = await app.inject({
         method: 'POST',
         url,
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         payload: '',
       });
+      await owner`update public.tenants set documents_enabled = false where id = ${A.tenantId}`;
+      const jobs = await owner<{ payload: Record<string, unknown> }[]>`
+        select payload from public.jobs
+        where tenant_id = ${A.tenantId} and queue = 'documents.automation'
+          and payload->>'quoteId' = ${quoteId}`;
+      expect(jobs.map((j) => j.payload)).toEqual([{ event: 'quote_accepted', quoteId }]);
       expect(accept.statusCode).toBe(200);
       expect(accept.body).toContain('You accepted this quote');
       [q] = await owner<
