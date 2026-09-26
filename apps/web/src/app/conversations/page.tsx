@@ -20,6 +20,10 @@ interface Row {
   pending_drafts: number;
   open_escalations: number;
   preview: string | null;
+  /** The latest e-mail was skipped (newsletter, spam, automatic message). */
+  ignored: boolean;
+  /** The latest e-mail is still being read by the assistant. */
+  reading: boolean;
 }
 
 function List() {
@@ -87,9 +91,15 @@ function List() {
                     <div className="truncate text-xs text-neutral-500">{r.preview}</div>
                   )}
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {r.pending_drafts > 0 && <Badge tone="amber">Draft to approve</Badge>}
-                    {r.open_escalations > 0 && <Badge tone="red">Reply yourself</Badge>}
-                    {!r.pending_drafts && !r.open_escalations && (
+                    {r.open_escalations > 0 ? (
+                      <Badge tone="red">Reply yourself</Badge>
+                    ) : r.pending_drafts > 0 ? (
+                      <Badge tone="amber">Draft to approve</Badge>
+                    ) : r.reading ? (
+                      <Badge tone="blue">Reading…</Badge>
+                    ) : r.ignored ? (
+                      <Badge>Ignored (not a customer e-mail)</Badge>
+                    ) : (
                       <Badge tone={st.tone}>{st.text}</Badge>
                     )}
                   </div>

@@ -107,7 +107,7 @@ function LoginForm() {
             </button>
             {mode === 'signin' && (
               <button type="button" className="text-indigo-700" onClick={() => void magicLink()}>
-                Email me a link
+                Forgot password? Email me a link
               </button>
             )}
           </div>

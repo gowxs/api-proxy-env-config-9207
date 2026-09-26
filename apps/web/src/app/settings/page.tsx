@@ -458,9 +458,10 @@ function DeleteAccount({ tenantId, name }: { tenantId: string; name: string }) {
   return (
     <Card title={<span className="text-red-800">Delete all data</span>}>
       <p className="text-sm text-neutral-700">
-        Permanently deletes this business: conversations, drafts, leads, the knowledge base, mailbox
-        connections and your login. Nothing is kept except an anonymous record that a deletion
-        happened. This cannot be undone.
+        Permanently deletes this business: conversations, drafts, leads, quotes, invoices and other
+        documents, the knowledge base, mailbox connections and your login. Nothing is kept except an
+        anonymous record that a deletion happened. This cannot be undone. If you must keep invoices
+        for your records, download their PDFs first.
       </p>
       <p className="mt-2 text-sm text-neutral-700">
         Emails already in your own mailbox are not touched. A subscription is cancelled at once;

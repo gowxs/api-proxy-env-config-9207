@@ -5,6 +5,7 @@ import {
   extractAllowlistEntries,
   findLinks,
   sanitizeReply,
+  stripCitationMarkers,
 } from '../src/index.ts';
 import { BOM, RLO, ZWSP } from './fixtures/chars.ts';
 
@@ -78,5 +79,17 @@ describe('sanitizeReply', () => {
       text: 'Thanks for your message!',
       removed: [],
     });
+  });
+});
+
+describe('citation markers', () => {
+  it('are removed from the text a customer reads, and are not a content removal', () => {
+    const r = sanitizeReply(
+      'Ein Onepager kostet 3.900 € [S1]. Die Umsetzung dauert 3–4 Wochen [S1, S2] .',
+      emptyAllowlist(),
+    );
+    expect(r.text).toBe('Ein Onepager kostet 3.900 €. Die Umsetzung dauert 3–4 Wochen.');
+    expect(r.removed).toEqual([]);
+    expect(stripCitationMarkers('Plain text [see note].')).toBe('Plain text [see note].');
   });
 });

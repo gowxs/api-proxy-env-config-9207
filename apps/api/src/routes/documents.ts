@@ -59,7 +59,7 @@ export const documentSettingsShape = {
       .string()
       .trim()
       .max(30)
-      .refine(vatNoValid, 'VAT number: use the country prefix, e.g. LV40003123456'),
+      .refine(vatNoValid, 'VAT number: use the country prefix, e.g. GB123456789 or DE123456789'),
   ),
   sellerBankName: blank(z.string().trim().max(100)),
   sellerIban: blank(z.string().trim().max(42).refine(ibanValid, 'That IBAN is not valid')),

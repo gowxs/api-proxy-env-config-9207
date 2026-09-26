@@ -52,10 +52,23 @@ function tidy(text: string): string {
  * knowledge base (PLAN.md §3.5 rule 5), plus invisible characters. Anything
  * removed is reported; the policy engine then refuses to auto-send.
  */
+/**
+ * Citation markers ("[S1]", "[S1, S2]") belong in the "sources" list, but a
+ * model sometimes also writes them into the text; they mean nothing to a
+ * customer and are removed (formatting only, not a content removal).
+ */
+export function stripCitationMarkers(s: string): string {
+  const out = s
+    .replace(/[ \t]*\[\s*S\d{1,3}(?:\s*[,;]\s*S\d{1,3})*\s*\]/gi, '')
+    .replace(/[ \t]+([.,;:!?])/g, '$1');
+  return out === s ? s : out;
+}
+
 export function sanitizeReply(reply: string, allow: Allowlist): SanitizedReply {
   const removed: Removal[] = [];
-  const visible = stripInvisible(reply);
-  if (visible !== reply) removed.push({ kind: 'invisible_characters', value: '' });
+  const stripped = stripInvisible(reply);
+  if (stripped !== reply) removed.push({ kind: 'invisible_characters', value: '' });
+  const visible = stripCitationMarkers(stripped);
 
   let out = '';
   let last = 0;

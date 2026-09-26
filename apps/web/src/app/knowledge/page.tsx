@@ -2,7 +2,7 @@
 
 import { KnowledgeAdd, SourceList, type KbSource } from '@/components/knowledge';
 import { AppPage } from '@/components/shell';
-import { Card, ErrorText, Loading, useLoad } from '@/components/ui';
+import { Card, ErrorText, Loading, useLoad, usePollWhile } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useTenantId } from '@/lib/session';
 
@@ -11,6 +11,10 @@ function Knowledge() {
   const { data, error, reload } = useLoad(
     () => api<KbSource[]>(`/v1/tenants/${tenantId}/kb/sources`),
     [tenantId],
+  );
+  usePollWhile(
+    Boolean(data?.some((s) => s.status === 'pending' || s.status === 'processing')),
+    reload,
   );
   return (
     <div className="grid gap-4 md:grid-cols-2">

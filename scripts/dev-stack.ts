@@ -151,6 +151,10 @@ async function main() {
     DEV_LOGIN_USER_ID: DEV.userId,
     DEV_LOGIN_EMAIL: DEV.ownerEmail,
     CONNECTION_TEST_WAIT_MS: '25000',
+    // Try the invite-code gate locally: SIGNUP_INVITE_CODES=CODE pnpm dev:stack --empty
+    ...(process.env.SIGNUP_INVITE_CODES
+      ? { SIGNUP_INVITE_CODES: process.env.SIGNUP_INVITE_CODES }
+      : {}),
   });
   start('worker', 'apps/worker', process.execPath, ['src/main.ts'], {
     ...common,
@@ -165,6 +169,12 @@ async function main() {
     ...(args.has('--gemini') && dotenv.GEMINI_API_KEY
       ? { GEMINI_API_KEY: dotenv.GEMINI_API_KEY }
       : { LLM_PROVIDER: 'fake' }),
+    // Model overrides, e.g. when the free tier's daily quota for one model is used up.
+    ...Object.fromEntries(
+      ['LLM_MODEL_FAST', 'LLM_MODEL_QUALITY', 'EMBED_MODEL']
+        .filter((k) => process.env[k])
+        .map((k) => [k, process.env[k]!]),
+    ),
   });
   start(
     'web',

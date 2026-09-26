@@ -261,6 +261,11 @@ function MessageItem({ m }: { m: Message }) {
           {m.summary && (
             <span className="w-full text-xs text-neutral-600">Summary: {m.summary}</span>
           )}
+          {(m.processing_status === 'queued' || m.processing_status === 'processing') && (
+            <Badge tone="blue">
+              Noctiv is still reading this e-mail — a draft appears here soon
+            </Badge>
+          )}
           {m.skip_reason && <Badge>{reasonText(m.skip_reason)}</Badge>}
           {reasons.map((r) => (
             <Badge key={r} tone="amber">
@@ -305,8 +310,9 @@ function ConversationView() {
         </Link>
         <h2 className="mt-2 text-lg font-semibold">{t.subject || '(no subject)'}</h2>
         <p className="text-sm text-neutral-600">
-          {t.customer_name ? `${t.customer_name} · ` : ''}
-          {t.customer_email} · to {t.mailbox}
+          {!data.messages.some((m) => m.direction === 'inbound')
+            ? `You (${t.mailbox}) → ${t.customer_name ? `${t.customer_name} · ` : ''}${t.customer_email}`
+            : `${t.customer_name ? `${t.customer_name} · ` : ''}${t.customer_email} · to ${t.mailbox}`}
         </p>
         <div className="mt-2 flex flex-wrap gap-1">
           <Badge tone={st.tone}>{st.text}</Badge>
@@ -325,7 +331,9 @@ function ConversationView() {
             Reason: {e.reason.split(', ').map(reasonText).join(' · ')}
           </p>
           <p className="mt-2 text-xs text-neutral-500">
-            Reply from your own mail app, then mark this as done.
+            {e.suggestion_draft_id
+              ? 'Check the suggested reply below and send it, or reply from your own mail app. Then mark this as done.'
+              : 'Reply from your own mail app, then mark this as done.'}
           </p>
           <ErrorText>{resolve.error}</ErrorText>
           <Button

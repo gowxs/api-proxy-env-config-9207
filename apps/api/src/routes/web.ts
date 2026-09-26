@@ -137,7 +137,7 @@ const settingsBody = z
 
 /** The sample reply shown in the Settings preview. */
 export const PREVIEW_REPLY =
-  'Hi Anna,\n\nThanks for your message. Yes, the lavender candle is in stock and costs 24 EUR; delivery within Latvia takes 2–3 business days.\n\nWould you like me to reserve one for you?';
+  'Hi Anna,\n\nThanks for your message. Yes, the lavender candle is in stock, and delivery takes 2–3 business days.\n\nWould you like me to reserve one for you?';
 
 const draftBody = z.object({ body: z.string().trim().min(1).max(20_000) }).strict();
 const approveBody = z.object({ body: z.string().trim().min(1).max(20_000).optional() }).strict();
@@ -470,7 +470,15 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                (select count(*) from public.drafts d where d.thread_id = th.id and d.status in ('pending_approval', 'suggestion'))::int as pending_drafts,
                (select count(*) from public.escalations e where e.thread_id = th.id and e.resolved_at is null)::int as open_escalations,
                (select left(m.body_text, 160) from public.messages m where m.thread_id = th.id and m.direction = 'inbound'
-                  order by m.received_at desc limit 1) as preview
+                  order by m.received_at desc limit 1) as preview,
+               coalesce((select p.status in ('queued', 'processing') from public.messages m
+                         join public.message_processing p on p.message_id = m.id
+                         where m.thread_id = th.id and m.direction = 'inbound'
+                         order by m.received_at desc limit 1), false) as reading,
+               coalesce((select p.status = 'skipped' from public.messages m
+                         join public.message_processing p on p.message_id = m.id
+                         where m.thread_id = th.id and m.direction = 'inbound'
+                         order by m.received_at desc limit 1), false) as ignored
         from public.threads th
         left join public.leads l on l.id = th.lead_id
         where ${
@@ -607,9 +615,15 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.post('/v1/tenants/:tenantId/escalations/:id/resolve', (req) =>
     tenantTx(req, async (tx, tenantId) => {
       const { id } = idParams.parse(req.params);
-      const rows = await tx`update public.escalations set resolved_at = now(), resolved_by = 'owner'
-                            where id = ${id} and resolved_at is null returning id`;
+      const rows = await tx<{ id: string; thread_id: string }[]>`
+        update public.escalations set resolved_at = now(), resolved_by = 'owner'
+        where id = ${id} and resolved_at is null returning id, thread_id`;
       if (!rows.length) throw new HttpError(409, 'already resolved or not found');
+      // The owner handled it: the conversation no longer needs them.
+      await tx`update public.threads set status = 'closed'
+               where id = ${rows[0]!.thread_id} and status = 'escalated'
+                 and not exists (select 1 from public.escalations e
+                                 where e.thread_id = ${rows[0]!.thread_id} and e.resolved_at is null)`;
       await audit(tx, tenantId, req.user!.userId, 'escalation.resolved', 'escalation', id);
       return { ok: true };
     }),
@@ -645,7 +659,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.notes !== undefined)
         await tx`update public.leads set notes = ${b.notes || null} where id = ${id}`;
       if (b.billing?.vatNo && !vatNoValid(b.billing.vatNo))
-        throw new HttpError(400, 'VAT number: use the country prefix, e.g. LV40003123456.');
+        throw new HttpError(
+          400,
+          'VAT number: use the country prefix, e.g. GB123456789 or DE123456789.',
+        );
       if (b.billing)
         await tx`update public.leads
                  set billing_name = ${b.billing.name || null}, billing_address = ${b.billing.address || null},

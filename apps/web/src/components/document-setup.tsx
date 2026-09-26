@@ -34,11 +34,16 @@ export interface DocSettings {
 }
 
 const FIELDS: [keyof DocSettings, string, string, string?][] = [
-  ['seller_legal_name', 'sellerLegalName', 'Legal name', 'As registered, e.g. “SIA Nordlicht”'],
+  ['seller_legal_name', 'sellerLegalName', 'Legal name', 'As registered, e.g. “Hearth & Wick Ltd”'],
   ['seller_legal_address', 'sellerLegalAddress', 'Legal address'],
-  ['seller_country', 'sellerCountry', 'Country', 'Printed on CMR notes, e.g. “Latvia”'],
+  ['seller_country', 'sellerCountry', 'Country', 'Printed on CMR notes, e.g. “United Kingdom”'],
   ['seller_reg_no', 'sellerRegNo', 'Registration number'],
-  ['seller_vat_no', 'sellerVatNo', 'VAT number', 'With the country prefix, e.g. LV40003123456'],
+  [
+    'seller_vat_no',
+    'sellerVatNo',
+    'VAT number',
+    'With the country prefix, e.g. GB123456789 or DE123456789',
+  ],
   ['seller_bank_name', 'sellerBankName', 'Bank'],
   ['seller_iban', 'sellerIban', 'IBAN'],
   ['seller_bic', 'sellerBic', 'BIC / SWIFT'],

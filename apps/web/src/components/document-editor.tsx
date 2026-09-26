@@ -31,7 +31,7 @@ import {
   type Doc,
   type InvoiceLine,
 } from '@/lib/documents';
-import { money, type PriceItem } from '@/lib/quotes';
+import { money, shortDate, type PriceItem } from '@/lib/quotes';
 import { DocumentPayment } from './payments';
 
 // ------------------------------------------------------------------ helpers
@@ -808,7 +808,7 @@ export function DocumentEditor({
         <p className="mt-1 text-sm text-neutral-500">
           {doc.counterparty_name ?? 'No customer yet'}
           {doc.payable && ` · ${money(doc.total_cents, doc.currency)}`}
-          {doc.issue_date && ` · issued ${doc.issue_date.slice(0, 10)}`}
+          {doc.issue_date && ` · issued ${shortDate(doc.issue_date)}`}
         </p>
         {doc.type !== 'cmr' && (
           <div className="mt-3">

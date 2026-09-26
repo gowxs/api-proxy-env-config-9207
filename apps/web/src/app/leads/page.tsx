@@ -186,7 +186,7 @@ function LeadRow({
                   value={billing.vatNo}
                   maxLength={30}
                   autoComplete="off"
-                  placeholder="e.g. LV40003123456"
+                  placeholder="e.g. GB123456789"
                   onChange={(e) => setB('vatNo', e.target.value)}
                 />
               </label>

@@ -12,7 +12,7 @@ const PROVIDERS: { id: Provider; label: string }[] = [
   { id: 'yahoo', label: 'Yahoo Mail' },
   { id: 'hostinger', label: 'Hostinger' },
   { id: 'generic', label: 'Other (IMAP/SMTP)' },
-  { id: 'outlook', label: 'Outlook / Microsoft 365' },
+  { id: 'outlook', label: 'Outlook / Microsoft 365 (not supported yet)' },
 ];
 
 /** A guide screenshot; without `src` a placeholder is shown until one is supplied. */
@@ -225,7 +225,7 @@ export function MailboxForm({
               open={!reconnect}
             >
               <summary className="cursor-pointer text-sm font-medium">
-                How to create an App Password
+                {provider === 'generic' ? 'What you need' : 'How to create an App Password'}
               </summary>
               <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-neutral-700">
                 {guide.steps.map((s) => (
@@ -355,7 +355,10 @@ export function MailboxForm({
               </strong>{' '}
               {result.message}
               {result.detail && (
-                <span className="mt-1 block text-xs opacity-75">Server said: {result.detail}</span>
+                <details className="mt-1 text-xs opacity-75">
+                  <summary className="cursor-pointer">Technical details</summary>
+                  {result.detail}
+                </details>
               )}
             </ErrorText>
           )}

@@ -39,20 +39,22 @@ function QuoteList() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
-          <div className="text-lg font-semibold tabular-nums">
-            {money(sum(['sent', 'viewed']), currency)}
+      {data.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
+            <div className="text-lg font-semibold tabular-nums">
+              {money(sum(['sent', 'viewed']), currency)}
+            </div>
+            <div className="text-xs text-neutral-500">Open (sent, not yet accepted)</div>
           </div>
-          <div className="text-xs text-neutral-500">Open (sent, not yet accepted)</div>
-        </div>
-        <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
-          <div className="text-lg font-semibold tabular-nums text-green-800">
-            {money(sum(['accepted']), currency)}
+          <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
+            <div className="text-lg font-semibold tabular-nums text-green-800">
+              {money(sum(['accepted']), currency)}
+            </div>
+            <div className="text-xs text-neutral-500">Accepted</div>
           </div>
-          <div className="text-xs text-neutral-500">Accepted</div>
         </div>
-      </div>
+      )}
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
         {FILTERS.map((x) => (
           <button
@@ -145,7 +147,11 @@ function QuotesModule() {
           },
         ]}
         note="Nothing is sent without your approval."
-        onEnable={() => toggle.set(true)}
+        onEnable={() => {
+          toggle.set(true);
+          // First thing to do: the price list quotes are made from.
+          setTab('prices');
+        }}
         busy={toggle.busy}
         error={toggle.error}
       />

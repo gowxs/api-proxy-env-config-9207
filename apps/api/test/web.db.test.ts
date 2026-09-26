@@ -89,6 +89,22 @@ describe('account and onboarding', () => {
         kb_sources: 0,
       },
     ]);
+    // Currency and VAT follow the country of the time zone (Riga: EUR, 21 %).
+    expect((await call('GET', `/v1/tenants/${created.json.id}`, userId)).json).toMatchObject({
+      quotes_currency: 'EUR',
+      quotes_vat_rate: 21,
+    });
+    const uk = randomUUID();
+    await owner`insert into auth.users (id, email, aud, role) values (${uk}, ${`uk-${uk.slice(0, 8)}@example.test`}, 'authenticated', 'authenticated')`;
+    const ukShop = await call('POST', '/v1/tenants', uk, {
+      name: 'Hearth & Wick',
+      timezone: 'Europe/London',
+      inviteCode: 'EARLY-2026',
+    });
+    expect((await call('GET', `/v1/tenants/${ukShop.json.id}`, uk)).json).toMatchObject({
+      quotes_currency: 'GBP',
+      quotes_vat_rate: 20,
+    });
     await call('PATCH', `/v1/tenants/${created.json.id}`, userId, { onboardingCompleted: true });
     expect(
       (await call('GET', '/v1/me', userId)).json.tenants[0].onboarding_completed_at,
@@ -192,6 +208,20 @@ describe('dashboard and conversations', () => {
     expect(typeof n.mode).toBe('string');
   });
 
+  it('marks conversations whose latest e-mail was ignored or is still being read', async () => {
+    const list = async () =>
+      (await call('GET', t(A, '/conversations'), A.userId)).json.find(
+        (x: { id: string }) => x.id === A.threadId,
+      );
+    const [p] = await owner<{ status: string }[]>`
+      select status from public.message_processing where message_id = ${A.messageId}`;
+    await owner`update public.message_processing set status = 'skipped' where message_id = ${A.messageId}`;
+    expect(await list()).toMatchObject({ ignored: true, reading: false });
+    await owner`update public.message_processing set status = 'processing' where message_id = ${A.messageId}`;
+    expect(await list()).toMatchObject({ ignored: false, reading: true });
+    await owner`update public.message_processing set status = ${p!.status} where message_id = ${A.messageId}`;
+  });
+
   it('lists threads that need action and shows one with its messages and drafts', async () => {
     const list = (await call('GET', t(A, '/conversations?filter=needs_action'), A.userId)).json;
     expect(list.map((x: { id: string }) => x.id)).toContain(A.threadId);
@@ -240,11 +270,19 @@ describe('dashboard and conversations', () => {
     expect((await call('POST', t(A, `/drafts/${d}/reject`), A.userId, {})).json.status).toBe(
       'rejected',
     );
-    const [esc] = await owner<{ id: string }[]>`
-      select id from public.escalations where tenant_id = ${A.tenantId} and resolved_at is null limit 1`;
+    const [esc] = await owner<{ id: string; thread_id: string }[]>`
+      select id, thread_id from public.escalations where tenant_id = ${A.tenantId} and resolved_at is null limit 1`;
+    await owner`update public.threads set status = 'escalated' where id = ${esc!.thread_id}`;
+    const others = await owner`
+      select 1 from public.escalations
+      where thread_id = ${esc!.thread_id} and resolved_at is null and id <> ${esc!.id}`;
     expect((await call('POST', t(A, `/escalations/${esc!.id}/resolve`), A.userId, {})).status).toBe(
       200,
     );
+    // "Mark as done" on the last open escalation: the conversation no longer needs the owner.
+    const [th] = await owner<{ status: string }[]>`
+      select status from public.threads where id = ${esc!.thread_id}`;
+    expect(th!.status).toBe(others.length ? 'escalated' : 'closed');
     expect((await call('POST', t(A, `/escalations/${esc!.id}/resolve`), A.userId, {})).status).toBe(
       409,
     );

@@ -84,7 +84,7 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     billingVatNo: 'VAT number',
     optional: 'optional',
     required: 'Please fill this in.',
-    vatInvalid: 'This VAT number looks wrong. Use the country prefix, e.g. LV40003123456.',
+    vatInvalid: 'This VAT number looks wrong. Use the country prefix, e.g. GB123456789.',
     fixBelow: 'Please check the details below.',
     downloadPdf: 'Download PDF',
     accepted: 'You accepted this quote. Thank you — we will be in touch.',

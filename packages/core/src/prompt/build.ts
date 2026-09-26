@@ -132,7 +132,10 @@ export function buildGenerationPrompt(input: {
     '4. Never offer discounts, refunds, free items, exceptions or deadlines unless an excerpt states them.',
     '5. Do not include links, email addresses or phone numbers unless they appear exactly in an excerpt.',
     `6. Write the reply in ${language}, friendly, concise and professional. Address only the sender. ` +
-      'Do not add a signature or sign-off name; it is added automatically.',
+      'Do not add a signature or sign-off name; it is added automatically. ' +
+      'Write as the business itself: never mention a knowledge base, excerpts, sources, an AI or an assistant, ' +
+      'and never say the e-mail was forwarded to a team. If part of the question is not answered by the excerpts, ' +
+      'leave that part out of the reply (a person will answer it).',
     '7. confidence (0 to 1): how sure you are that the reply is correct, complete and fully supported by the cited excerpts.',
     '8. action: "auto_send" only if the reply fully answers the email from the excerpts; "draft" if a person should check it; ' +
       '"escalate" if you cannot answer, or the email is a complaint, refund, legal or contract matter, discount request, angry or urgent.',

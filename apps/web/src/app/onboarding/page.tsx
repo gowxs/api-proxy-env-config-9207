@@ -14,6 +14,7 @@ import {
   Notice,
   useAction,
   useLoad,
+  usePollWhile,
 } from '@/components/ui';
 import { api } from '@/lib/api';
 import { SessionProvider, useSession } from '@/lib/session';
@@ -33,7 +34,8 @@ function BusinessStep({ onDone }: { onDone: () => Promise<void> }) {
   const guess = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [name, setName] = useState('');
   const [website, setWebsite] = useState('');
-  const [timezone, setTimezone] = useState('');
+  // The device's time zone is almost always the right one; it can be changed.
+  const [timezone, setTimezone] = useState(guess ?? '');
   const [invite, setInvite] = useState('');
   const { busy, error, run } = useAction();
   const zones = useMemo(timezones, []);
@@ -119,6 +121,10 @@ function KnowledgeStep({ tenantId, onNext }: { tenantId: string; onNext: () => v
     () => api<KbSource[]>(`/v1/tenants/${tenantId}/kb/sources`),
     [tenantId],
   );
+  usePollWhile(
+    Boolean(data?.some((s) => s.status === 'pending' || s.status === 'processing')),
+    reload,
+  );
   return (
     <div className="space-y-5">
       <p className="text-sm text-neutral-600">
@@ -175,7 +181,7 @@ function SummaryStep({ tenantId, onFinish }: { tenantId: string; onFinish: () =>
           })
         }
       >
-        Go to dashboard
+        Open Noctiv
       </Button>
     </div>
   );

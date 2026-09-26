@@ -54,6 +54,13 @@ const runner = new JobRunner({
   // A crashed worker's jobs are re-claimed after this. Long enough for a website
   // ingest that waits out free-tier rate limits (a live job must never be re-claimed).
   leaseSeconds: 900,
+  // Jobs run side by side; slow ones are capped so mail keeps flowing.
+  batchSize: 8,
+  queueLimits: {
+    [QUEUES.kbIngest]: 2,
+    [QUEUES.quotesImport]: 1,
+    [QUEUES.tenantDelete]: 1,
+  },
   handlers: {
     [QUEUES.connectionTest]: connectionTestHandler({
       keys,

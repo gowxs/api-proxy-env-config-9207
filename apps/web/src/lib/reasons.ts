@@ -27,11 +27,23 @@ const REASONS: Record<string, string> = {
   free_tier_refused: 'Not a test mailbox (free AI tier)',
 };
 
+/** What the fact check found without a source (packages/core claims). */
+const CLAIM: Record<string, string> = {
+  money: 'an amount',
+  percentage: 'a percentage',
+  duration: 'a time span',
+  time: 'a time of day',
+  date: 'a date',
+  weekday: 'a weekday',
+  number: 'a number',
+};
+
 export function reasonText(code: string): string {
   if (REASONS[code]) return REASONS[code];
   const [prefix, rest] = code.split(':');
   if (prefix === 'hard_list' && rest) return `Needs a person: ${rest.replace(/_/g, ' ')}`;
-  if (prefix === 'unsupported_claim' && rest) return `Unsupported ${rest.replace(/_/g, ' ')}`;
+  if (prefix === 'unsupported_claim' && rest)
+    return `The reply mentions ${CLAIM[rest] ?? `a ${rest.replace(/_/g, ' ')}`} that is not in your knowledge base`;
   if (prefix === 'loop_header' || prefix === 'class')
     return `Ignored (${(rest ?? '').replace(/_/g, ' ')})`;
   return code.replace(/[_:]/g, ' ');

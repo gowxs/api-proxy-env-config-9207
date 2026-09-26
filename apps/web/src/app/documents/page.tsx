@@ -57,18 +57,22 @@ function DocumentList() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
-          <div className="text-lg font-semibold tabular-nums">{money(sum(['sent']), currency)}</div>
-          <div className="text-xs text-neutral-500">Invoiced, not yet paid</div>
-        </div>
-        <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
-          <div className="text-lg font-semibold tabular-nums text-green-800">
-            {money(sum(['paid']), currency)}
+      {invoices.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
+            <div className="text-lg font-semibold tabular-nums">
+              {money(sum(['sent']), currency)}
+            </div>
+            <div className="text-xs text-neutral-500">Invoiced, not yet paid</div>
           </div>
-          <div className="text-xs text-neutral-500">Paid</div>
+          <div className="rounded-lg bg-white p-3 ring-1 ring-neutral-200">
+            <div className="text-lg font-semibold tabular-nums text-green-800">
+              {money(sum(['paid']), currency)}
+            </div>
+            <div className="text-xs text-neutral-500">Paid</div>
+          </div>
         </div>
-      </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={a.busy} onClick={() => create('invoice')}>
           New invoice

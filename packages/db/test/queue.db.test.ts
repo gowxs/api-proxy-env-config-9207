@@ -25,6 +25,43 @@ afterAll(() => Promise.all([owner.end(), worker.end(), api.end()]));
 const q = () => `test.${randomUUID().slice(0, 8)}`;
 
 describe('job queue', () => {
+  it('a slow job does not hold up others; a queue limit caps its share', async () => {
+    const slow = q();
+    const fast = q();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let slowStarted = 0;
+    const done: string[] = [];
+    const runner = new JobRunner({
+      sql: worker,
+      pollMs: 50,
+      batchSize: 4,
+      queueLimits: { [slow]: 1 },
+      handlers: {
+        [slow]: async () => {
+          slowStarted++;
+          await gate;
+          done.push('slow');
+        },
+        [fast]: async () => void done.push('fast'),
+      },
+    });
+    await enqueueFor(worker, { tenantId: T.tenantId, queue: slow });
+    await enqueueFor(worker, { tenantId: T.tenantId, queue: slow });
+    runner.start();
+    await new Promise((r) => setTimeout(r, 300));
+    // The crawl-like job is still running; a new fast job runs anyway.
+    await enqueueFor(worker, { tenantId: T.tenantId, queue: fast });
+    for (let i = 0; i < 40 && !done.includes('fast'); i++)
+      await new Promise((r) => setTimeout(r, 50));
+    expect(done).toEqual(['fast']);
+    expect(slowStarted).toBe(1);
+    release();
+    for (let i = 0; i < 40 && done.length < 3; i++) await new Promise((r) => setTimeout(r, 50));
+    await runner.stop();
+    expect(done).toEqual(['fast', 'slow', 'slow']);
+  });
+
   it('runs a job once and stores its result', async () => {
     const queue = q();
     const id = await enqueueFor(worker, { tenantId: T.tenantId, queue, payload: { n: 2 } });

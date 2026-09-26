@@ -68,8 +68,13 @@ export type JobHandler = (job: Job) => Promise<unknown>;
 export interface JobRunnerOptions {
   sql: Sql;
   handlers: Record<string, JobHandler>;
-  /** Jobs claimed per poll. */
+  /** Jobs run at the same time (runOnce: jobs claimed per call). */
   batchSize?: number;
+  /**
+   * At most this many jobs of a queue at once, so slow work (a website
+   * crawl) never takes every slot from mail fetching and sending.
+   */
+  queueLimits?: Record<string, number>;
   pollMs?: number;
   leaseSeconds?: number;
   onError?: (job: Job, error: unknown, outcome: string) => void;
@@ -84,73 +89,115 @@ export function backoffSeconds(attempts: number): number {
  * Polls the queue and runs handlers. A crashed worker's jobs become
  * claimable again when their lease expires; handlers must be idempotent.
  */
+type ClaimedRow = {
+  id: string;
+  tenant_id: string;
+  queue: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
+};
+
 export class JobRunner {
   private readonly opts: Required<Omit<JobRunnerOptions, 'onError'>> &
     Pick<JobRunnerOptions, 'onError'>;
   private timer: NodeJS.Timeout | undefined;
   private running = false;
-  private active: Promise<void> = Promise.resolve();
+  /** Jobs running now (job id → queue); start() keeps up to batchSize of them. */
+  private readonly inFlight = new Map<string, { queue: string; done: Promise<void> }>();
+  private claiming = false;
 
   constructor(opts: JobRunnerOptions) {
-    this.opts = { batchSize: 5, pollMs: 1_000, leaseSeconds: 300, ...opts };
+    this.opts = { batchSize: 5, pollMs: 1_000, leaseSeconds: 300, queueLimits: {}, ...opts };
   }
 
-  /** Claims and runs one batch; returns how many jobs ran. */
+  private claim(queues: string[], limit: number) {
+    return this.opts.sql<ClaimedRow[]>`
+      select * from app.claim_jobs(${queues}::text[], ${limit}, ${this.opts.leaseSeconds})`;
+  }
+
+  private async run(row: ClaimedRow): Promise<void> {
+    const job: Job = {
+      id: row.id,
+      tenantId: row.tenant_id,
+      queue: row.queue,
+      payload: row.payload,
+      attempts: row.attempts,
+      maxAttempts: row.max_attempts,
+    };
+    try {
+      const result = await this.opts.handlers[job.queue]!(job);
+      await this.opts
+        .sql`select app.finish_job(${job.id}, ${this.opts.sql.json((result ?? null) as never)})`;
+    } catch (e) {
+      const retryable = e instanceof JobError ? e.retryable : true;
+      const delay =
+        e instanceof JobError && e.retryInSeconds !== undefined
+          ? e.retryInSeconds
+          : backoffSeconds(job.attempts);
+      const message = e instanceof Error ? `${e.name}: ${e.message}` : 'unknown error';
+      const [r] = await this.opts.sql<
+        { fail_job: string }[]
+      >`select app.fail_job(${job.id}, ${message}, ${delay}, ${retryable})`;
+      this.opts.onError?.(job, e, r?.fail_job ?? 'unknown');
+    }
+  }
+
+  /** Claims and runs one batch to completion; returns how many jobs ran (tests, scripts). */
   async runOnce(): Promise<number> {
-    const queues = Object.keys(this.opts.handlers);
-    const jobs = await this.opts.sql<
-      {
-        id: string;
-        tenant_id: string;
-        queue: string;
-        payload: Record<string, unknown>;
-        attempts: number;
-        max_attempts: number;
-      }[]
-    >`select * from app.claim_jobs(${queues}::text[], ${this.opts.batchSize}, ${this.opts.leaseSeconds})`;
-    await Promise.all(
-      jobs.map(async (row) => {
-        const job: Job = {
-          id: row.id,
-          tenantId: row.tenant_id,
-          queue: row.queue,
-          payload: row.payload,
-          attempts: row.attempts,
-          maxAttempts: row.max_attempts,
-        };
-        try {
-          const result = await this.opts.handlers[job.queue]!(job);
-          await this.opts
-            .sql`select app.finish_job(${job.id}, ${this.opts.sql.json((result ?? null) as never)})`;
-        } catch (e) {
-          const retryable = e instanceof JobError ? e.retryable : true;
-          const delay =
-            e instanceof JobError && e.retryInSeconds !== undefined
-              ? e.retryInSeconds
-              : backoffSeconds(job.attempts);
-          const message = e instanceof Error ? `${e.name}: ${e.message}` : 'unknown error';
-          const [r] = await this.opts.sql<
-            { fail_job: string }[]
-          >`select app.fail_job(${job.id}, ${message}, ${delay}, ${retryable})`;
-          this.opts.onError?.(job, e, r?.fail_job ?? 'unknown');
-        }
-      }),
-    );
+    const jobs = await this.claim(Object.keys(this.opts.handlers), this.opts.batchSize);
+    await Promise.all(jobs.map((row) => this.run(row)));
     return jobs.length;
+  }
+
+  /**
+   * Fills free slots: queues with a limit are claimed on their own (up to
+   * their remaining allowance), the rest together. Returns jobs started.
+   */
+  private async fill(): Promise<number> {
+    if (this.claiming || !this.running) return 0;
+    this.claiming = true;
+    try {
+      let started = 0;
+      const busy = new Map<string, number>();
+      for (const j of this.inFlight.values()) busy.set(j.queue, (busy.get(j.queue) ?? 0) + 1);
+      const free = () => this.opts.batchSize - this.inFlight.size;
+      const limited = Object.keys(this.opts.handlers).filter(
+        (q) => this.opts.queueLimits[q] !== undefined,
+      );
+      const open = Object.keys(this.opts.handlers).filter(
+        (q) => this.opts.queueLimits[q] === undefined,
+      );
+      const startAll = (rows: ClaimedRow[]) => {
+        for (const row of rows) {
+          const done = this.run(row).finally(() => {
+            this.inFlight.delete(row.id);
+            // A slot is free again: look for more work at once.
+            if (this.running) void this.fill();
+          });
+          this.inFlight.set(row.id, { queue: row.queue, done });
+          started++;
+        }
+      };
+      if (free() > 0 && open.length) startAll(await this.claim(open, free()));
+      for (const q of limited) {
+        const n = Math.min(free(), this.opts.queueLimits[q]! - (busy.get(q) ?? 0));
+        if (n > 0) startAll(await this.claim([q], n));
+      }
+      return started;
+    } finally {
+      this.claiming = false;
+    }
   }
 
   start(): void {
     this.running = true;
     const tick = async () => {
       if (!this.running) return;
-      this.active = this.runOnce()
-        .then((n) => {
-          // Keep draining without waiting while there is work.
-          this.timer = setTimeout(tick, n > 0 ? 0 : this.opts.pollMs);
-        })
-        .catch(() => {
-          this.timer = setTimeout(tick, this.opts.pollMs);
-        });
+      const n = await this.fill().catch(() => 0);
+      // Keep draining without waiting while there is work and room.
+      const again = n > 0 && this.inFlight.size < this.opts.batchSize;
+      this.timer = setTimeout(() => void tick(), again ? 0 : this.opts.pollMs);
     };
     void tick();
   }
@@ -158,7 +205,7 @@ export class JobRunner {
   async stop(): Promise<void> {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
-    await this.active;
+    await Promise.all([...this.inFlight.values()].map((j) => j.done));
   }
 }
 

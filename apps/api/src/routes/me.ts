@@ -14,6 +14,23 @@ const createBody = z
   })
   .strict();
 
+/** Standard VAT rate and currency by time zone, for new businesses (QA 2026-09-26). */
+const LOCAL_DEFAULTS: Record<string, { currency: string; vatRate: number }> = {
+  'Europe/London': { currency: 'GBP', vatRate: 20 },
+  'Europe/Dublin': { currency: 'EUR', vatRate: 23 },
+  'Europe/Berlin': { currency: 'EUR', vatRate: 19 },
+  'Europe/Vienna': { currency: 'EUR', vatRate: 20 },
+  'Europe/Paris': { currency: 'EUR', vatRate: 20 },
+  'Europe/Amsterdam': { currency: 'EUR', vatRate: 21 },
+  'Europe/Brussels': { currency: 'EUR', vatRate: 21 },
+  'Europe/Madrid': { currency: 'EUR', vatRate: 21 },
+  'Europe/Rome': { currency: 'EUR', vatRate: 22 },
+  'Europe/Riga': { currency: 'EUR', vatRate: 21 },
+  'Europe/Vilnius': { currency: 'EUR', vatRate: 21 },
+  'Europe/Tallinn': { currency: 'EUR', vatRate: 24 },
+  'Europe/Helsinki': { currency: 'EUR', vatRate: 25.5 },
+};
+
 export interface MeDeps extends AppDeps {
   /** Phase 1 signup gate (PLAN.md Q12): creating an account needs one of these codes. Empty = open (dev). */
   inviteCodes: string[];
@@ -95,13 +112,20 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     const user = req.user!;
     const b = createBody.parse(req.body);
     if (deps.inviteCodes.length && !deps.inviteCodes.includes(b.inviteCode ?? ''))
-      throw new HttpError(403, 'A valid invite code is needed during the early access phase.');
+      throw new HttpError(
+        403,
+        'That invite code is not valid. Noctiv is invite-only during early access: ask us for a code at contact@noctiv.io.',
+      );
     const existing = await deps.sql`select 1 from app.user_tenants(${user.userId})`;
     if (existing.length) throw new HttpError(409, 'You already have a business account.');
     const id = randomUUID();
     await withTenant(deps.sql, id, async (tx) => {
-      await tx`insert into public.tenants (id, name, website_url, timezone)
-               values (${id}, ${b.name}, ${b.websiteUrl ?? null}, ${b.timezone})`;
+      // Currency and standard VAT rate of the business's country, guessed from its
+      // time zone (the owner can change both in Quotes → Setup).
+      const local = LOCAL_DEFAULTS[b.timezone];
+      await tx`insert into public.tenants (id, name, website_url, timezone, quotes_currency, quotes_vat_rate)
+               values (${id}, ${b.name}, ${b.websiteUrl ?? null}, ${b.timezone},
+                       ${local?.currency ?? 'EUR'}, ${local?.vatRate ?? 21})`;
       await tx`insert into public.tenant_members (tenant_id, user_id, role) values (${id}, ${user.userId}, 'owner')`;
       await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id)
                values (${id}, 'owner', ${user.userId}, 'tenant.created', 'tenant', ${id})`;

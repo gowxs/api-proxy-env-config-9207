@@ -159,3 +159,12 @@ export function timeAgo(iso: string | null | undefined): string {
 export function Loading() {
   return <p className="py-6 text-sm text-neutral-500">Loading…</p>;
 }
+
+/** Calls reload every few seconds while `active` (e.g. something is still being processed). */
+export function usePollWhile(active: boolean, reload: () => unknown, ms = 4000) {
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => void reload(), ms);
+    return () => clearTimeout(t);
+  });
+}
