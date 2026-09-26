@@ -156,6 +156,13 @@ function links(
       return { dashboard: draftId ? `${app}/drafts/${draftId}` : `${app}/drafts` };
     case 'mailbox_disconnected':
       return { dashboard: `${app}/settings/mailboxes` };
+    case 'payment_matched':
+      return {
+        dashboard:
+          typeof p.documentId === 'string' ? `${app}/documents/${p.documentId}` : `${app}/payments`,
+      };
+    case 'payment_proposed':
+      return { dashboard: `${app}/payments` };
     case 'quote_accepted':
     case 'quote_needs_you':
       return {

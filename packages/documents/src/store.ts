@@ -1,13 +1,14 @@
 import { formatMoney, quoteLocale, type VatMode } from '@noctiv/quotes';
 import type { TransactionSql } from 'postgres';
 import { documentProblems, type Seller } from './checks.ts';
-import { documentCoverText } from './cover.ts';
+import { documentCoverText, paymentReminderText } from './cover.ts';
 import { docLabels } from './labels.ts';
 import { renderCmrPdf } from './pdf/cmr.ts';
 import { dateText, type DocBrand } from './pdf/common.ts';
 import { renderDeliveryNotePdf, renderInvoicePdf } from './pdf/invoice.ts';
 import {
   emptyData,
+  isPayable,
   parseData,
   type CmrData,
   type DeliveryNoteData,
@@ -68,9 +69,13 @@ export interface DocumentRecord {
   sourceDocumentId: string | null;
   sourceMessageId: string | null;
   draftId: string | null;
+  /** The overdue reminder's draft, once queued. */
+  reminderDraftId: string | null;
   data: DocData;
   prefill: Record<string, { source: string }> | null;
   prefillStatus: 'pending' | 'done' | 'failed' | null;
+  /** Asks for payment: an invoice, or a delivery note with prices. */
+  payable: boolean;
   currency: string;
   vatMode: VatMode;
   vatRate: number;
@@ -106,9 +111,11 @@ interface Row {
   source_document_id: string | null;
   source_message_id: string | null;
   draft_id: string | null;
+  reminder_draft_id: string | null;
   data: unknown;
   prefill: Record<string, { source: string }> | null;
   prefill_status: 'pending' | 'done' | 'failed' | null;
+  payable: boolean;
   currency: string;
   vat_mode: VatMode;
   vat_rate: number;
@@ -155,9 +162,11 @@ const toRecord = (r: Row): DocumentRecord => ({
   sourceDocumentId: r.source_document_id,
   sourceMessageId: r.source_message_id,
   draftId: r.draft_id,
+  reminderDraftId: r.reminder_draft_id,
   data: parseData(r.type, r.data),
   prefill: r.prefill && Object.keys(r.prefill).length ? r.prefill : null,
   prefillStatus: r.prefill_status,
+  payable: r.payable,
   currency: r.currency,
   vatMode: r.vat_mode,
   vatRate: Number(r.vat_rate),
@@ -196,7 +205,7 @@ const toRecord = (r: Row): DocumentRecord => ({
 
 const SELECT = (tx: TransactionSql) => tx`
   select d.id, d.tenant_id, d.type, d.number, d.status, d.language, d.thread_id, d.lead_id, d.quote_id,
-         d.source_document_id, d.source_message_id, d.draft_id, d.data, d.prefill, d.prefill_status,
+         d.source_document_id, d.source_message_id, d.draft_id, d.reminder_draft_id, d.data, d.prefill, d.prefill_status, d.payable,
          d.currency, d.vat_mode, d.vat_rate::float8 as vat_rate, d.subtotal_cents, d.vat_cents,
          d.total_cents, d.counterparty_name, d.issue_date::text as issue_date,
          d.due_date::text as due_date, d.created_at, d.issued_at, d.sent_at, d.paid_at,
@@ -209,10 +218,14 @@ const SELECT = (tx: TransactionSql) => tx`
 
 export async function loadDocument(
   tx: TransactionSql,
-  where: { id: string } | { draftId: string },
+  where: { id: string } | { draftId: string } | { reminderDraftId: string },
 ): Promise<DocumentRecord | null> {
   const [r] = await tx<Row[]>`${SELECT(tx)} where ${
-    'id' in where ? tx`d.id = ${where.id}` : tx`d.draft_id = ${where.draftId}`
+    'id' in where
+      ? tx`d.id = ${where.id}`
+      : 'draftId' in where
+        ? tx`d.draft_id = ${where.draftId}`
+        : tx`d.reminder_draft_id = ${where.reminderDraftId}`
   }`;
   return r ? toRecord(r) : null;
 }
@@ -245,9 +258,11 @@ export function documentJson(d: DocumentRecord) {
     quote_id: d.quoteId,
     source_document_id: d.sourceDocumentId,
     draft_id: d.draftId,
+    reminder_draft_id: d.reminderDraftId,
     data: d.data,
     prefill: d.prefill,
     prefill_status: d.prefillStatus,
+    payable: d.payable,
     currency: d.currency,
     vat_mode: d.vatMode,
     vat_rate: d.vatRate,
@@ -307,7 +322,14 @@ export async function writeDocumentData(
     update public.documents
     set data = ${tx.json(data as never)}, subtotal_cents = ${t.subtotalCents}, vat_cents = ${t.vatCents},
         total_cents = ${t.totalCents}, counterparty_name = ${counterparty(d.type, data)},
-        due_date = ${d.type === 'invoice' ? (data as InvoiceData).dueDate : null}
+        due_date = ${
+          d.type === 'invoice'
+            ? (data as InvoiceData).dueDate
+            : d.type === 'delivery_note' && (data as DeliveryNoteData).withPrices
+              ? (data as DeliveryNoteData).dueDate
+              : null
+        },
+        payable = ${isPayable(d.type, data)}
         ${language ? tx`, language = ${language}` : tx``}
     where id = ${d.id}`;
 }
@@ -490,6 +512,10 @@ export async function createDocument(tx: TransactionSql, c: CreateInput): Promis
   if (c.type === 'invoice') {
     data = { ...(data as InvoiceData), dueDate: addDays(t!.today, t!.invoice_due_days) };
   }
+  if (c.type === 'delivery_note') {
+    // Used only if the owner turns on prices (pavadzīme-rēķins).
+    data = { ...(data as DeliveryNoteData), dueDate: addDays(t!.today, t!.invoice_due_days) };
+  }
   if (c.type === 'cmr') {
     const cmr = data as CmrData;
     const country = t!.seller_country ?? '';
@@ -553,6 +579,17 @@ export function documentCover(d: DocumentRecord, customerName: string | null): s
   });
 }
 
+/** The overdue reminder's text, in the document's language. */
+export function documentReminder(d: DocumentRecord, customerName: string | null): string {
+  return paymentReminderText({
+    language: d.language,
+    customerName,
+    number: d.number ?? '',
+    total: formatMoney(d.totalCents, d.currency, quoteLocale(d.language)),
+    due: dateText(d.dueDate, d.language),
+  });
+}
+
 /** File name in the document's language, ASCII only ("Rekins-INV-2026-0001.pdf"). */
 export function documentFileName(
   d: Pick<DocumentRecord, 'type' | 'number' | 'language'> & { data?: DocData },
@@ -611,6 +648,7 @@ export function renderDocumentPdf(d: DocumentRecord, logo: Buffer | null): Promi
               vatMode: d.vatMode,
               vatRatePercent: d.vatRate,
               totals: documentTotals(data.lines, { mode: d.vatMode, ratePercent: d.vatRate }),
+              dueDate: d.dueDate,
             },
           }
         : {}),

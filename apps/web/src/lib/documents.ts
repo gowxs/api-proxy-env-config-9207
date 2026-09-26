@@ -43,6 +43,8 @@ export interface DeliveryNoteData {
   deliveryDate: string | null;
   /** Pavadzīme-rēķins: prices and totals on the note (default off). */
   withPrices: boolean;
+  /** With prices: when payment is due. */
+  dueDate: string | null;
   lines: DeliveryLine[];
   vehicle: string;
   driver: string;
@@ -105,9 +107,13 @@ interface DocBase {
   quote_id: string | null;
   source_document_id: string | null;
   draft_id: string | null;
+  /** The overdue reminder's draft, once queued. */
+  reminder_draft_id: string | null;
   /** Fields the AI filled from the e-mail, with the text they were copied from. */
   prefill: Record<string, { source: string }> | null;
   prefill_status: 'pending' | 'done' | 'failed' | null;
+  /** Asks for payment: an invoice, or a delivery note with prices (pavadzīme-rēķins). */
+  payable: boolean;
   currency: string;
   vat_mode: VatMode;
   vat_rate: number;
@@ -126,6 +132,8 @@ interface DocBase {
   /** What is still missing before the document can be issued (empty when ready). */
   problems: string[];
   seller: Seller;
+  /** Detail view only: payments linked or proposed for this document. */
+  payments?: Payment[];
 }
 export type Doc =
   | (DocBase & { type: 'invoice'; data: InvoiceData })
@@ -176,3 +184,27 @@ export function parseNumber(s: string): number | null {
   if (!t || !/^\d+(\.\d{1,3})?$/.test(t)) return null;
   return Number(t);
 }
+
+/** A credit read from the business's bank notification (PLAN.md §22.9). */
+export interface Payment {
+  id: string;
+  amount_cents: number;
+  currency: string | null;
+  payer_name: string | null;
+  reference: string | null;
+  status: 'unmatched' | 'proposed' | 'matched' | 'dismissed';
+  match_kind: 'exact' | 'amount' | 'payer' | 'manual' | null;
+  document_id: string | null;
+  document_number: string | null;
+  matched_by: 'auto' | 'owner' | null;
+  matched_at: string | null;
+  received_at: string | null;
+  created_at: string;
+}
+
+export const MATCH_TEXT: Record<NonNullable<Payment['match_kind']>, string> = {
+  exact: 'amount and invoice number match',
+  amount: 'amount matches; the payment details do not name the invoice',
+  payer: 'the payer is the buyer; check the amount',
+  manual: 'linked by you',
+};

@@ -534,6 +534,69 @@
   margin-top: var(--s-6);
 }
 
+/* ---------- Integrations ---------- */
+.soon-grid {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-7);
+}
+@media (min-width: 48rem) {
+  .soon-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.soon h3 {
+  margin-block: var(--s-3) var(--s-2);
+}
+.soon p {
+  color: var(--text-2);
+}
+.soon .label {
+  display: block;
+}
+.wl {
+  display: grid;
+  gap: var(--s-4);
+  margin-top: var(--s-5);
+}
+.wl .btn {
+  justify-self: start;
+}
+.wl fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.wl legend {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  margin-bottom: var(--s-2);
+}
+.check {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  min-height: 1.5rem;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+.check input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem;
+  accent-color: var(--accent);
+}
+.wl-all {
+  max-width: 40rem;
+}
+.wl-all .muted {
+  margin-top: var(--s-5);
+  font-size: var(--fs-small);
+}
+
 /* ---------- Review mode (?review): outlines copy that still needs approval ---------- */
 .review [data-new] {
   outline: 2px dashed #d97706;

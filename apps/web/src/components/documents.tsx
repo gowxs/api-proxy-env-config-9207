@@ -26,9 +26,7 @@ export function DocumentChip({ doc }: { doc: Doc }) {
           <span className="text-neutral-500"> · {doc.counterparty_name}</span>
         )}
       </span>
-      {doc.type === 'invoice' && (
-        <span className="tabular-nums">{money(doc.total_cents, doc.currency)}</span>
-      )}
+      {doc.payable && <span className="tabular-nums">{money(doc.total_cents, doc.currency)}</span>}
       <Badge tone={st.tone}>{st.text}</Badge>
     </Link>
   );

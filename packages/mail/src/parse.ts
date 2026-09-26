@@ -16,7 +16,7 @@ export interface InboundMessage {
   text: string;
   /** Hidden-text injection signal from the HTML part (HTML itself is not kept). */
   htmlHiddenText: boolean;
-  /** Only the headers the loop filter needs, lower-cased names. */
+  /** Only the headers the loop filter and the bank check need, lower-cased names. */
   loopHeaders: HeaderMap;
   attachments: { filename: string | null; contentType: string; size: number }[];
   date: Date;
@@ -35,6 +35,9 @@ const LOOP_HEADERS = [
   'x-loop',
   'return-path',
   'content-type',
+  // The receiving provider's SPF/DKIM/DMARC verdict (the topmost one is theirs):
+  // bank notifications are trusted only when it shows the bank's domain passing.
+  'authentication-results',
 ] as const;
 
 const MAX_TEXT_CHARS = 200_000;

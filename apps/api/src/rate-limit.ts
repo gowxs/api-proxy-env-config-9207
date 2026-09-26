@@ -78,6 +78,18 @@ export function defaultRules(): Rule[] {
       limiter: new RateLimiter({ max: 60, windowMs: 60 * MIN }),
     },
     {
+      // Sign-ups: the database also sends at most one confirmation per address a day.
+      name: 'waitlist',
+      match: (req) => (post(req) && req.url === '/waitlist' ? `wl:${req.ip}` : null),
+      limiter: new RateLimiter({ max: 5, windowMs: 60 * MIN }),
+    },
+    {
+      name: 'waitlist-links',
+      match: (req) =>
+        req.url.startsWith('/waitlist/') || req.url.startsWith('/admin/') ? `wll:${req.ip}` : null,
+      limiter: new RateLimiter({ max: 30, windowMs: 10 * MIN }),
+    },
+    {
       name: 'signup',
       match: (req) => (post(req) && req.url === '/v1/tenants' ? `signup:${req.ip}` : null),
       limiter: new RateLimiter({ max: 5, windowMs: 60 * MIN }),

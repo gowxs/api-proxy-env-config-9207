@@ -245,6 +245,8 @@ export interface DeliveryNotePdfInput extends PdfContext {
     vatMode: VatMode;
     vatRatePercent: number;
     totals: DocumentTotals;
+    /** When payment is due (ISO date). */
+    dueDate: string | null;
   };
 }
 
@@ -267,6 +269,9 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
     [t.date, dateText(i.issueDate, i.language)],
     ...(d.deliveryDate
       ? ([[t.deliveryDate, dateText(d.deliveryDate, i.language)]] as [string, string][])
+      : []),
+    ...(i.priced?.dueDate
+      ? ([[t.dueDate, dateText(i.priced.dueDate, i.language)]] as [string, string][])
       : []),
   ]);
   y = parties(
@@ -394,7 +399,7 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
         labels: t,
         seller: i.seller,
         reference: i.number,
-        payBy: null,
+        payBy: p.dueDate ? t.payBy(dateText(p.dueDate, i.language)) : null,
         brand,
       });
   }

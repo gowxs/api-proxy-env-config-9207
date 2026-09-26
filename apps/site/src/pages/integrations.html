@@ -1,0 +1,294 @@
+<script type="application/json" id="page">
+  {
+    "title": "Integrations · Noctiv",
+    "description": "One inbox, one platform: replies, follow-ups, leads, quotes, invoices and delivery notes today. Accounting and online store connections are next; join the waitlist.",
+    "nav": "integrations"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap">
+    <p class="label">Integrations</p>
+    <h1 style="margin-top: var(--s-3)" data-new>Everything in one place.</h1>
+    <p class="lead" data-new>
+      One inbox, one platform. Today Noctiv handles replies, follow-ups, leads, quotes, invoices and
+      delivery notes. Next: your accounting software and your online store.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section" id="now">
+  <div class="wrap">
+    <div class="section-head" data-new>
+      <h2>Available now.</h2>
+      <p class="lead">Included in the plan, working from your own mailbox.</p>
+    </div>
+    <div class="rows rows--2" data-new>
+      <div class="row">
+        <span class="label">Available now</span>
+        <h3>E-mail replies &amp; follow-ups</h3>
+        <p>
+          Answers customers in their language from your own facts, and follows up when a
+          conversation goes quiet. You choose how much it sends on its own.
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">Available now</span>
+        <h3>Leads</h3>
+        <p>
+          Every new enquiry becomes a lead with who asked and what they need, so none is forgotten
+          in the inbox.
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">Available now · Beta</span>
+        <h3>Quotes</h3>
+        <p>
+          A price request becomes a quote from your price list: a branded PDF the customer accepts
+          with one click.
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">Available now · Beta</span>
+        <h3>Invoices, delivery notes and CMR</h3>
+        <p>
+          Issued from the conversation and sent as PDFs. Your bank's payment notifications are
+          matched to open invoices.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="soon">
+  <div class="wrap">
+    <div class="section-head" data-new>
+      <h2>Coming soon.</h2>
+      <p class="lead">
+        Leave your e-mail and we'll tell you once, when it works. We don't promise dates we can't
+        keep.
+      </p>
+    </div>
+    <div class="soon-grid" data-new>
+      <article class="panel soon" id="xero">
+        <span class="label">Accounting · Coming soon</span>
+        <h3>Xero</h3>
+        <p>
+          Invoices you issue in Noctiv go to Xero automatically.<br />Payments Noctiv matches are
+          recorded there too, with no retyping.
+        </p>
+        <form class="wl" method="post" action="{{app}}api/waitlist">
+          <input type="hidden" name="integration" value="xero" />
+          <input type="hidden" name="source" value="integrations-xero" />
+          <div class="field">
+            <label for="wl-xero">Your e-mail</label>
+            <input
+              class="input"
+              id="wl-xero"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Notify me when this is ready. No other e-mails.</span>
+          </label>
+          <div hidden>
+            <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <button class="btn btn--sm" type="submit">Notify me</button>
+        </form>
+      </article>
+      <article class="panel soon" id="quickbooks">
+        <span class="label">Accounting · Coming soon</span>
+        <h3>QuickBooks</h3>
+        <p>
+          Invoices you issue in Noctiv go to QuickBooks automatically.<br />Payments Noctiv matches
+          are recorded there too, with no retyping.
+        </p>
+        <form class="wl" method="post" action="{{app}}api/waitlist">
+          <input type="hidden" name="integration" value="quickbooks" />
+          <input type="hidden" name="source" value="integrations-quickbooks" />
+          <div class="field">
+            <label for="wl-quickbooks">Your e-mail</label>
+            <input
+              class="input"
+              id="wl-quickbooks"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Notify me when this is ready. No other e-mails.</span>
+          </label>
+          <div hidden>
+            <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <button class="btn btn--sm" type="submit">Notify me</button>
+        </form>
+      </article>
+      <article class="panel soon" id="zoho-books">
+        <span class="label">Accounting · Coming soon</span>
+        <h3>Zoho Books</h3>
+        <p>
+          Invoices you issue in Noctiv go to Zoho Books automatically.<br />Payments Noctiv matches
+          are recorded there too, with no retyping.
+        </p>
+        <form class="wl" method="post" action="{{app}}api/waitlist">
+          <input type="hidden" name="integration" value="zoho_books" />
+          <input type="hidden" name="source" value="integrations-zoho-books" />
+          <div class="field">
+            <label for="wl-zoho_books">Your e-mail</label>
+            <input
+              class="input"
+              id="wl-zoho_books"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Notify me when this is ready. No other e-mails.</span>
+          </label>
+          <div hidden>
+            <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <button class="btn btn--sm" type="submit">Notify me</button>
+        </form>
+      </article>
+      <article class="panel soon" id="shopify">
+        <span class="label">Online stores · Coming soon</span>
+        <h3>Shopify</h3>
+        <p>
+          “Where is my order?” answered with the order's real status.<br />Tracking numbers and
+          order details come from your Shopify store.
+        </p>
+        <form class="wl" method="post" action="{{app}}api/waitlist">
+          <input type="hidden" name="integration" value="shopify" />
+          <input type="hidden" name="source" value="integrations-shopify" />
+          <div class="field">
+            <label for="wl-shopify">Your e-mail</label>
+            <input
+              class="input"
+              id="wl-shopify"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Notify me when this is ready. No other e-mails.</span>
+          </label>
+          <div hidden>
+            <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <button class="btn btn--sm" type="submit">Notify me</button>
+        </form>
+      </article>
+      <article class="panel soon" id="woocommerce">
+        <span class="label">Online stores · Coming soon</span>
+        <h3>WooCommerce</h3>
+        <p>
+          “Where is my order?” answered with the order's real status.<br />Tracking numbers and
+          order details come from your WooCommerce store.
+        </p>
+        <form class="wl" method="post" action="{{app}}api/waitlist">
+          <input type="hidden" name="integration" value="woocommerce" />
+          <input type="hidden" name="source" value="integrations-woocommerce" />
+          <div class="field">
+            <label for="wl-woocommerce">Your e-mail</label>
+            <input
+              class="input"
+              id="wl-woocommerce"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+            />
+          </div>
+          <label class="check">
+            <input type="checkbox" name="consent" value="yes" required />
+            <span>Notify me when this is ready. No other e-mails.</span>
+          </label>
+          <div hidden>
+            <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+          </div>
+          <button class="btn btn--sm" type="submit">Notify me</button>
+        </form>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="waitlist">
+  <div class="wrap">
+    <div class="panel wl-all" data-new>
+      <h2>Tell me when it's ready.</h2>
+      <form class="wl" method="post" action="{{app}}api/waitlist">
+        <input type="hidden" name="source" value="integrations-bottom" />
+        <fieldset>
+          <legend>Which integrations?</legend>
+          <label class="check"
+            ><input type="checkbox" name="integration" value="xero" /><span>Xero</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" name="integration" value="quickbooks" /><span
+              >QuickBooks</span
+            ></label
+          >
+          <label class="check"
+            ><input type="checkbox" name="integration" value="zoho_books" /><span
+              >Zoho Books</span
+            ></label
+          >
+          <label class="check"
+            ><input type="checkbox" name="integration" value="shopify" /><span>Shopify</span></label
+          >
+          <label class="check"
+            ><input type="checkbox" name="integration" value="woocommerce" /><span
+              >WooCommerce</span
+            ></label
+          >
+        </fieldset>
+        <div class="field">
+          <label for="wl-all">Your e-mail</label>
+          <input
+            class="input"
+            id="wl-all"
+            name="email"
+            type="email"
+            autocomplete="email"
+            maxlength="254"
+            required
+          />
+        </div>
+        <label class="check">
+          <input type="checkbox" name="consent" value="yes" required />
+          <span>Notify me when this is ready. No other e-mails.</span>
+        </label>
+        <div hidden>
+          <label>Leave empty <input name="website" tabindex="-1" autocomplete="off" /></label>
+        </div>
+        <button class="btn" type="submit">Notify me</button>
+      </form>
+      <p class="muted small">
+        We'll send one e-mail to confirm your address. Every e-mail has an unsubscribe link. See our
+        <a href="/privacy/">privacy policy</a>.
+      </p>
+    </div>
+  </div>
+</section>

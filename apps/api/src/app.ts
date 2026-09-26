@@ -5,6 +5,7 @@ import type { Sql } from 'postgres';
 import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
 import { registerRateLimits } from './rate-limit.ts';
+import { waitlistRoutes } from './routes/waitlist.ts';
 import type { PaddleClient } from './billing/paddle.ts';
 import { actionRoutes } from './routes/actions.ts';
 import { billingRoutes, type BillingConfig } from './routes/billing.ts';
@@ -53,6 +54,10 @@ export interface AppDeps {
   billing?: BillingConfig;
   /** Paddle API client (needs PADDLE_API_KEY). */
   paddle?: PaddleClient;
+  /** The public site (waitlist pages link back to it). */
+  siteUrl?: string;
+  /** Bearer token for GET /admin/waitlist.csv; without it the export is off. */
+  waitlistExportToken?: string;
   /** Off only in tests that need many requests. */
   rateLimits?: boolean;
 }
@@ -85,6 +90,17 @@ export function buildApp(
   });
 
   if (deps.rateLimits !== false) registerRateLimits(app);
+
+  // HTML forms (action pages, the site's waitlist form): fields as lists of values.
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string', bodyLimit: 4096 },
+    (_req, body, done) => {
+      const out: Record<string, string[]> = {};
+      for (const [k, v] of new URLSearchParams(body as string)) (out[k] ??= []).push(v);
+      done(null, out);
+    },
+  );
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 
@@ -133,6 +149,12 @@ export function buildApp(
       sql: deps.sql,
       actionSecret: deps.actionSecret,
       appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+    });
+    waitlistRoutes(app, {
+      sql: deps.sql,
+      secret: deps.actionSecret,
+      siteUrl: deps.siteUrl ?? 'https://noctiv.io',
+      ...(deps.waitlistExportToken ? { exportToken: deps.waitlistExportToken } : {}),
     });
     quoteLinkRoutes(app, {
       sql: deps.sql,

@@ -769,3 +769,52 @@ Forced RLS and isolation policies like every table. Documents are business recor
 - **Unit:** schemas and issue checks per type, IBAN and VAT number checks, totals and reverse charge, numbering format, labels complete in six languages, CMR pre-fill validation (source text must be in the e-mail; numbers and dates parsed from the source), PDFs render for every type and language, the CMR has four pages.
 - **API (db):** settings, create manual / from quote / from invoice, edit, issue (numbering per type, per year, per tenant; required fields), send in mode 1 (waits) and mode 2 (goes out), mark paid / delivered, cancel keeps the number, locked after sending, other tenants see nothing.
 - **Worker (db):** the sent e-mail carries the PDF (CMR with four pages) and the document becomes sent; pre-fill keeps only fields found in the e-mail.
+
+### 22.9 Incoming payments (founder request 2026-09-26)
+
+- **Payable documents:** invoices, and delivery notes with prices (pavadzīme-rēķins). They have a due date and go draft → sent → paid. A delivery note without prices stays draft → sent → delivered. `documents.payable` records which rule applies.
+- **Bank senders:** Settings → Documents → "Bank notification senders". The owner adds the bank's domain once (for example swedbank.lv); subdomains are included.
+- **Sender check:** an e-mail counts as a bank notification only if it passes two tests. The sender's domain must be on that list. The receiving provider's topmost `Authentication-Results` must also show DKIM pass for that domain, or DMARC pass for it. Other e-mails claiming "payment received" go through normal handling. A forged bank sender is skipped and logged.
+- **Bank e-mails are handled first:**
+  - They are never replied to and never become leads.
+  - The AI copies the credit notification: amount, currency, payer and reference.
+  - Every value must appear in the e-mail's own text, and code reads the numbers.
+  - The free AI tier runs only on test mailboxes.
+- **Matching:**
+  - *Exact:* the amount equals an open payable document's total and the reference names its number. In modes 2 and 3 the document is marked paid automatically and the owner is notified. In mode 1 the owner gets a "Mark as paid" proposal to confirm with one click.
+  - *Partial:* the amount matches one open document, and the reference names no other document. Or the payer is the document's buyer. This is always only a proposal.
+  - *No match:* the payment waits in Payments for manual linking or dismissal.
+- **Data and app:**
+  - Data: `bank_senders` and `payments` (amount, currency, payer, reference, status, match kind, document, and the e-mail text each field was read from).
+  - App: payment details are shown on the document, a Payments page, and a dashboard link to payments to check.
+
+### 22.10 Overdue reminder
+
+- **When:** 3 days after the due date of a sent, unpaid, payable document, the customer gets one reminder. It is sent once, in the document's language, on the same thread, with the PDF attached.
+- **Mode rules:** in mode 1 the reminder waits for approval; in modes 2 and 3 it is sent.
+- **If paid first:** a payment recorded before the reminder is sent supersedes it.
+
+## 23. Integrations page and waitlist (founder request 2026-09-26)
+
+- **Site:**
+  - `/integrations/` ("Everything in one place"), linked from the header and footer.
+  - "Available now": replies & follow-ups, leads, quotes (beta), and invoices / delivery notes / CMR (beta).
+  - "Coming soon": Xero, QuickBooks, Zoho Books, Shopify and WooCommerce, each with two lines on what it will do and a waitlist form.
+  - One more form at the bottom.
+  - No dates anywhere. The new copy is marked for review.
+- **Forms:**
+  - No JavaScript: they post to `app.noctiv.io/api/waitlist`, which the CSP `form-action` allows.
+  - Fields: e-mail, integration(s), a required consent box ("Notify me when this is ready. No other e-mails."), and a hidden honeypot field.
+  - Rate limit: 5 per hour per IP.
+- **Data:**
+  - `marketing.waitlist` (email, integrations, source, status, ip hash, timestamps).
+  - It sits outside the public schema; the runtime roles reach it only through `app.waitlist_*` functions.
+  - The IP is stored as an HMAC with the action-link secret.
+- **Double opt-in:**
+  - The worker sends one confirmation e-mail through the system mailer, at most one per address per day.
+  - The confirm and unsubscribe links are HMAC-signed and do not expire. Opening a link shows a button; the button acts.
+  - The e-mail carries one-click `List-Unsubscribe`.
+- **Export:**
+  - `GET /admin/waitlist.csv` with `Authorization: Bearer $WAITLIST_EXPORT_TOKEN`.
+  - It contains confirmed sign-ups, plus account owners who switched on "Notify me" in the app.
+- **App:** Settings → Integrations shows the same cards, with a per-tenant "Notify me" switch (`tenants.integrations_notify`).

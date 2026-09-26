@@ -20,6 +20,10 @@ export const apiEnvSchema = z
     PUBLIC_APP_URL: z.url().default('http://localhost:3000'),
     /** Public base URL of this API; defaults to PUBLIC_APP_URL + /api (the dashboard proxies it). */
     PUBLIC_API_URL: z.url().optional(),
+    /** The public site (https://noctiv.io): waitlist pages link back to it. */
+    PUBLIC_SITE_URL: z.url().default('https://noctiv.io'),
+    /** Founder's bearer token for GET /admin/waitlist.csv; unset = export off. */
+    WAITLIST_EXPORT_TOKEN: z.string().min(32).optional(),
     /** Comma-separated invite codes; signup is gated while set (required in production, Q12). */
     SIGNUP_INVITE_CODES: z
       .string()

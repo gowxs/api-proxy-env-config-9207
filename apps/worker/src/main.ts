@@ -15,6 +15,8 @@ import { documentsPrefillHandler } from './jobs/documents-prefill.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { alertDeadJob } from './ops/alerts.ts';
 import { purgeExpiredContent, tenantDeleteHandler } from './ops/gdpr.ts';
+import { sendWaitlistConfirmations } from './ops/waitlist.ts';
+import { queuePaymentReminders } from './ops/payment-reminders.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
@@ -152,6 +154,7 @@ const hourly = () =>
     db.sql`select app.expire_quotes()`,
     db.sql`select app.purge_expired_quote_text()`,
     db.sql`select app.purge_expired_document_prefill()`,
+    queuePaymentReminders(db.sql, logger),
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();
@@ -204,7 +207,23 @@ if (config.SYSTEM_SMTP_HOST) {
       running = false;
     }
   };
-  notifyTimer = setInterval(() => void deliver(), config.NOTIFY_POLL_MS);
+  const waitlistMail = config.ACTION_LINK_SECRET
+    ? {
+        sql: db.sql,
+        transport,
+        from: config.SYSTEM_MAIL_FROM,
+        apiUrl: config.PUBLIC_API_URL,
+        secret: config.ACTION_LINK_SECRET,
+        logger,
+      }
+    : null;
+  notifyTimer = setInterval(() => {
+    void deliver();
+    if (waitlistMail)
+      void sendWaitlistConfirmations(waitlistMail).catch((e: unknown) =>
+        logger.error({ err: String(e) }, 'waitlist confirmations failed'),
+      );
+  }, config.NOTIFY_POLL_MS);
   if (!config.ACTION_LINK_SECRET) {
     logger.warn('ACTION_LINK_SECRET not set: draft emails carry no Approve / Reject links');
   }

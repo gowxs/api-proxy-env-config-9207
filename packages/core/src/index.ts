@@ -30,6 +30,7 @@ export * from './kb/chunk.ts';
 export * from './kb/rank-fusion.ts';
 export * from './schedule/business-time.ts';
 export * from './notify/action-token.ts';
+export * from './notify/waitlist-token.ts';
 export * from './notify/channel.ts';
 export * from './ops/data-region.ts';
 export * from './email-design/render.ts';

@@ -177,6 +177,79 @@ function SellerCard({
   );
 }
 
+interface BankSender {
+  id: string;
+  domain: string;
+}
+
+function BankSendersCard({ tenantId }: { tenantId: string }) {
+  const list = useLoad(() => api<BankSender[]>(`/v1/tenants/${tenantId}/bank-senders`), [tenantId]);
+  const [domain, setDomain] = useState('');
+  const a = useAction();
+  return (
+    <Card title="Incoming payments">
+      <p className="text-sm text-neutral-600">
+        Add the domain your bank sends “money received” notifications from. Noctiv reads those
+        e-mails (never answers them), matches the payment to an open invoice and marks it paid, or
+        asks you when it is not sure.
+      </p>
+      <ul className="mt-3 space-y-1">
+        {(list.data ?? []).map((b) => (
+          <li key={b.id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="font-medium">{b.domain}</span>
+            <button
+              type="button"
+              className="text-red-700"
+              disabled={a.busy}
+              onClick={() =>
+                void a.run(async () => {
+                  await api(`/v1/tenants/${tenantId}/bank-senders/${b.id}`, {
+                    method: 'DELETE',
+                    body: {},
+                  });
+                  await list.reload();
+                })
+              }
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void a.run(async () => {
+            await api(`/v1/tenants/${tenantId}/bank-senders`, {
+              method: 'POST',
+              body: { domain },
+            });
+            setDomain('');
+            await list.reload();
+          });
+        }}
+      >
+        <input
+          className={`${inputClass} min-w-0 flex-1`}
+          placeholder="e.g. swedbank.lv"
+          aria-label="Bank notification domain"
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+        />
+        <Button type="submit" disabled={a.busy || !domain.trim()}>
+          Add
+        </Button>
+      </form>
+      <p className="mt-2 text-xs text-neutral-500">
+        Only messages your mail provider verified as really coming from that domain (DKIM or DMARC)
+        are read; anything else claiming to be your bank is ignored.
+      </p>
+      <ErrorText>{a.error ?? list.error}</ErrorText>
+    </Card>
+  );
+}
+
 function DocumentsSettings() {
   const tenantId = useTenantId();
   const t = useLoad(() => api<DocSettings>(`/v1/tenants/${tenantId}`), [tenantId]);
@@ -222,6 +295,7 @@ function DocumentsSettings() {
         <Notice>Documents are off. You can fill in your business details now.</Notice>
       )}
       <SellerCard s={s} tenantId={tenantId} reload={t.reload} />
+      <BankSendersCard tenantId={tenantId} />
     </div>
   );
 }

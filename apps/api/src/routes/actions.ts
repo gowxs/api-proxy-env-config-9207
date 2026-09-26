@@ -27,12 +27,13 @@ const escapeHtml = (s: string) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 
-function page(
+export function page(
   reply: FastifyReply,
   code: number,
   title: string,
   body: string,
   form?: { label: string; danger: boolean },
+  link?: { href: string; label: string },
 ) {
   const button = form
     ? `<form method="post"><button type="submit" style="font-size:16px;padding:10px 18px;border:0;border-radius:6px;color:#fff;background:${form.danger ? '#8a1f1f' : '#1f3a5f'};cursor:pointer">${escapeHtml(form.label)}</button></form>`
@@ -53,7 +54,7 @@ function page(
     .send(
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Noctiv</title></head>` +
         `<body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:48px auto;padding:0 16px;color:#1a1a1a">` +
-        `<h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${button}</body></html>`,
+        `<h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${button}${link ? `<p><a href="${escapeHtml(link.href)}" style="color:#1f3a5f">${escapeHtml(link.label)}</a></p>` : ''}</body></html>`,
     );
 }
 
@@ -77,13 +78,6 @@ const VERB: Record<DraftAction, { confirm: string; done: string; question: strin
  * any later click just reports what happened.
  */
 export function actionRoutes(app: FastifyInstance, deps: ActionDeps) {
-  // The confirmation form posts no fields; accept and ignore its body.
-  app.addContentTypeParser(
-    'application/x-www-form-urlencoded',
-    { parseAs: 'string', bodyLimit: 1024 },
-    (_req, _body, done) => done(null, {}),
-  );
-
   const dashboardHint = `Open the dashboard: ${deps.appUrl.replace(/\/+$/, '')}/drafts`;
 
   const claimsOr = (token: string, reply: FastifyReply): ActionClaims | undefined => {

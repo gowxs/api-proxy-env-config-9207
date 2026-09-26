@@ -32,6 +32,7 @@ import {
   type InvoiceLine,
 } from '@/lib/documents';
 import { money, type PriceItem } from '@/lib/quotes';
+import { DocumentPayment } from './payments';
 
 // ------------------------------------------------------------------ helpers
 type Obj = Record<string, unknown>;
@@ -627,11 +628,22 @@ function DeliveryNoteForm({ ctx }: { ctx: Ctx }) {
           <span>
             Show prices and totals (pavadzīme-rēķins)
             <span className="block text-xs text-neutral-500">
-              The delivery note then also works as the invoice for these goods.
+              The delivery note then also works as the invoice: it has a due date and is marked
+              paid, not delivered.
             </span>
           </span>
         </label>
         <DeliveryLines ctx={ctx} />
+        {Boolean(ctx.data.withPrices) && (
+          <div className="mt-3">
+            <DateField
+              ctx={ctx}
+              path="dueDate"
+              label="Payment due"
+              hint="Printed with the bank details"
+            />
+          </div>
+        )}
       </Card>
       <Card title="Notes">
         <Text ctx={ctx} path="notes" label="Notes (optional)" multiline />
@@ -788,7 +800,7 @@ export function DocumentEditor({
         </div>
         <p className="mt-1 text-sm text-neutral-500">
           {doc.counterparty_name ?? 'No customer yet'}
-          {doc.type === 'invoice' && ` · ${money(doc.total_cents, doc.currency)}`}
+          {doc.payable && ` · ${money(doc.total_cents, doc.currency)}`}
           {doc.issue_date && ` · issued ${doc.issue_date.slice(0, 10)}`}
         </p>
         {doc.type !== 'cmr' && (
@@ -838,6 +850,16 @@ export function DocumentEditor({
       {doc.type === 'invoice' && <InvoiceForm ctx={ctx} tenantId={tenantId} />}
       {doc.type === 'delivery_note' && <DeliveryNoteForm ctx={ctx} />}
       {doc.type === 'cmr' && <CmrForm ctx={ctx} />}
+
+      {(doc.payments ?? []).length > 0 && (
+        <Card title="Payment">
+          <div className="space-y-2">
+            {doc.payments!.map((p) => (
+              <DocumentPayment key={p.id} p={p} tenantId={tenantId} onChange={reload} />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {!locked && doc.problems.length > 0 && !dirty && (
         <div className="rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-800">
@@ -917,7 +939,7 @@ export function DocumentEditor({
                 Attach to reply
               </Button>
             )}
-            {doc.type === 'invoice' && doc.status === 'sent' && (
+            {doc.payable && (doc.status === 'sent' || doc.status === 'issued') && (
               <Button
                 disabled={a.busy}
                 onClick={() =>
@@ -930,7 +952,7 @@ export function DocumentEditor({
                 Mark as paid
               </Button>
             )}
-            {doc.type !== 'invoice' && doc.status === 'sent' && (
+            {!doc.payable && (doc.status === 'sent' || doc.status === 'issued') && (
               <Button
                 disabled={a.busy}
                 onClick={() =>

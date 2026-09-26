@@ -91,3 +91,32 @@ export function documentCoverText(i: {
         : b.cmr(i.number);
   return [HELLO[l](greetingName(i.customerName)), '', body].join('\n');
 }
+
+const REMINDER: Record<QuoteLanguage, (n: string, total: string, due: string) => string> = {
+  en: (n, t, d) =>
+    `This is a friendly reminder that invoice ${n} for ${t} was due on ${d}. If you have already paid, thank you, and please ignore this message. The invoice is attached again.`,
+  de: (n, t, d) =>
+    `wir möchten Sie freundlich daran erinnern, dass die Rechnung ${n} über ${t} am ${d} fällig war. Falls Sie bereits bezahlt haben, danken wir Ihnen und bitten Sie, diese Nachricht zu ignorieren. Die Rechnung liegt noch einmal bei.`,
+  lv: (n, t, d) =>
+    `Atgādinām, ka rēķina ${n} par summu ${t} apmaksas termiņš bija ${d}. Ja maksājums jau ir veikts, paldies, un lūdzam neņemt vērā šo ziņu. Rēķins vēlreiz pievienots pielikumā.`,
+  nl: (n, t, d) =>
+    `Een vriendelijke herinnering: factuur ${n} van ${t} moest uiterlijk ${d} betaald zijn. Hebt u al betaald, dan danken wij u en kunt u dit bericht negeren. De factuur is opnieuw bijgevoegd.`,
+  fr: (n, t, d) =>
+    `Nous nous permettons de vous rappeler que la facture ${n} d’un montant de ${t} était à régler le ${d}. Si vous l’avez déjà réglée, merci et veuillez ignorer ce message. La facture est à nouveau jointe.`,
+  es: (n, t, d) =>
+    `Le recordamos amablemente que la factura ${n} por ${t} vencía el ${d}. Si ya la ha pagado, gracias y no tenga en cuenta este mensaje. Adjuntamos de nuevo la factura.`,
+};
+
+/** The one overdue reminder to the customer (fixed text; code fills in number, total, date). */
+export function paymentReminderText(i: {
+  language: string | null;
+  customerName: string | null;
+  number: string;
+  total: string;
+  due: string;
+}): string {
+  const l = quoteLang(i.language);
+  return [HELLO[l](greetingName(i.customerName)), '', REMINDER[l](i.number, i.total, i.due)].join(
+    '\n',
+  );
+}

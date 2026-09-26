@@ -29,7 +29,7 @@ const APP_URL = process.env.SITE_APP_URL ?? 'https://app.noctiv.io/';
 interface PageMeta {
   title: string;
   description: string;
-  /** Header link to mark as current: how | pricing | contact. */
+  /** Header link to mark as current: how | pricing | integrations | contact. */
   nav?: string;
   /** Excluded from the sitemap and search engines. */
   noindex?: boolean;
@@ -116,7 +116,8 @@ function headers(scripts: string[]): string {
     "connect-src 'self'",
     "manifest-src 'self'",
     "base-uri 'none'",
-    "form-action 'self'",
+    // The integrations waitlist forms post to the app's API.
+    `form-action 'self' ${new URL(APP_URL).origin}`,
     "frame-ancestors 'none'",
     'upgrade-insecure-requests',
   ].join('; ');
@@ -223,7 +224,7 @@ export function build(): { pages: string[] } {
         head: meta.noindex ? '<meta name="robots" content="noindex" />' : '',
         css,
         // Partials inside the page body are expanded before it goes into the layout.
-        content: render(raw.slice(m[0].length), {}, parts),
+        content: render(raw.slice(m[0].length), { app: APP_URL }, parts),
         scripts,
         nav: meta.nav ?? '',
         app: APP_URL,

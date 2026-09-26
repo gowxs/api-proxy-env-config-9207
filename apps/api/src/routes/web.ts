@@ -5,6 +5,7 @@ import {
   renderReplyEmail,
   TENANT_MODES,
   type TenantMode,
+  WAITLIST_INTEGRATIONS,
 } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
 import { documentJson, listDocuments, prefixLocks } from '@noctiv/documents';
@@ -128,6 +129,8 @@ const settingsBody = z
     ...designShape,
     ...quoteSettingsShape,
     ...documentSettingsShape,
+    /** Settings → Integrations: "notify me when it's ready" (PLAN.md §23). */
+    integrationsNotify: z.array(z.enum(WAITLIST_INTEGRATIONS)).max(5),
   })
   .partial()
   .strict();
@@ -184,7 +187,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                quotes_validity_days, quotes_auto_send_limit_cents,
                documents_enabled, seller_legal_name, seller_legal_address, seller_reg_no, seller_vat_no,
                seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days,
-               doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr
+               doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify
         from public.tenants`;
       return { ...t, doc_prefix_locks: await prefixLocks(tx) };
     }),
@@ -216,6 +219,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
+      if (b.integrationsNotify !== undefined)
+        cols.integrations_notify = WAITLIST_INTEGRATIONS.filter((i) =>
+          b.integrationsNotify!.includes(i),
+        );
       Object.assign(
         cols,
         await designColumns(tx, b),
@@ -353,13 +360,15 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           unpaid: number;
           unpaid_cents: number;
           currency: string;
+          payments_to_review: number;
         }[]
       >`
         select t.documents_enabled as enabled, t.quotes_currency as currency,
                (select count(*) from public.documents where status = 'draft')::int as drafts,
-               (select count(*) from public.documents where type = 'invoice' and status in ('issued', 'sent'))::int as unpaid,
+               (select count(*) from public.documents where payable and status in ('issued', 'sent'))::int as unpaid,
+               (select count(*) from public.payments where status in ('proposed', 'unmatched'))::int as payments_to_review,
                (select coalesce(sum(total_cents), 0) from public.documents
-                 where type = 'invoice' and status in ('issued', 'sent'))::int as unpaid_cents
+                 where payable and status in ('issued', 'sent'))::int as unpaid_cents
         from public.tenants t`;
       return {
         mode: t!.mode,
@@ -389,6 +398,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           unpaid: docs!.unpaid,
           unpaidCents: docs!.unpaid_cents,
           currency: docs!.currency,
+          paymentsToReview: docs!.payments_to_review,
         },
       };
     }),

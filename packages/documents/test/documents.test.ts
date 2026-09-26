@@ -378,7 +378,13 @@ describe('PDFs', () => {
       number: 'DN-2026-0002',
       language: 'lv',
       data,
-      priced: { currency: 'EUR', vatMode: 'exclusive', vatRatePercent: 21, totals },
+      priced: {
+        currency: 'EUR',
+        vatMode: 'exclusive',
+        vatRatePercent: 21,
+        totals,
+        dueDate: '2026-10-10',
+      },
     });
     expect(pages(pdf)).toBe(1);
     // Without the option a delivery note has no totals.

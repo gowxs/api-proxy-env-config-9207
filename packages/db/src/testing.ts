@@ -150,6 +150,9 @@ export async function seedTenant(
                                            currency, vat_mode, vat_rate, counterparty_name)
              values (${tenantId}, 'invoice', 'issued', 'INV-2000-0001', ${threadId}, ${leadId}, ${quoteId},
                      ${tx.json({ buyer: { name: `Customer ${label}` } })}, 'EUR', 'exclusive', 21, ${`Customer ${label}`})`;
+    await tx`insert into public.bank_senders (tenant_id, domain) values (${tenantId}, ${`bank-${label}.example.test`})`;
+    await tx`insert into public.payments (tenant_id, message_id, amount_cents, currency, payer_name, status)
+             values (${tenantId}, ${messageId}, 1210, 'EUR', ${`Customer ${label}`}, 'unmatched')`;
     await tx`insert into public.escalations (tenant_id, message_id, thread_id, category, reason)
              values (${tenantId}, ${messageId}, ${threadId}, 'hard_list', 'complaint')`;
     await tx`insert into public.usage_daily (tenant_id, day, llm_calls) values (${tenantId}, current_date, 1)`;

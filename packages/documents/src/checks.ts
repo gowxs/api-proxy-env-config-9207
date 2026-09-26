@@ -75,7 +75,12 @@ function invoiceProblems(
   return p;
 }
 
-function deliveryNoteProblems(d: DeliveryNoteData, s: Seller, vatMode: VatMode): string[] {
+function deliveryNoteProblems(
+  d: DeliveryNoteData,
+  s: Seller,
+  vatMode: VatMode,
+  today: string,
+): string[] {
   // With prices it is also an invoice (pavadzīme-rēķins): VAT number when VAT applies.
   const p = sellerProblems(s, { needVat: d.withPrices && vatMode !== 'none', needBank: false });
   if (blank(d.receiver.name)) p.push('Receiver: name is missing');
@@ -89,6 +94,7 @@ function deliveryNoteProblems(d: DeliveryNoteData, s: Seller, vatMode: VatMode):
     if (blank(l.unit)) p.push(`${n}: unit is missing`);
     if (d.withPrices && l.unitPriceCents === null) p.push(`${n}: price is missing`);
   });
+  if (d.withPrices && d.dueDate && d.dueDate < today) p.push('The due date is in the past');
   return p;
 }
 
@@ -135,6 +141,6 @@ export function documentProblems(
 ): string[] {
   if (type === 'invoice') return invoiceProblems(data as InvoiceData, seller, o);
   if (type === 'delivery_note')
-    return deliveryNoteProblems(data as DeliveryNoteData, seller, o.vatMode);
+    return deliveryNoteProblems(data as DeliveryNoteData, seller, o.vatMode, o.today);
   return cmrProblems(data as CmrData);
 }

@@ -39,7 +39,7 @@ interface Message {
 }
 interface Draft {
   id: string;
-  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document';
+  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document' | 'payment_reminder';
   status: string;
   to_address: string;
   subject: string;
@@ -134,11 +134,13 @@ function DraftCard({
             ? 'Quote reply'
             : draft.kind === 'document'
               ? 'Reply with document'
-              : draft.kind === 'followup'
-                ? 'Follow-up draft'
-                : draft.kind === 'acknowledgement'
-                  ? 'Acknowledgement (sent automatically)'
-                  : 'Reply draft'}
+              : draft.kind === 'payment_reminder'
+                ? 'Payment reminder'
+                : draft.kind === 'followup'
+                  ? 'Follow-up draft'
+                  : draft.kind === 'acknowledgement'
+                    ? 'Acknowledgement (sent automatically)'
+                    : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}
@@ -341,7 +343,9 @@ function ConversationView() {
           key={d.id}
           draft={d}
           quote={data.quotes?.find((q) => q.draft_id === d.id)}
-          document={data.documents?.find((x) => x.draft_id === d.id)}
+          document={data.documents?.find(
+            (x) => x.draft_id === d.id || x.reminder_draft_id === d.id,
+          )}
           tenantId={tenantId}
           onChange={() => void reload()}
         />

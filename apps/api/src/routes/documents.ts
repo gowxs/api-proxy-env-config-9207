@@ -9,7 +9,11 @@ import {
   DocumentSourceError,
   ibanValid,
   issueDocument,
+  linkPayment,
   listDocuments,
+  listPayments,
+  markDocumentPaid,
+  normalizeBankDomain,
   loadDocument,
   parseData,
   PREFIX_COLUMN,
@@ -199,7 +203,15 @@ export function documentRoutes(
   );
 
   app.get('/v1/tenants/:tenantId/documents/:id', (req) =>
-    tenantTx(req, async (tx) => documentJson(await load(tx, idParams.parse(req.params).id))),
+    tenantTx(req, async (tx) => {
+      const d = await load(tx, idParams.parse(req.params).id);
+      return {
+        ...documentJson(d),
+        payments: (await listPayments(tx, { documentId: d.id })).filter(
+          (p) => p.status !== 'dismissed',
+        ),
+      };
+    }),
   );
 
   app.post('/v1/tenants/:tenantId/documents', (req) =>
@@ -372,16 +384,16 @@ export function documentRoutes(
         .strict()
         .parse(req.body);
       const d = await load(tx, id);
-      if ((status === 'paid') !== (d.type === 'invoice'))
+      if ((status === 'paid') !== d.payable)
         throw new HttpError(
           400,
-          d.type === 'invoice' ? 'Invoices are marked as paid.' : 'Mark it as delivered.',
+          d.payable ? 'This document asks for payment: mark it as paid.' : 'Mark it as delivered.',
         );
       if (d.status !== 'issued' && d.status !== 'sent')
         throw new HttpError(409, `It is ${d.status}.`);
-      await tx`update public.documents
-               set status = ${status}, ${tx(status === 'paid' ? 'paid_at' : 'delivered_at')} = now()
-               where id = ${id}`;
+      if (status === 'paid') await markDocumentPaid(tx, id);
+      else
+        await tx`update public.documents set status = 'delivered', delivered_at = now() where id = ${id}`;
       await audit(tx, tenantId, req.user!.userId, `document.${status}`, id);
       return documentJson((await loadDocument(tx, { id }))!);
     }),
@@ -415,6 +427,83 @@ export function documentRoutes(
       return { ok: true };
     }),
   );
+
+  // ------------------------------------------------------ incoming payments
+  app.get('/v1/tenants/:tenantId/bank-senders', (req) =>
+    tenantTx(
+      req,
+      (tx) => tx`select id, domain, created_at from public.bank_senders order by domain`,
+    ),
+  );
+
+  /** The owner confirms a sender domain as their bank's notifications (once). */
+  app.post('/v1/tenants/:tenantId/bank-senders', (req) =>
+    tenantTx(req, async (tx, tenantId) => {
+      const { domain } = z
+        .object({ domain: z.string().max(300) })
+        .strict()
+        .parse(req.body);
+      const d = normalizeBankDomain(domain);
+      if (!d)
+        throw new HttpError(
+          400,
+          'Enter the domain your bank sends notifications from, e.g. swedbank.lv',
+        );
+      const own = await tx<{ n: number }[]>`
+        select count(*)::int as n from public.email_connections where split_part(email_address, '@', 2) = ${d}`;
+      if (own[0]!.n) throw new HttpError(400, 'That is your own mailbox’s domain, not a bank.');
+      await tx`
+        insert into public.bank_senders (tenant_id, domain, created_by)
+        values (${tenantId}, ${d}, ${req.user!.userId})
+        on conflict (tenant_id, domain) do nothing`;
+      const [row] = await tx<{ id: string }[]>`
+        select id from public.bank_senders where domain = ${d}`;
+      await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id, metadata)
+               values (${tenantId}, 'owner', ${req.user!.userId}, 'bank_sender.added', 'bank_sender', ${row!.id},
+                       ${tx.json({ domain: d })})`;
+      return { id: row!.id, domain: d };
+    }),
+  );
+
+  app.delete('/v1/tenants/:tenantId/bank-senders/:id', (req) =>
+    tenantTx(req, async (tx) => {
+      const { id } = idParams.parse(req.params);
+      const rows = await tx`delete from public.bank_senders where id = ${id} returning id`;
+      if (!rows.length) throw new HttpError(404, 'not found');
+      return { ok: true };
+    }),
+  );
+
+  app.get('/v1/tenants/:tenantId/payments', (req) => tenantTx(req, (tx) => listPayments(tx)));
+
+  const paymentAction = (
+    path: string,
+    fn: (tx: TransactionSql, id: string, body: unknown) => Promise<string>,
+  ) =>
+    app.post(`/v1/tenants/:tenantId/payments/:id/${path}`, (req) =>
+      tenantTx(req, async (tx, tenantId) => {
+        const { id } = idParams.parse(req.params);
+        const r = await fn(tx, id, req.body ?? {});
+        if (r === 'not_found') throw new HttpError(404, 'not found');
+        if (r === 'already_matched') throw new HttpError(409, 'This payment is already linked.');
+        if (r === 'not_open') throw new HttpError(409, 'That document is not open for payment.');
+        await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id)
+                 values (${tenantId}, 'owner', ${req.user!.userId}, ${`payment.${path}`}, 'payment', ${id})`;
+        return (await listPayments(tx, { id }))[0];
+      }),
+    );
+  // Accept the proposed match: the document is marked paid.
+  paymentAction('confirm', (tx, id) => linkPayment(tx, id, null));
+  // Link to any open document (manual matching).
+  paymentAction('link', (tx, id, body) =>
+    linkPayment(tx, id, z.object({ documentId: z.uuid() }).strict().parse(body).documentId),
+  );
+  // Not ours to match (e.g. a refund or a transfer between own accounts).
+  paymentAction('dismiss', async (tx, id) => {
+    const rows = await tx`update public.payments set status = 'dismissed', document_id = null
+                          where id = ${id} and status in ('unmatched', 'proposed') returning id`;
+    return rows.length ? 'ok' : 'not_found';
+  });
 
   /** The owner's copy of the PDF (the same file the customer gets). */
   app.get('/v1/tenants/:tenantId/documents/:id/pdf', async (req, reply) => {

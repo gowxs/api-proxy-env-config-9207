@@ -29,7 +29,8 @@ import {
   type DocumentRecord,
 } from '@noctiv/documents';
 
-type DraftKind = 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document';
+type DraftKind =
+  'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document' | 'payment_reminder';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -418,12 +419,18 @@ async function planSend(
   }
 
   let document: SendPlan['document'] = null;
-  if (d.kind === 'document') {
-    const doc = await loadDocument(tx, { draftId: d.id });
+  if (d.kind === 'document' || d.kind === 'payment_reminder') {
+    const reminder = d.kind === 'payment_reminder';
+    const doc = await loadDocument(tx, reminder ? { reminderDraftId: d.id } : { draftId: d.id });
     if (!doc) return { fail: { code: 'DOCUMENT_MISSING', outboundId: existing?.id ?? null } };
     // Cancelled (or already sent another way) since the reply was prepared.
-    if (!existing && doc.status !== 'issued')
+    if (!existing && !reminder && doc.status !== 'issued')
       return { done: { skipped: `document_${doc.status}` } };
+    // Paid (or cancelled) since the reminder was queued: it is not sent.
+    if (!existing && reminder && doc.status !== 'sent') {
+      await tx`update public.drafts set status = 'superseded' where id = ${d.id}`;
+      return { done: { skipped: `reminder_document_${doc.status}` } };
+    }
     const logoOk = doc.brand.logoUrl
       ? logoAllowed(doc.brand.logoUrl, await loadAllowlist(tx))
       : false;
@@ -601,6 +608,14 @@ async function finalizeSent(
     await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
              values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
                      ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'acknowledgement' })})`;
+    return;
+  }
+  if (plan.draft.kind === 'payment_reminder') {
+    // The customer was reminded; no follow-up, the conversation keeps its state.
+    await tx`update public.threads set last_outbound_at = ${now} where id = ${plan.threadId}`;
+    await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
+             values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
+                     ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'payment_reminder', number: plan.document?.doc.number ?? null })})`;
     return;
   }
   if (plan.draft.kind === 'document') {

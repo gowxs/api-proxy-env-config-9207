@@ -29,7 +29,8 @@ function DocumentList() {
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
   const shown = data.filter((d) => tab === 'all' || d.type === tab);
-  const invoices = data.filter((d) => d.type === 'invoice');
+  // Invoices and delivery notes with prices (pavadzīme-rēķins) ask for payment.
+  const invoices = data.filter((d) => d.payable);
   const currency = invoices[0]?.currency ?? 'EUR';
   const sum = (s: Doc['status'][]) =>
     invoices.filter((d) => s.includes(d.status)).reduce((t, d) => t + d.total_cents, 0);
@@ -67,6 +68,9 @@ function DocumentList() {
           New CMR
         </Button>
       </div>
+      <Link className="inline-block text-sm text-indigo-700" href="/payments">
+        Incoming payments →
+      </Link>
       <ErrorText>{a.error}</ErrorText>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
         {TABS.map((x) => (
@@ -100,7 +104,7 @@ function DocumentList() {
                       {d.number ?? `${DOC_TYPE[d.type].short} draft`}
                     </span>
                     <Badge tone={st.tone}>{st.text}</Badge>
-                    {d.type === 'invoice' && (
+                    {d.payable && (
                       <span className="ml-auto text-sm font-semibold tabular-nums">
                         {money(d.total_cents, d.currency)}
                       </span>
@@ -111,7 +115,7 @@ function DocumentList() {
                       {DOC_TYPE[d.type].short} · {d.counterparty_name ?? 'no customer yet'}
                     </span>
                     <span>
-                      {d.type === 'invoice' && d.status === 'sent' && d.due_date
+                      {d.payable && d.status === 'sent' && d.due_date
                         ? `due ${shortDate(d.due_date)}`
                         : shortDate(d.issue_date ?? d.created_at)}
                     </span>

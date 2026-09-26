@@ -37,4 +37,27 @@ describe('API rate limits', () => {
     // Other routes are unaffected.
     expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
   });
+
+  it('waitlist sign-ups: 5 per hour per address, then 429', async () => {
+    const app = buildApp({
+      logger: createLogger({ service: 'api-test', level: 'silent' }),
+      sql: {} as Sql,
+      checkDatabase: async () => true,
+      verifyToken: async () => ({ userId: 'u' }),
+      credentialsPublicKey: 'x'.repeat(43),
+      connectionTestWaitMs: 1_000,
+      actionSecret: 's'.repeat(40),
+    });
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/waitlist',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'email=bad',
+      });
+      codes.push(r.statusCode);
+    }
+    expect(codes).toEqual([400, 400, 400, 400, 400, 429]);
+  });
 });

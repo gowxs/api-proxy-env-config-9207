@@ -206,6 +206,15 @@ describe('invoices', () => {
     expect(issued.status).toBe(200);
     const pdf = await call('GET', A, `/documents/${r.json.id}/pdf`);
     expect(pdf.headers['content-disposition']).toContain('Precu-pavadzime-rekins-DN-');
+    // With prices it asks for payment: paid, not delivered.
+    expect(issued.json).toMatchObject({ payable: true });
+    expect(issued.json.due_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(
+      (await call('POST', A, `/documents/${r.json.id}/mark`, { status: 'delivered' })).status,
+    ).toBe(400);
+    expect(
+      (await call('POST', A, `/documents/${r.json.id}/mark`, { status: 'paid' })).json.status,
+    ).toBe('paid');
   });
 
   it('an invoice from an accepted quote copies its lines, VAT and customer', async () => {
@@ -447,5 +456,61 @@ describe('number prefixes', () => {
       problems: [],
     });
     expect((await call('POST', B, `/documents/${c.json.id}/issue`, {})).status).toBe(200);
+  });
+});
+
+describe('incoming payments (owner side)', () => {
+  it('bank senders are normalised and checked', async () => {
+    expect((await call('POST', A, '/bank-senders', { domain: 'not a domain' })).status).toBe(400);
+    const r = await call('POST', A, '/bank-senders', { domain: 'https://www.Swedbank.lv/biz' });
+    expect(r.json).toMatchObject({ domain: 'swedbank.lv' });
+    expect(
+      (await call('GET', A, '/bank-senders')).json.map((b: { domain: string }) => b.domain),
+    ).toContain('swedbank.lv');
+    expect((await call('DELETE', A, `/bank-senders/${r.json.id}`, {})).status).toBe(200);
+  });
+
+  it('confirm a proposal, link manually, dismiss; the invoice shows the payment', async () => {
+    const make = async () => {
+      const c = await call('POST', A, '/documents', { type: 'invoice', threadId: A.threadId });
+      await call('PATCH', A, `/documents/${c.json.id}`, { data: readyInvoice });
+      await call('POST', A, `/documents/${c.json.id}/issue`, {});
+      return c.json.id as string;
+    };
+    const first = await make();
+    const second = await make();
+    const pay = async (status: string, documentId: string | null) =>
+      (
+        await owner<{ id: string }[]>`
+          insert into public.payments (tenant_id, amount_cents, currency, payer_name, reference, status, match_kind, document_id)
+          values (${A.tenantId}, 60046, 'EUR', 'SIA Ozols', 'order 12', ${status}, ${documentId ? 'amount' : null}, ${documentId})
+          returning id`
+      )[0]!.id;
+    const proposed = await pay('proposed', first);
+    const c = await call('POST', A, `/payments/${proposed}/confirm`, {});
+    expect(c.json).toMatchObject({ status: 'matched', matched_by: 'owner', match_kind: 'amount' });
+    const doc = (await call('GET', A, `/documents/${first}`)).json;
+    expect(doc.status).toBe('paid');
+    expect(doc.payments[0]).toMatchObject({
+      amount_cents: 60046,
+      payer_name: 'SIA Ozols',
+      status: 'matched',
+    });
+
+    const loose = await pay('unmatched', null);
+    const l = await call('POST', A, `/payments/${loose}/link`, { documentId: second });
+    expect(l.json).toMatchObject({ status: 'matched', match_kind: 'manual', document_id: second });
+    expect((await call('GET', A, `/documents/${second}`)).json.status).toBe('paid');
+    // A paid invoice cannot take another payment.
+    const again = await pay('unmatched', null);
+    expect((await call('POST', A, `/payments/${again}/link`, { documentId: second })).status).toBe(
+      409,
+    );
+    expect((await call('POST', A, `/payments/${again}/dismiss`, {})).json.status).toBe('dismissed');
+    // Another tenant sees none of it.
+    expect(
+      (await call('GET', B, '/payments')).json.some((p: { id: string }) => p.id === proposed),
+    ).toBe(false);
+    expect((await call('POST', B, `/payments/${loose}/dismiss`, {})).status).toBe(404);
   });
 });

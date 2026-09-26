@@ -32,6 +32,8 @@ import { loadAllowlist, retrieveKnowledge } from '@noctiv/kb';
 import type { Sql, TransactionSql } from 'postgres';
 import { QUEUES } from '../queues.ts';
 import { setLeadStage } from './leads.ts';
+import { bankDomainFor } from '@noctiv/documents';
+import { handleBankEmail } from './bank.ts';
 import { draftQuote } from './quote.ts';
 
 export interface PipelineDeps {
@@ -73,8 +75,11 @@ export interface Loaded {
     maxPerSender24h: number;
     maxPerHour: number;
     quotesEnabled: boolean;
+    documentsEnabled: boolean;
   };
   thread: { status: string };
+  /** Sender domains the owner confirmed as their bank's notifications. */
+  bankDomains: string[];
   /** In the trial or subscribed (app.billing_entitled). */
   entitled: boolean;
   /** Arrived while service was stopped; handled in approve-everything mode. */
@@ -104,6 +109,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
       quotes_enabled: boolean;
+      documents_enabled: boolean;
       thread_status: string;
       entitled: boolean;
       backlog: boolean;
@@ -112,7 +118,8 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
-           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, th.status as thread_status,
+           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled,
+           th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
     from public.message_processing mp
@@ -126,6 +133,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
   const own = await tx<
     { email_address: string }[]
   >`select email_address from public.email_connections`;
+  const banks = await tx<{ domain: string }[]>`select domain from public.bank_senders`;
   return {
     processingStatus: row.processing_status,
     message: {
@@ -152,7 +160,9 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       maxPerSender24h: row.max_ai_replies_per_sender_24h,
       maxPerHour: row.max_replies_per_hour,
       quotesEnabled: row.quotes_enabled,
+      documentsEnabled: row.documents_enabled,
     },
+    bankDomains: banks.map((b) => b.domain),
     thread: { status: row.thread_status },
     entitled: row.entitled,
     backlog: row.backlog,
@@ -225,6 +235,11 @@ export async function processMessage(
   const m = l.message;
   const replyTo = m.replyTo ? [m.replyTo] : [];
   const body = m.bodyText === null ? null : stripQuotedText(m.bodyText);
+
+  // 0. The business's own bank: payments are read, nothing is answered, no lead.
+  //    (Before the loop filter: bank notifications come from no-reply senders.)
+  const bankDomain = bankDomainFor(m.from, l.bankDomains);
+  if (bankDomain) return handleBankEmail(deps, tenantId, l, bankDomain);
 
   // 1. Never-reply rules (no model call, no lead).
   if (body !== null) {

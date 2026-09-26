@@ -53,8 +53,13 @@ export const DeliveryNoteSchema = z.strictObject({
   loadingAddress: text(500),
   deliveryAddress: text(500),
   deliveryDate: isoDate,
-  /** Pavadzīme-rēķins: the lines carry prices and the note shows totals (default off). */
+  /**
+   * Pavadzīme-rēķins: the lines carry prices, the note shows totals and it is
+   * also the invoice (paid / unpaid, due date, payment reminders). Default off.
+   */
   withPrices: z.boolean().default(false),
+  /** With prices: when payment is due. */
+  dueDate: isoDate,
   lines: z
     .array(
       z.strictObject({
@@ -156,4 +161,12 @@ export function emptyData(type: DocType): DocData {
       },
     ],
   };
+}
+
+/**
+ * Documents that ask for payment: invoices, and delivery notes with prices
+ * (pavadzīme-rēķins). They are paid, not delivered, and count as unpaid.
+ */
+export function isPayable(type: DocType, data: DocData): boolean {
+  return type === 'invoice' || (type === 'delivery_note' && (data as DeliveryNoteData).withPrices);
 }

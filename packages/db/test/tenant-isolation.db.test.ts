@@ -50,8 +50,8 @@ async function canSelectTenantId(role: string, table: string): Promise<boolean> 
 }
 
 describe('schema invariants', () => {
-  it('covers all 26 tables', () => {
-    expect(tables).toHaveLength(26);
+  it('covers all 28 tables', () => {
+    expect(tables).toHaveLength(28);
   });
 
   it('every table has tenant_id, forced RLS and both isolation policies', async () => {

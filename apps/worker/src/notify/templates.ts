@@ -307,6 +307,37 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         footer: FOOTER,
       });
     }
+    case 'payment_matched':
+    case 'payment_proposed': {
+      const amount =
+        typeof p.amountCents === 'number'
+          ? formatMoney(p.amountCents, str(p.currency) || 'EUR')
+          : '';
+      const number = headerText(str(p.number), 40);
+      const matched = n.kind === 'payment_matched';
+      const how: Record<string, string> = {
+        exact: 'the amount and the invoice number in the payment details match',
+        amount: 'the amount matches (the payment details do not name the invoice)',
+        payer: 'the payer’s name matches the buyer (check the amount)',
+      };
+      return render(
+        matched ? `Payment received: ${number} is paid` : `Payment received: is it ${number}?`,
+        {
+          heading: matched
+            ? `A payment of ${amount} came in and ${number} is now marked as paid.`
+            : `A payment of ${amount} came in. It looks like it is for ${number}.`,
+          lines: [
+            ['Account', n.tenantName],
+            ['Matched because', how[str(p.matchKind)] ?? 'it matched an open invoice'],
+          ],
+          note: matched
+            ? 'Read from your bank’s notification. If it is wrong, open the invoice and change its status.'
+            : 'Nothing was changed. One click in the dashboard marks it as paid.',
+          buttons: [[matched ? 'Open invoice' : 'Review payment', n.links.dashboard]],
+          footer: FOOTER,
+        },
+      );
+    }
     case 'quote_needs_you': {
       const items = Array.isArray(p.unmapped)
         ? p.unmapped.map((u) => `“${untrusted(u, 80)}”`).join(', ')

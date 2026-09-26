@@ -227,6 +227,15 @@ function SettingsForm({
         </Link>
       </Card>
 
+      <Card title="Integrations">
+        <p className="text-sm text-neutral-600">
+          What Noctiv does today, and accounting and online-store connections coming next.
+        </p>
+        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/integrations">
+          Integrations →
+        </Link>
+      </Card>
+
       <Card title="E-mail design">
         <p className="text-sm text-neutral-600">
           {designInfo(t.email_template).title}: {designInfo(t.email_template).line}

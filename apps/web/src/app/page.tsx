@@ -37,6 +37,7 @@ interface Dashboard {
   knowledge: Record<string, number>;
   quotes?: { enabled: boolean; open: number; accepted: number };
   documents?: {
+    paymentsToReview?: number;
     enabled: boolean;
     drafts: number;
     unpaid: number;
@@ -214,6 +215,12 @@ function DashboardView() {
             {data.documents.unpaid > 0 &&
               `(${new Intl.NumberFormat('en-GB', { style: 'currency', currency: data.documents.currency }).format(data.documents.unpaidCents / 100)})`}
           </p>
+          {(data.documents.paymentsToReview ?? 0) > 0 && (
+            <Link className="mt-1 inline-block text-sm text-amber-800" href="/payments">
+              {data.documents.paymentsToReview} incoming payment
+              {data.documents.paymentsToReview === 1 ? '' : 's'} to check →
+            </Link>
+          )}
         </Card>
       )}
 

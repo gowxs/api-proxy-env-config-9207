@@ -15,6 +15,9 @@ export type NotificationKind =
   /** Quotes (beta): the customer accepted a quote; a request had items not on the price list. */
   | 'quote_accepted'
   | 'quote_needs_you'
+  /** Documents (beta): a bank credit matched an invoice (paid), or may match one (proposal). */
+  | 'payment_matched'
+  | 'payment_proposed'
   /** One-off check that the system mailer reaches the owner (queued by an operator). */
   | 'test';
 
