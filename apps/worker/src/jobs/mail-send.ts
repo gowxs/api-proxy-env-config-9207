@@ -22,7 +22,14 @@ import {
   type QuoteDocument,
 } from '@noctiv/quotes';
 
-type DraftKind = 'reply' | 'followup' | 'acknowledgement' | 'quote';
+import {
+  documentFileName,
+  loadDocument,
+  renderDocumentPdf,
+  type DocumentRecord,
+} from '@noctiv/documents';
+
+type DraftKind = 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -54,6 +61,8 @@ export interface MailSendDeps {
   inProgressMs?: number;
   /** Quotes (beta): signs the accept link in the PDF and fetches the logo. */
   quotes?: { secret: string; publicApiUrl: string; fetchLogo: SafeFetch };
+  /** Documents (beta): fetches the logo for the PDF (none: the company name is printed). */
+  fetchLogo?: SafeFetch;
 }
 
 type SentVia = 'auto' | 'owner_approval';
@@ -95,6 +104,8 @@ interface SendPlan {
   followupsSent: number;
   /** A 'quote' draft: the quote to attach as a PDF. */
   quote: { doc: QuoteDocument; logoAllowed: boolean } | null;
+  /** A 'document' draft: the invoice, delivery note or CMR to attach. */
+  document: { doc: DocumentRecord; logoAllowed: boolean } | null;
 }
 
 type PlanResult =
@@ -179,6 +190,21 @@ export function mailSendHandler(deps: MailSendDeps) {
         {
           filename: quotePdfFileName(doc.number, doc.language),
           content: pdf,
+          contentType: 'application/pdf',
+        },
+      ];
+    }
+
+    if (plan.document) {
+      const { doc, logoAllowed } = plan.document;
+      const logo =
+        logoAllowed && deps.fetchLogo
+          ? await fetchQuoteLogo(deps.fetchLogo, doc.brand.logoUrl)
+          : null;
+      attachments = [
+        {
+          filename: documentFileName(doc),
+          content: await renderDocumentPdf(doc, logo),
           contentType: 'application/pdf',
         },
       ];
@@ -391,6 +417,19 @@ async function planSend(
     quote = { doc, logoAllowed: logoOk };
   }
 
+  let document: SendPlan['document'] = null;
+  if (d.kind === 'document') {
+    const doc = await loadDocument(tx, { draftId: d.id });
+    if (!doc) return { fail: { code: 'DOCUMENT_MISSING', outboundId: existing?.id ?? null } };
+    // Cancelled (or already sent another way) since the reply was prepared.
+    if (!existing && doc.status !== 'issued')
+      return { done: { skipped: `document_${doc.status}` } };
+    const logoOk = doc.brand.logoUrl
+      ? logoAllowed(doc.brand.logoUrl, await loadAllowlist(tx))
+      : false;
+    document = { doc, logoAllowed: logoOk };
+  }
+
   if (!existing && outbound.sentVia === 'auto') {
     // Serialise auto-sends per tenant so two jobs cannot both pass the caps.
     await tx`select 1 from public.tenants where id = ${tenantId} for update`;
@@ -488,6 +527,7 @@ async function planSend(
       },
       followupsSent: d.followups_sent,
       quote,
+      document,
     },
   };
 }
@@ -561,6 +601,17 @@ async function finalizeSent(
     await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
              values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
                      ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'acknowledgement' })})`;
+    return;
+  }
+  if (plan.draft.kind === 'document') {
+    // An invoice or transport paper is not a question: no follow-up is scheduled
+    // and the conversation keeps its state.
+    await tx`update public.documents set status = 'sent', sent_at = ${now}
+             where draft_id = ${plan.draft.id} and status = 'issued'`;
+    await tx`update public.threads set last_outbound_at = ${now} where id = ${plan.threadId}`;
+    await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
+             values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
+                     ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'document', number: plan.document?.doc.number ?? null })})`;
     return;
   }
   const isQuote = plan.draft.kind === 'quote';

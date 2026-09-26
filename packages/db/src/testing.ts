@@ -29,6 +29,8 @@ export const GREENMAIL_USERS = {
   sendCustomer: { address: 'maris@example-mail.test', password: 'maris-pass' },
   quoteShop: { address: 'offers@lumen-studio.test', password: 'app-pass-q' },
   quoteCustomer: { address: 'ilze@example-mail.test', password: 'ilze-pass' },
+  docShop: { address: 'billing@lumen-studio.test', password: 'app-pass-d' },
+  docCustomer: { address: 'karlis@example-mail.test', password: 'karlis-pass' },
   /** Owner login email for notification tests. */
   owner: { address: 'owner@lumen-studio.test', password: 'owner-pass' },
   admin: { address: 'admin@noctiv.test', password: 'admin-pass' },
@@ -144,6 +146,10 @@ export async function seedTenant(
     await tx`insert into public.quote_lines
                (tenant_id, quote_id, position, price_item_id, name, unit, qty, unit_price_cents, line_total_cents)
              values (${tenantId}, ${quoteId}, 0, ${priceItemId}, ${`Item ${label}`}, 'pcs', 1, 1000, 1000)`;
+    await tx`insert into public.documents (tenant_id, type, status, number, thread_id, lead_id, quote_id, data,
+                                           currency, vat_mode, vat_rate, counterparty_name)
+             values (${tenantId}, 'invoice', 'issued', 'INV-2000-0001', ${threadId}, ${leadId}, ${quoteId},
+                     ${tx.json({ buyer: { name: `Customer ${label}` } })}, 'EUR', 'exclusive', 21, ${`Customer ${label}`})`;
     await tx`insert into public.escalations (tenant_id, message_id, thread_id, category, reason)
              values (${tenantId}, ${messageId}, ${threadId}, 'hard_list', 'complaint')`;
     await tx`insert into public.usage_daily (tenant_id, day, llm_calls) values (${tenantId}, current_date, 1)`;

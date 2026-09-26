@@ -704,3 +704,67 @@ All tables have `tenant_id`, forced RLS and isolation policies like the rest.
 - **Core (unit):** mapping validation (unknown label, draft item, qty not in the e-mail, min/max, assumed 1), totals and rounding, VAT none/exclusive/inclusive, the auto-send decision (limit, unmapped, mode), CSV parsing (separators, decimal comma, bad rows), and quote number format.
 - **Worker (db):** quote drafted in mode 1; auto-sent in mode 2 under the limit, held over it; clarifying question plus owner notification for unmapped items; a sent message has the PDF attached; import parsing keeps only prices present in the text.
 - **API (db):** price list CRUD and CSV import, draft items not quotable, editing lines recomputes totals, the accept link (view, accept, expired, bad token) moves the lead to `quoted` → `accepted` and notifies the owner.
+
+## 22. Documents (beta): invoices, delivery notes, CMR — plan (founder request 2026-09-26)
+
+A per-tenant module, off by default (Settings → "Documents (beta)"). Three document types on one engine: **fields → validation → branded PDF**, in the same style as quotes. Not accounting: no ledger, no bookkeeping export, no e-invoicing formats (Peppol, UBL) yet.
+
+### 22.1 Engine (`packages/documents`)
+
+Every type is a definition with: a field schema (lenient while drafting, strict to issue), defaults, derived values computed in code (totals), a one-line summary for lists (counterparty, total), labels, and a PDF renderer. The API and the worker only talk to the engine; adding a type later means adding a definition.
+
+- **Lifecycle:** `draft` (editable, no number, no PDF) → `issued` (validated, numbered, PDF exists; still editable until sent, keeps its number) → `sent` (attached to a reply that went out; locked) → `paid` (invoice) or `delivered` (delivery note, CMR). A draft can be deleted; an issued document can be `cancelled` (its number stays used, so numbering has no gaps). *Deviation from the brief:* "issued" (shown as "Ready") sits between draft and sent, because gap-free numbering needs the number at issue time, not at creation.
+- **Numbering:** per type, per tenant, restarting each calendar year in the tenant's time zone, like quotes: `INV-2026-0001`, `DN-2026-0001`, `CMR-2026-0001`. Next number = highest of that type and year + 1, tenant row locked; unique `(tenant_id, number)`.
+- **Language:** invoices and delivery notes follow the customer's language (en, de, lv, nl, fr, es; else English), taken from the source quote or the conversation, editable. CMR labels are always the standard English/French bilingual form.
+- **No invented facts:** every number and date comes from the tenant's data (settings, price list, quote), the owner's own input, or the customer's e-mail. Code computes all totals. The model never writes a number that is not copied from the e-mail (see 22.5).
+- **Sending:** a document goes out as an attachment on a reply in the conversation, following the mode rules: in mode 1 the reply waits for approval like every draft (the owner can still edit the document or the text); in modes 2 and 3 the owner's "Send" sends it. Nothing is ever sent without an owner action: documents are never created or sent automatically. The reply text is fixed per language ("Please find attached invoice INV-2026-0001 …"), filled in by code. The reply uses the tenant's e-mail design.
+
+### 22.2 Settings
+
+- `tenants.documents_enabled` (default false).
+- Seller details (used on every document): legal name, legal address, registration number, VAT number, bank name, IBAN (checked with the mod-97 checksum), BIC. Default due days for invoices (14).
+- VAT mode and rate and currency are the ones in Settings → Quotes, now shown in both places ("VAT settings are shared by quotes and documents").
+
+### 22.3 Invoice
+
+- **Created** from an accepted quote (one click on the quote: lines, currency, VAT and buyer copied) or manually (lines typed, or picked from the confirmed price list).
+- **Fields:** seller (from settings, read-only on the invoice), buyer (name, address, registration no., VAT no., e-mail; filled from the lead, editable), issue date (set when issued), supply date (optional), due date (default issue date + due days), payment reference (default: the invoice number), lines (item, unit, qty, unit price, line total), notes.
+- **VAT:** the tenant's mode (none / added / included) and rate, snapshotted on the invoice. **Reverse charge** flag: VAT 0 and the standard note in the invoice language ("Reverse charge: VAT to be accounted for by the recipient, Art. 196 Directive 2006/112/EC"); requires seller and buyer VAT numbers, and prices without VAT (mode "added" or "none"). *Decision for you:* reverse charge with VAT-inclusive prices would mean recalculating every line; it is blocked for now.
+- **Issue checks:** seller legal name, address and IBAN; seller VAT no. when VAT applies; buyer name and address; at least one line; due date not before the issue date.
+- **Mark as paid** (date recorded). No partial payments, no reminders yet.
+
+### 22.4 Delivery note (pavadzīme)
+
+- **Created** from an invoice (buyer, lines with qty and units copied; no prices) or manually.
+- **Fields:** supplier (seller details), receiver (name, address, registration no.), loading address (default: seller address), delivery address, delivery date, lines (item, unit, qty), vehicle and driver (optional), notes. The PDF has signature boxes: issued by, and received by (name, signature, date).
+- **Mark as delivered.**
+
+### 22.5 CMR consignment note
+
+- **Standard layout, boxes 1–24:** 1 sender; 2 consignee; 3 place of delivery; 4 place and date of taking over; 5 documents attached; 6–12 goods (marks and nos., number of packages, method of packing, nature of the goods, statistical no., gross weight kg, volume m³, one row per goods line); 13 sender's instructions; 14 payment for carriage (paid / forward); 15 cash on delivery; 16 carrier; 17 successive carriers; 18 carrier's reservations; 19 special agreements; 20 to be paid by; 21 established in / on; 22–24 signatures (sender, carrier, consignee with place and date). Plus the vehicle registration (tractor / trailer) and the CMR convention clause. Labels in English and French.
+- **Four copies in one PDF** (one page each): 1 sender, 2 consignee, 3 carrier, 4 extra, each marked in the copy strip.
+- **AI pre-fill from an e-mail order:** on an inbound message the owner clicks "Draft CMR from this e-mail". A worker job asks the model for every field as `{value, source}`, where `source` is the exact text in the e-mail. Code keeps a field only if its source text is in the e-mail; numbers (packages, weight, volume) and dates are parsed by code **from the source text**, never taken from the model's value. Sender defaults to the seller details; the model never fills the tenant's own data. Fields that fail the check stay empty. Every pre-filled field is highlighted with its source text, and the document cannot be issued (no PDF) until the owner confirms that they checked all highlighted fields. The same data rule as elsewhere: the free AI tier only reads test mailboxes. The source excerpts are removed when the document is issued (and by the retention purge for old drafts).
+- **Mark as delivered.**
+
+### 22.6 Data
+
+| Table / column | Contents |
+| --- | --- |
+| `tenants.documents_enabled`, `seller_*`, `invoice_due_days` | Settings above. |
+| `documents` | type (`invoice`, `delivery_note`, `cmr`), number (null until issued), status, language, thread, lead, source quote / document / message, the reply draft that carries it, `data` (the type's fields, JSON validated by the engine), `prefill` (AI-filled field paths and their source text), currency, VAT mode / rate snapshot, reverse charge, subtotal / VAT / total cents, counterparty name (for lists), issue / due dates, issued / sent / paid / delivered / cancelled times. |
+| `drafts.kind` | + `document`. |
+
+Forced RLS and isolation policies like every table. Documents are business records: the e-mail retention purge does not delete them (the AI source excerpts excepted).
+
+### 22.7 API, worker, app, site
+
+- **API:** document list (type / status filters), get, create (manual, from quote, from invoice), edit (draft and issued), issue, send (creates the reply draft), mark paid / delivered, cancel, delete draft, PDF download (the owner's copy), "draft CMR from this e-mail".
+- **Worker:** `mail.send` attaches the document PDF (CMR: the four-copy PDF) and marks the document sent; `documents.prefill` job for the CMR.
+- **App:** Settings → Documents (switch, seller details, due days), Documents list (type tabs, status, number, counterparty, total), document editor page per type, documents on the conversation page (create from quote, draft CMR from an e-mail, the reply with the document before approval, with a link to edit it), dashboard card.
+- **Site:** "Invoices, delivery notes and CMR (beta)" on Pricing and How it works, marked for review.
+
+### 22.8 Tests
+
+- **Unit:** schemas and issue checks per type, IBAN and VAT number checks, totals and reverse charge, numbering format, labels complete in six languages, CMR pre-fill validation (source text must be in the e-mail; numbers and dates parsed from the source), PDFs render for every type and language, the CMR has four pages.
+- **API (db):** settings, create manual / from quote / from invoice, edit, issue (numbering per type, per year, per tenant; required fields), send in mode 1 (waits) and mode 2 (goes out), mark paid / delivered, cancel keeps the number, locked after sending, other tenants see nothing.
+- **Worker (db):** the sent e-mail carries the PDF (CMR with four pages) and the document becomes sent; pre-fill keeps only fields found in the e-mail.

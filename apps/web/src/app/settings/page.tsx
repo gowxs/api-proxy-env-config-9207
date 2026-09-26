@@ -36,6 +36,7 @@ interface Tenant {
   reply_signature: string | null;
   email_template: string;
   quotes_enabled: boolean;
+  documents_enabled?: boolean;
 }
 
 function AutoSendDialog({
@@ -212,6 +213,17 @@ function SettingsForm({
         </p>
         <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/quotes">
           {t.quotes_enabled ? 'Price list and quote settings →' : 'Set up quotes →'}
+        </Link>
+      </Card>
+
+      <Card title="Documents (beta)">
+        <p className="text-sm text-neutral-600">
+          {t.documents_enabled
+            ? 'On: invoices, delivery notes and CMR notes, sent as PDFs with your replies.'
+            : 'Off. Turn it on to create invoices, delivery notes and CMR notes.'}
+        </p>
+        <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/documents">
+          {t.documents_enabled ? 'Business details and documents →' : 'Set up documents →'}
         </Link>
       </Card>
 

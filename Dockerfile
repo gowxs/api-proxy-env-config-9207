@@ -8,6 +8,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
+COPY packages/documents/package.json packages/documents/
 COPY packages/kb/package.json packages/kb/
 COPY packages/llm/package.json packages/llm/
 COPY packages/mail/package.json packages/mail/
@@ -23,6 +24,7 @@ COPY apps/worker/src apps/worker/src
 COPY packages/core/src packages/core/src
 COPY packages/db/src packages/db/src
 COPY packages/db/scripts packages/db/scripts
+COPY packages/documents/src packages/documents/src
 COPY packages/kb/src packages/kb/src
 COPY packages/llm/src packages/llm/src
 COPY packages/mail/src packages/mail/src

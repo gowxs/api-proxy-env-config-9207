@@ -1,17 +1,13 @@
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import PDFDocument from 'pdfkit';
 import { formatMoney, formatQty } from './money.ts';
 import { formatRate, quoteLabels, quoteLocale } from './labels.ts';
+import {
+  newPdf,
+  PDF_INK as INK,
+  PDF_MUTED as MUTED,
+  PDF_RULE as RULE,
+  pdfBrandColor,
+} from './pdf-base.ts';
 import { formatDate } from './texts.ts';
-
-const require = createRequire(import.meta.url);
-const FONT_DIR = dirname(require.resolve('@expo-google-fonts/manrope/package.json'));
-const FONTS = {
-  regular: join(FONT_DIR, '400Regular/Manrope_400Regular.ttf'),
-  semibold: join(FONT_DIR, '600SemiBold/Manrope_600SemiBold.ttf'),
-  bold: join(FONT_DIR, '800ExtraBold/Manrope_800ExtraBold.ttf'),
-};
 
 export interface QuotePdfBrand {
   companyName: string;
@@ -48,47 +44,15 @@ export interface QuotePdfInput {
   brand: QuotePdfBrand;
 }
 
-const INK = '#1F2430';
-const MUTED = '#5B6275';
-const RULE = '#E3E6EE';
-
 /** A one- or multi-page A4 quote. Deterministic for the same input (fixed creation date). */
 export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
-  const doc = new PDFDocument({
-    size: 'A4',
-    margins: { top: 56, bottom: 56, left: 56, right: 56 },
-    info: {
-      Title: `${quoteLabels(q.language).quote} ${q.number}`,
-      Author: q.brand.companyName,
-      Creator: 'Noctiv',
-      CreationDate: q.createdAt,
-    },
+  const { doc, done } = newPdf({
+    title: `${quoteLabels(q.language).quote} ${q.number}`,
+    author: q.brand.companyName,
+    createdAt: q.createdAt,
   });
-  doc.registerFont('r', FONTS.regular);
-  doc.registerFont('s', FONTS.semibold);
-  doc.registerFont('b', FONTS.bold);
-  // No ligatures: Manrope joins "tt", so copied text ("https", "written") would lose letters.
-  const NO_LIGATURES = {
-    liga: false,
-    clig: false,
-    dlig: false,
-  } as unknown as PDFKit.Mixins.OpenTypeFeatures[];
-  for (const m of ['text', 'heightOfString', 'widthOfString'] as const) {
-    const orig = (doc[m] as (...a: unknown[]) => unknown).bind(doc);
-    (doc as unknown as Record<string, unknown>)[m] = (...args: unknown[]) => {
-      const last = args[args.length - 1];
-      if (args.length > 1 && last && typeof last === 'object')
-        args[args.length - 1] = { features: NO_LIGATURES, ...last };
-      else args.push({ features: NO_LIGATURES });
-      return orig(...args);
-    };
-  }
-  const chunks: Buffer[] = [];
-  doc.on('data', (c: Buffer) => chunks.push(c));
-  const done = new Promise<Buffer>((res) => doc.on('end', () => res(Buffer.concat(chunks))));
 
-  const brand =
-    q.brand.color && /^#[0-9A-Fa-f]{6}$/.test(q.brand.color) ? q.brand.color : '#2F3A56';
+  const brand = pdfBrandColor(q.brand.color);
   const L = doc.page.margins.left;
   const W = doc.page.width - L - doc.page.margins.right;
   const t = quoteLabels(q.language);

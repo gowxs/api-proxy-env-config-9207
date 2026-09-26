@@ -1,0 +1,21 @@
+{
+  "name": "@noctiv/documents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Documents (beta): invoices, delivery notes and CMR consignment notes — fields, validation, numbering, branded PDFs.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/quotes": "workspace:*",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.17.6"
+  }
+}

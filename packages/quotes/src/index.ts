@@ -17,4 +17,5 @@ export * from './token.ts';
 export * from './import.ts';
 export * from './prompt.ts';
 export { renderQuotePdf, type QuotePdfBrand, type QuotePdfInput } from './pdf.ts';
+export { newPdf, pdfBrandColor, PDF_INK, PDF_MUTED, PDF_RULE } from './pdf-base.ts';
 export * from './store.ts';

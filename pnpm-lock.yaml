@@ -44,6 +44,9 @@ importers:
       '@noctiv/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@noctiv/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@noctiv/kb':
         specifier: workspace:*
         version: link:../../packages/kb
@@ -117,6 +120,9 @@ importers:
       '@noctiv/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@noctiv/documents':
+        specifier: workspace:*
+        version: link:../../packages/documents
       '@noctiv/kb':
         specifier: workspace:*
         version: link:../../packages/kb
@@ -190,6 +196,22 @@ importers:
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
+
+  packages/documents:
+    dependencies:
+      '@noctiv/quotes':
+        specifier: workspace:*
+        version: link:../quotes
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/pdfkit':
+        specifier: ^0.17.6
+        version: 0.17.6
 
   packages/kb:
     dependencies:

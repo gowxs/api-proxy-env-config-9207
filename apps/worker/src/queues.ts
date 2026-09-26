@@ -9,4 +9,5 @@ export const QUEUES = {
   healthCheck: 'connection.health',
   tenantDelete: 'tenant.delete',
   quotesImport: 'quotes.import',
+  documentsPrefill: 'documents.prefill',
 } as const;

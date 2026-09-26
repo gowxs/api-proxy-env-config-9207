@@ -17,6 +17,8 @@ import {
 import { api } from '@/lib/api';
 import type { Quote } from '@/lib/quotes';
 import { QuoteBlock } from '@/components/quote';
+import { ConversationDocuments, DraftDocument } from '@/components/documents';
+import type { Doc } from '@/lib/documents';
 import { reasonText, THREAD_STATUS } from '@/lib/reasons';
 import { useTenantId } from '@/lib/session';
 
@@ -37,7 +39,7 @@ interface Message {
 }
 interface Draft {
   id: string;
-  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote';
+  kind: 'reply' | 'followup' | 'acknowledgement' | 'quote' | 'document';
   status: string;
   to_address: string;
   subject: string;
@@ -72,6 +74,9 @@ interface Detail {
   escalations: Escalation[];
   /** Quotes (beta) in this conversation. */
   quotes?: Quote[];
+  /** Documents (beta) in this conversation; absent when the module is off. */
+  documents?: Doc[];
+  documentsEnabled?: boolean;
 }
 
 const fmt = (iso: string) =>
@@ -98,10 +103,13 @@ const DRAFT_STATUS: Record<
 function DraftCard({
   draft,
   quote,
+  document,
   tenantId,
   onChange,
 }: {
   draft: Draft;
+  /** For a document draft: the document it carries. */
+  document?: Doc;
   /** For a quote draft: the quote it carries. */
   quote?: Quote;
   tenantId: string;
@@ -124,11 +132,13 @@ function DraftCard({
         <span className="text-sm font-semibold">
           {draft.kind === 'quote'
             ? 'Quote reply'
-            : draft.kind === 'followup'
-              ? 'Follow-up draft'
-              : draft.kind === 'acknowledgement'
-                ? 'Acknowledgement (sent automatically)'
-                : 'Reply draft'}
+            : draft.kind === 'document'
+              ? 'Reply with document'
+              : draft.kind === 'followup'
+                ? 'Follow-up draft'
+                : draft.kind === 'acknowledgement'
+                  ? 'Acknowledgement (sent automatically)'
+                  : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}
@@ -144,6 +154,7 @@ function DraftCard({
           </p>
         </div>
       )}
+      {document && <DraftDocument doc={document} />}
       {draft.status === 'suggestion' && (
         <p className="mb-2 text-xs text-red-800">
           The assistant was not sure about this answer. Check every fact before sending.
@@ -330,6 +341,7 @@ function ConversationView() {
           key={d.id}
           draft={d}
           quote={data.quotes?.find((q) => q.draft_id === d.id)}
+          document={data.documents?.find((x) => x.draft_id === d.id)}
           tenantId={tenantId}
           onChange={() => void reload()}
         />
@@ -340,6 +352,19 @@ function ConversationView() {
         .map((q) => (
           <QuoteBlock key={q.id} quote={q} tenantId={tenantId} onChange={() => void reload()} />
         ))}
+
+      {data.documentsEnabled && (
+        <ConversationDocuments
+          tenantId={tenantId}
+          threadId={t.id}
+          documents={data.documents ?? []}
+          quotes={data.quotes ?? []}
+          latestInboundId={
+            [...data.messages].reverse().find((m) => m.direction === 'inbound' && m.body_text)
+              ?.id ?? null
+          }
+        />
+      )}
 
       <ul className="space-y-3">
         {data.messages.map((m) => (

@@ -11,6 +11,7 @@ import { mailFetchHandler } from './jobs/mail-fetch.ts';
 import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { quotesImportHandler } from './jobs/quotes-import.ts';
+import { documentsPrefillHandler } from './jobs/documents-prefill.ts';
 import { MailboxManager } from './mailbox/manager.ts';
 import { alertDeadJob } from './ops/alerts.ts';
 import { purgeExpiredContent, tenantDeleteHandler } from './ops/gdpr.ts';
@@ -67,6 +68,7 @@ const runner = new JobRunner({
       ...(quotes ? { quotes } : {}),
     }),
     [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
+    [QUEUES.documentsPrefill]: documentsPrefillHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
     [QUEUES.healthCheck]: healthCheckHandler({
       sql: db.sql,
@@ -89,6 +91,7 @@ const runner = new JobRunner({
       keys,
       allowInsecure: config.MAIL_ALLOW_INSECURE,
       logger,
+      fetchLogo: createSafeFetcher({ maxBytes: 1024 * 1024, timeoutMs: 8_000 }),
       ...(quotes
         ? {
             quotes: {
@@ -148,6 +151,7 @@ const hourly = () =>
     db.sql`select app.queue_trial_reminders()`,
     db.sql`select app.expire_quotes()`,
     db.sql`select app.purge_expired_quote_text()`,
+    db.sql`select app.purge_expired_document_prefill()`,
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();

@@ -7,6 +7,7 @@ import {
   type TenantMode,
 } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
+import { documentJson, listDocuments } from '@noctiv/documents';
 import { loadAllowlist } from '@noctiv/kb';
 import {
   BlockedUrlError,
@@ -21,6 +22,7 @@ import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
 import { HttpError } from './http-error.ts';
+import { documentSettingsColumns, documentSettingsShape } from './documents.ts';
 import { quoteSettingsColumns, quoteSettingsShape, selectQuotes } from './quotes.ts';
 
 /** Queue names shared with the worker (apps/worker/src/queues.ts). */
@@ -125,6 +127,7 @@ const settingsBody = z
     onboardingCompleted: z.literal(true),
     ...designShape,
     ...quoteSettingsShape,
+    ...documentSettingsShape,
   })
   .partial()
   .strict();
@@ -178,7 +181,9 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                email_template, brand_company_name, brand_logo_url, brand_color, brand_website,
                brand_phone, brand_address, brand_social_links,
                quotes_enabled, quotes_currency, quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate,
-               quotes_validity_days, quotes_auto_send_limit_cents
+               quotes_validity_days, quotes_auto_send_limit_cents,
+               documents_enabled, seller_legal_name, seller_legal_address, seller_reg_no, seller_vat_no,
+               seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days
         from public.tenants`;
       return t;
     }),
@@ -210,7 +215,12 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
-      Object.assign(cols, await designColumns(tx, b), quoteSettingsColumns(b));
+      Object.assign(
+        cols,
+        await designColumns(tx, b),
+        quoteSettingsColumns(b),
+        documentSettingsColumns(b),
+      );
       if (Object.keys(cols).length) {
         await tx`update public.tenants set ${tx(cols)} where id = ${tenantId}`;
         await audit(tx, tenantId, req.user!.userId, 'settings.updated', 'tenant', tenantId, {
@@ -334,6 +344,21 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                (select count(*) from public.quotes where status in ('pending_approval', 'sent', 'viewed'))::int as open,
                (select count(*) from public.quotes where status = 'accepted')::int as accepted
         from public.tenants t`;
+      const [docs] = await tx<
+        {
+          enabled: boolean;
+          drafts: number;
+          unpaid: number;
+          unpaid_cents: number;
+          currency: string;
+        }[]
+      >`
+        select t.documents_enabled as enabled, t.quotes_currency as currency,
+               (select count(*) from public.documents where status = 'draft')::int as drafts,
+               (select count(*) from public.documents where type = 'invoice' and status in ('issued', 'sent'))::int as unpaid,
+               (select coalesce(sum(total_cents), 0) from public.documents
+                 where type = 'invoice' and status in ('issued', 'sent'))::int as unpaid_cents
+        from public.tenants t`;
       return {
         mode: t!.mode,
         timezone: tz,
@@ -356,6 +381,13 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         },
         knowledge: Object.fromEntries(kb.map((k) => [k.status, k.n])),
         quotes,
+        documents: {
+          enabled: docs!.enabled,
+          drafts: docs!.drafts,
+          unpaid: docs!.unpaid,
+          unpaidCents: docs!.unpaid_cents,
+          currency: docs!.currency,
+        },
       };
     }),
   );
@@ -412,7 +444,19 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         select id, category, reason, summary, suggestion_draft_id, resolved_at, created_at
         from public.escalations where thread_id = ${id} order by created_at`;
       const quotes = await selectQuotes(tx, tx`q.thread_id = ${id}`);
-      return { thread, messages, drafts, escalations, quotes };
+      const [t] = await tx<
+        { documents_enabled: boolean }[]
+      >`select documents_enabled from public.tenants`;
+      const documents = (await listDocuments(tx, { threadId: id })).map(documentJson);
+      return {
+        thread,
+        messages,
+        drafts,
+        escalations,
+        quotes,
+        documents,
+        documentsEnabled: t?.documents_enabled ?? false,
+      };
     }),
   );
 

@@ -36,6 +36,13 @@ interface Dashboard {
   };
   knowledge: Record<string, number>;
   quotes?: { enabled: boolean; open: number; accepted: number };
+  documents?: {
+    enabled: boolean;
+    drafts: number;
+    unpaid: number;
+    unpaidCents: number;
+    currency: string;
+  };
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -192,6 +199,23 @@ function DashboardView() {
           {(data.knowledge.failed ?? 0) > 0 && ` · ${data.knowledge.failed} failed`}
         </p>
       </Card>
+
+      {data.documents?.enabled && (
+        <Card
+          title="Documents (beta)"
+          action={
+            <Link className="text-sm text-indigo-700" href="/documents">
+              Open
+            </Link>
+          }
+        >
+          <p className="text-sm text-neutral-700">
+            {data.documents.drafts} to finish · {data.documents.unpaid} unpaid{' '}
+            {data.documents.unpaid > 0 &&
+              `(${new Intl.NumberFormat('en-GB', { style: 'currency', currency: data.documents.currency }).format(data.documents.unpaidCents / 100)})`}
+          </p>
+        </Card>
+      )}
 
       {data.quotes?.enabled && (
         <Card
