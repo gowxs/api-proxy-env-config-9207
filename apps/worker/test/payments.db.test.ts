@@ -359,8 +359,8 @@ describe('overdue reminder', () => {
 
   it('mode 2: sent on its own, with the invoice attached again', async () => {
     const T = await tenant('remind-mode2', 'auto_send');
-    const shop = GREENMAIL_USERS.docShop;
-    const customer = GREENMAIL_USERS.docCustomer;
+    const shop = GREENMAIL_USERS.payShop;
+    const customer = GREENMAIL_USERS.payCustomer;
     const connectionId = await addGreenmailConnection(owner, gm, {
       tenantId: T.tenantId,
       address: shop.address,
