@@ -21,6 +21,8 @@ import { sendWaitlistConfirmations } from './ops/waitlist.ts';
 import { queuePaymentReminders } from './ops/payment-reminders.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { scanQuotaWaits } from './ops/quota.ts';
+import { maybeSendDigest } from './ops/digest.ts';
+import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
@@ -156,15 +158,32 @@ const refreshTimer = setInterval(
       .catch((e: unknown) => logger.error({ err: String(e) }, 'mailbox refresh failed')),
   60_000,
 );
+// Monitoring (PLAN.md §25): a heartbeat every minute, read by the API's
+// GET /healthz/worker (down after 3 minutes without one).
+const startedAt = new Date();
+const workerName = `${hostname()}:${process.pid}`.slice(0, 100);
+const beat = () =>
+  db.sql`select app.worker_beat(${workerName}, ${startedAt})`.catch((e: unknown) =>
+    logger.error({ err: String(e) }, 'heartbeat failed'),
+  );
+void beat();
+const heartbeatTimer = setInterval(() => void beat(), 60_000);
+// Mailbox health checks every 30 minutes: /healthz/worker reports a
+// connected mailbox not checked for 60 minutes.
+const healthScan = () =>
+  scanHealthChecks(db.sql).catch((e: unknown) =>
+    logger.error({ err: String(e) }, 'health check scan failed'),
+  );
+void healthScan();
+const healthTimer = setInterval(() => void healthScan(), 30 * 60_000);
 // Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
-// old health checks removed, a health check per connected mailbox, the
+// old health checks removed, the
 // retention purge (idempotent; content past retention_days is removed) and
 // trial reminder e-mails (7 days and 1 day before the trial ends).
 const hourly = () =>
   Promise.all([
     db.sql`select * from app.housekeeping()`,
     db.sql`select * from app.hourly_maintenance()`,
-    scanHealthChecks(db.sql),
     purgeExpiredContent(db.sql),
     db.sql`select app.queue_trial_reminders()`,
     db.sql`select app.expire_quotes()`,
@@ -176,6 +195,7 @@ const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();
 
 let notifyTimer: NodeJS.Timeout | undefined;
+let digestTimer: NodeJS.Timeout | undefined;
 if (config.SYSTEM_SMTP_HOST) {
   const transport = createSystemTransport({
     host: config.SYSTEM_SMTP_HOST,
@@ -243,6 +263,20 @@ if (config.SYSTEM_SMTP_HOST) {
   if (!config.ACTION_LINK_SECRET) {
     logger.warn('ACTION_LINK_SECRET not set: draft emails carry no Approve / Reject links');
   }
+  // Admin daily digest at 08:00 Riga (PLAN.md §25).
+  const adminEmail = config.ADMIN_EMAIL;
+  if (adminEmail) {
+    const digest = () =>
+      void maybeSendDigest({
+        sql: db.sql,
+        transport,
+        from: config.SYSTEM_MAIL_FROM,
+        to: adminEmail,
+        logger,
+      }).catch((e: unknown) => logger.error({ err: String(e) }, 'admin digest failed'));
+    digest();
+    digestTimer = setInterval(digest, 60_000);
+  }
 } else {
   logger.warn(
     'SYSTEM_SMTP_HOST not set: owner and admin notifications stay queued until the system mailer is configured',
@@ -271,6 +305,9 @@ const shutdown = async (signal: string) => {
   clearInterval(refreshTimer);
   clearInterval(housekeepingTimer);
   clearInterval(followupTimer);
+  clearInterval(heartbeatTimer);
+  clearInterval(healthTimer);
+  if (digestTimer) clearInterval(digestTimer);
   clearInterval(quotaTimer);
   if (notifyTimer) clearInterval(notifyTimer);
   await manager.stopAll();

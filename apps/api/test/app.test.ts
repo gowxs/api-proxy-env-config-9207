@@ -33,6 +33,37 @@ describe('api health endpoints', () => {
     expect(res.statusCode).toBe(503);
   });
 
+  it('worker health: ok with a fresh heartbeat and checked mailboxes (PLAN.md §25)', async () => {
+    const at = (s: number) => new Date(Date.now() - s * 1000);
+    const get = async (
+      h: () => Promise<{ lastBeat: Date | null; connected: number; unchecked: number }>,
+    ) => {
+      const app = buildApp({ ...base, checkDatabase: async () => true, workerHealth: h });
+      return app.inject({ method: 'GET', url: '/healthz/worker' });
+    };
+    const ok = await get(async () => ({ lastBeat: at(30), connected: 2, unchecked: 0 }));
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json()).toMatchObject({ status: 'ok', problems: [] });
+    expect(ok.headers['cache-control']).toBe('no-store');
+
+    const stale = await get(async () => ({ lastBeat: at(200), connected: 2, unchecked: 0 }));
+    expect(stale.statusCode).toBe(503);
+    expect(stale.json().problems).toEqual(['worker_heartbeat']);
+
+    const never = await get(async () => ({ lastBeat: null, connected: 0, unchecked: 0 }));
+    expect(never.statusCode).toBe(503);
+
+    const mailbox = await get(async () => ({ lastBeat: at(10), connected: 2, unchecked: 1 }));
+    expect(mailbox.statusCode).toBe(503);
+    expect(mailbox.json().problems).toEqual(['mailbox_checks']);
+
+    const down = await get(async () => {
+      throw new Error('db down');
+    });
+    expect(down.statusCode).toBe(503);
+    expect(down.json()).toEqual({ status: 'unavailable', problems: ['database'] });
+  });
+
   it('requires a bearer token on /v1 routes', async () => {
     const app = buildApp({ ...base, checkDatabase: async () => true });
     const res = await app.inject({

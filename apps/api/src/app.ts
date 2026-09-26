@@ -16,6 +16,7 @@ import { quoteRoutes } from './routes/quotes.ts';
 import { composeRoutes } from './routes/compose.ts';
 import { documentRoutes } from './routes/documents.ts';
 import { HttpError, webRoutes } from './routes/web.ts';
+import { healthRoutes, readWorkerHealth, type WorkerHealth } from './routes/health.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -33,6 +34,8 @@ export interface AppDeps {
   logger: Logger;
   /** Returns true when the database answers; used by the readiness probe. */
   checkDatabase: () => Promise<boolean>;
+  /** GET /healthz/worker reads this (default: app.worker_health in the database). */
+  workerHealth?: () => Promise<WorkerHealth>;
   sql: Sql;
   verifyToken: VerifyToken;
   /** Worker's public sealing key: the API can encrypt mailbox passwords but never decrypt them. */
@@ -104,6 +107,7 @@ export function buildApp(
   );
 
   app.get('/healthz', async () => ({ status: 'ok' }));
+  healthRoutes(app, deps.workerHealth ?? (() => readWorkerHealth(deps.sql)));
 
   app.get('/readyz', async (_req, reply) => {
     const dbOk = await deps.checkDatabase().catch(() => false);

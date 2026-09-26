@@ -872,3 +872,26 @@ QA.md lists the findings; these are the decisions and how they were built.
 - **D4: mixed quote requests.** Matched lines → a quote. The unmatched parts go through the normal grounded reply (`generateGrounded`, the same retrieval, guard and verifier), told to answer only those parts; its text is added under the quote cover. If it cannot be answered, the owner gets `quote_needs_you` with `partial: true`. If the added text would not have been auto-sent on its own, the quote waits for approval (`partial_answer_check`).
 - **D5: AI quota waits.** `app.quota_waits()` lists customer e-mails waiting on the provider's daily quota. Every 5 minutes the worker checks: after 30 minutes the admin gets `quota_wait`, after 4 hours the owner gets `replies_delayed` (each at most once per tenant and day). The app shows "Replies are delayed" whenever e-mails wait. `app.fail_job` no longer counts a quota wait against the retries, for up to 26 hours after the e-mail arrived.
 - **D6: Compose follow-ups.** A "Follow up if no reply" checkbox, on by default. When it is off, the thread gets `followup_stop_reason = 'owner_off'` and sending schedules no follow-up.
+
+## 25. Monitoring and backups (founder request 2026-09-27)
+
+- **Worker heartbeat:** each worker process writes `app.worker_heartbeats` every minute (`app.worker_beat`). Mailbox health checks now run every 30 minutes instead of hourly.
+- **`GET /healthz/worker`** (API; public at `https://app.noctiv.io/api/healthz/worker`) reads `app.worker_health` and returns 503 when either of these holds:
+  - the newest heartbeat is older than 3 minutes;
+  - a connected mailbox of an active account has not been health-checked for 60 minutes.
+
+  It returns counts only, with `Cache-Control: no-store`.
+- **External uptime:** UptimeRobot (free plan) runs HTTP checks every 5 minutes on `https://noctiv.io`, `https://app.noctiv.io/login` and `/api/healthz/worker`, alerting the admin e-mail. `scripts/uptime-monitors.ts` creates the monitors, idempotently, from `UPTIMEROBOT_API_KEY`.
+- **Admin daily digest:** at 08:00 Riga, one e-mail per Riga day. `app.admin_digest_claim` makes it once only, and a failed send is retried 10 minutes apart, up to 5 times. It covers the 24 hours up to 08:00 and shows counts only:
+  - accounts (with billing state);
+  - e-mails processed, auto-sent, escalated and failed;
+  - sends;
+  - Gemini usage for the previous UTC day;
+  - quota waits;
+  - failed jobs by queue, and overdue jobs;
+  - mailbox disconnects;
+  - worker heartbeat;
+  - waitlist sign-ups;
+  - the ten busiest accounts.
+- **Backups:** a nightly encrypted `pg_dump` to Cloudflare R2 (EU), kept 30 days. It runs as the Northflank cron job `db-backup` (`docker/backup/`, `scripts/northflank-backup-job.ts`). Restore uses `scripts/restore-backup.sh`. The runbook is `docs/backup-restore.md`.
+

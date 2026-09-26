@@ -37,6 +37,11 @@ for `api`, `worker` or the packages. Only `web` is built (`next build`).
 | Worker          | Northflank project `noctiv`, service `worker` (London, **non-EU**) | same image, `SERVICE=worker`; warns and emails the admin while non-EU       |
 | Database + Auth | Supabase `bdbztonmdfnqqlonvywn` (Frankfurt)                        | migrations via the Supabase connector; runtime roles via the session pooler |
 
+Monitoring: `https://app.noctiv.io/api/healthz/worker` (503 when the worker's heartbeat is older
+than 3 minutes or a mailbox has not been checked for an hour), UptimeRobot checks every 5 minutes
+(`scripts/uptime-monitors.ts`), and an admin digest e-mail at 08:00 Riga. Nightly encrypted
+database backups go to Cloudflare R2; restore with `docs/backup-restore.md`.
+
 Secrets live only in the hosts' environment settings and the local `.env`. Signup needs the invite
 code in `SIGNUP_INVITE_CODES` (API). Owner notification emails stay queued until Brevo SMTP is set
 (`SYSTEM_MAILER_PENDING=true`). Only operator-flagged test mailboxes are processed (free AI tier).
