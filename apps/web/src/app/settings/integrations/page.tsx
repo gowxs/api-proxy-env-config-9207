@@ -53,6 +53,14 @@ const SOON: { id: Soon; name: string; line: string }[] = [
 
 /** Settings → Integrations (PLAN.md §23): what works today, and "notify me" for what's next. */
 export default function IntegrationsPage() {
+  return (
+    <AppPage title="Integrations">
+      <Integrations />
+    </AppPage>
+  );
+}
+
+function Integrations() {
   const tenantId = useTenantId();
   const t = useLoad(
     () => api<{ integrations_notify: Soon[] }>(`/v1/tenants/${tenantId}`),
@@ -82,7 +90,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <AppPage title="Integrations">
+    <>
       <p className="text-sm text-neutral-600">
         One inbox, one platform. See also{' '}
         <a className="text-indigo-700" href="https://noctiv.io/integrations/">
@@ -131,6 +139,6 @@ export default function IntegrationsPage() {
           </Card>
         ))
       )}
-    </AppPage>
+    </>
   );
 }
