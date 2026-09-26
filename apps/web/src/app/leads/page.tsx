@@ -59,6 +59,11 @@ interface Lead {
   last_activity_at: string;
   notes: string | null;
   thread_id: string | null;
+  billing_name: string | null;
+  billing_address: string | null;
+  billing_reg_no: string | null;
+  billing_vat_no: string | null;
+  billing_updated_at: string | null;
 }
 
 function LeadRow({
@@ -73,6 +78,13 @@ function LeadRow({
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState(lead.notes ?? '');
   const [name, setName] = useState(lead.name ?? '');
+  const [billing, setBilling] = useState({
+    name: lead.billing_name ?? '',
+    address: lead.billing_address ?? '',
+    regNo: lead.billing_reg_no ?? '',
+    vatNo: lead.billing_vat_no ?? '',
+  });
+  const setB = (k: keyof typeof billing, v: string) => setBilling((b) => ({ ...b, [k]: v }));
   const { busy, error, run } = useAction();
   const save = (body: Record<string, unknown>) =>
     run(async () => {
@@ -130,9 +142,63 @@ function LeadRow({
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
+          <fieldset className="space-y-3 rounded-lg bg-neutral-50 p-3">
+            <legend className="float-left w-full text-sm font-semibold">Billing details</legend>
+            <p className="clear-both text-xs text-neutral-500">
+              Used on invoices for this customer. The customer can also give them when accepting a
+              quote.
+              {lead.billing_updated_at && ` Last changed ${timeAgo(lead.billing_updated_at)}.`}
+            </p>
+            <label className="block text-sm">
+              Company or name
+              <input
+                className={inputClass}
+                value={billing.name}
+                maxLength={200}
+                autoComplete="off"
+                onChange={(e) => setB('name', e.target.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              Billing address
+              <textarea
+                className={`${inputClass} min-h-16`}
+                value={billing.address}
+                maxLength={500}
+                onChange={(e) => setB('address', e.target.value)}
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm">
+                Registration number
+                <input
+                  className={inputClass}
+                  value={billing.regNo}
+                  maxLength={40}
+                  autoComplete="off"
+                  onChange={(e) => setB('regNo', e.target.value)}
+                />
+              </label>
+              <label className="text-sm">
+                VAT number
+                <input
+                  className={inputClass}
+                  value={billing.vatNo}
+                  maxLength={30}
+                  autoComplete="off"
+                  placeholder="e.g. LV40003123456"
+                  onChange={(e) => setB('vatNo', e.target.value)}
+                />
+              </label>
+            </div>
+          </fieldset>
           <ErrorText>{error}</ErrorText>
           <div className="flex gap-2">
-            <Button variant="secondary" disabled={busy} onClick={() => void save({ notes, name })}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void save({ notes, name, billing })}
+            >
               Save
             </Button>
             {lead.thread_id && (

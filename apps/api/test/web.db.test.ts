@@ -271,6 +271,43 @@ describe('leads', () => {
       (await call('PATCH', t(A, `/leads/${A.leadId}`), A.userId, { stage: 'vip' })).status,
     ).toBe(400);
   });
+
+  it('shows and edits the billing details used on invoices', async () => {
+    const patch = (billing: Record<string, string>) =>
+      call('PATCH', t(A, `/leads/${A.leadId}`), A.userId, { billing });
+    const ok = await patch({
+      name: 'SIA Ozols Būve',
+      address: 'Krasta iela 12, Rīga',
+      regNo: '40103987654',
+      vatNo: 'lv 4010 3987654',
+    });
+    expect(ok.status).toBe(200);
+    const lead = () =>
+      call('GET', t(A, '/leads'), A.userId).then((r) =>
+        r.json.leads.find((l: { id: string }) => l.id === A.leadId),
+      );
+    expect(await lead()).toMatchObject({
+      billing_name: 'SIA Ozols Būve',
+      billing_address: 'Krasta iela 12, Rīga',
+      billing_reg_no: '40103987654',
+      billing_vat_no: 'LV40103987654',
+    });
+    const bad = await patch({ name: 'X', address: 'Y', regNo: '', vatNo: '12345' });
+    expect(bad.status).toBe(400);
+    expect(bad.json.error).toContain('country prefix');
+    expect((await lead()).billing_name).toBe('SIA Ozols Būve');
+    // Emptied fields are cleared.
+    expect((await patch({ name: '', address: '', regNo: '', vatNo: '' })).status).toBe(200);
+    expect(await lead()).toMatchObject({ billing_name: null, billing_vat_no: null });
+    // Another tenant cannot touch it.
+    expect(
+      (
+        await call('PATCH', t(A, `/leads/${A.leadId}`), B.userId, {
+          billing: { name: 'Z', address: 'Z', regNo: '', vatNo: '' },
+        })
+      ).status,
+    ).toBe(403);
+  });
 });
 
 describe('knowledge base', () => {

@@ -8,7 +8,7 @@ import {
   WAITLIST_INTEGRATIONS,
 } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
-import { documentJson, listDocuments, prefixLocks } from '@noctiv/documents';
+import { documentJson, listDocuments, prefixLocks, vatNoValid } from '@noctiv/documents';
 import { loadAllowlist } from '@noctiv/kb';
 import {
   BlockedUrlError,
@@ -146,6 +146,18 @@ const leadBody = z
     stage: z.enum(LEAD_STAGES),
     name: z.string().trim().max(200).nullable(),
     notes: z.string().max(5_000).nullable(),
+    /** Billing details (also given by the customer on the quote Accept page). */
+    billing: z
+      .object({
+        name: z.string().trim().max(200),
+        address: z.string().trim().max(500),
+        regNo: z.string().trim().max(40),
+        vatNo: z
+          .string()
+          .transform((v) => v.replace(/\s+/g, '').toUpperCase())
+          .pipe(z.string().max(30)),
+      })
+      .strict(),
   })
   .partial()
   .strict();
@@ -609,6 +621,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const q = z.object({ stage: z.enum(LEAD_STAGES).optional() }).parse(req.query);
       const leads = await tx`
         select l.id, l.email, l.name, l.stage, l.stage_changed_at, l.last_activity_at, l.notes, l.first_seen_at,
+               l.billing_name, l.billing_address, l.billing_reg_no, l.billing_vat_no, l.billing_updated_at,
                (select th.id from public.threads th where th.lead_id = l.id order by th.created_at desc limit 1) as thread_id
         from public.leads l
         where ${q.stage ? tx`l.stage = ${q.stage}` : tx`true`}
@@ -631,6 +644,14 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         await tx`update public.leads set name = ${b.name || null} where id = ${id}`;
       if (b.notes !== undefined)
         await tx`update public.leads set notes = ${b.notes || null} where id = ${id}`;
+      if (b.billing?.vatNo && !vatNoValid(b.billing.vatNo))
+        throw new HttpError(400, 'VAT number: use the country prefix, e.g. LV40003123456.');
+      if (b.billing)
+        await tx`update public.leads
+                 set billing_name = ${b.billing.name || null}, billing_address = ${b.billing.address || null},
+                     billing_reg_no = ${b.billing.regNo || null}, billing_vat_no = ${b.billing.vatNo || null},
+                     billing_updated_at = now()
+                 where id = ${id}`;
       if (b.stage && b.stage !== lead.stage) {
         await tx`update public.leads set stage = ${b.stage}, stage_changed_at = now() where id = ${id}`;
         await tx`insert into public.lead_events (tenant_id, lead_id, from_stage, to_stage, actor, actor_user_id, reason)
