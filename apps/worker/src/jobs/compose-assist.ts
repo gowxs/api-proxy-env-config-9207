@@ -36,7 +36,8 @@ export type ComposeAssistResult =
     }
   | { ok: false; error: 'budget_halted' | 'free_tier_refused' | 'model_error' | 'invalid_output' };
 
-const numbersOf = (s: string) => s.match(/\d+(?:[.,]\d+)*/g) ?? [];
+/** Whole numbers only: "3" is not backed by "30", "2023" or a code like "a3f". */
+const numbersOf = (s: string) => s.match(/(?<![\p{L}\d])\d+(?:[.,]\d+)*(?![\p{L}\d])/gu) ?? [];
 
 /**
  * compose.assist — the "Write with AI" help in Inbox → New e-mail (PLAN.md
@@ -132,10 +133,8 @@ export function composeAssistHandler(deps: ComposeAssistDeps) {
       .map((x) => /^\[?\s*s\s*(\d{1,3})\s*\]?$/i.exec(x.trim()))
       .map((m) => (m ? labels.get(`S${Number(m[1])}`) : undefined))
       .filter((x): x is string => Boolean(x));
-    const backing = [notes, p.subject ?? '', ...cited].join('\n');
-    const unsupportedNumbers = [
-      ...new Set(numbersOf(r.value.body).filter((n) => !backing.includes(n))),
-    ];
+    const backing = new Set(numbersOf([notes, p.subject ?? '', ...cited].join('\n')));
+    const unsupportedNumbers = [...new Set(numbersOf(r.value.body).filter((n) => !backing.has(n)))];
     return {
       ok: true,
       subject: r.value.subject || (p.subject ?? ''),
