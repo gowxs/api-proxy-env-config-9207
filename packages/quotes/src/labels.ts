@@ -37,6 +37,17 @@ export interface QuoteLabels {
   acceptOnline: (date: string) => string;
   acceptButton: string;
   downloadPdf: string;
+  /** Billing details asked before accepting (for the invoice). */
+  billingHeading: string;
+  billingIntro: string;
+  billingName: string;
+  billingAddress: string;
+  billingRegNo: string;
+  billingVatNo: string;
+  optional: string;
+  required: string;
+  vatInvalid: string;
+  fixBelow: string;
   accepted: string;
   expired: string;
   rejected: string;
@@ -65,6 +76,16 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'NOTES',
     acceptOnline: (d) => `Accept this quote online (valid until ${d}):`,
     acceptButton: 'Accept quote',
+    billingHeading: 'Billing details',
+    billingIntro: 'For the invoice. We use them only for this order.',
+    billingName: 'Company or name',
+    billingAddress: 'Billing address',
+    billingRegNo: 'Registration number',
+    billingVatNo: 'VAT number',
+    optional: 'optional',
+    required: 'Please fill this in.',
+    vatInvalid: 'This VAT number looks wrong. Use the country prefix, e.g. LV40003123456.',
+    fixBelow: 'Please check the details below.',
     downloadPdf: 'Download PDF',
     accepted: 'You accepted this quote. Thank you — we will be in touch.',
     expired: 'This quote has expired. Reply to our e-mail to ask for a new one.',
@@ -92,6 +113,16 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'HINWEISE',
     acceptOnline: (d) => `Nehmen Sie dieses Angebot online an (gültig bis ${d}):`,
     acceptButton: 'Angebot annehmen',
+    billingHeading: 'Rechnungsdaten',
+    billingIntro: 'Für die Rechnung. Wir verwenden sie nur für diesen Auftrag.',
+    billingName: 'Firma oder Name',
+    billingAddress: 'Rechnungsadresse',
+    billingRegNo: 'Registernummer',
+    billingVatNo: 'USt-IdNr.',
+    optional: 'optional',
+    required: 'Bitte ausfüllen.',
+    vatInvalid: 'Diese USt-IdNr. scheint falsch. Bitte mit Länderkennung, z. B. DE123456789.',
+    fixBelow: 'Bitte prüfen Sie die Angaben unten.',
     downloadPdf: 'PDF herunterladen',
     accepted: 'Sie haben dieses Angebot angenommen. Vielen Dank – wir melden uns bei Ihnen.',
     expired:
@@ -121,6 +152,16 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'PIEZĪMES',
     acceptOnline: (d) => `Apstipriniet šo piedāvājumu tiešsaistē (derīgs līdz ${d}):`,
     acceptButton: 'Apstiprināt piedāvājumu',
+    billingHeading: 'Rēķina rekvizīti',
+    billingIntro: 'Rēķinam. Tos izmantojam tikai šim pasūtījumam.',
+    billingName: 'Uzņēmums vai vārds',
+    billingAddress: 'Juridiskā adrese',
+    billingRegNo: 'Reģistrācijas numurs',
+    billingVatNo: 'PVN numurs',
+    optional: 'nav obligāts',
+    required: 'Lūdzu, aizpildiet.',
+    vatInvalid: 'Šķiet, ka PVN numurs nav pareizs. Norādiet ar valsts kodu, piem., LV40003123456.',
+    fixBelow: 'Lūdzu, pārbaudiet datus zemāk.',
     downloadPdf: 'Lejupielādēt PDF',
     accepted: 'Jūs apstiprinājāt šo piedāvājumu. Paldies — mēs ar jums sazināsimies.',
     expired:
@@ -150,6 +191,16 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'OPMERKINGEN',
     acceptOnline: (d) => `Accepteer deze offerte online (geldig tot ${d}):`,
     acceptButton: 'Offerte accepteren',
+    billingHeading: 'Factuurgegevens',
+    billingIntro: 'Voor de factuur. We gebruiken ze alleen voor deze bestelling.',
+    billingName: 'Bedrijf of naam',
+    billingAddress: 'Factuuradres',
+    billingRegNo: 'KvK-nummer',
+    billingVatNo: 'Btw-nummer',
+    optional: 'optioneel',
+    required: 'Vul dit in.',
+    vatInvalid: 'Dit btw-nummer lijkt niet te kloppen. Gebruik de landcode, bijv. NL123456789B01.',
+    fixBelow: 'Controleer de gegevens hieronder.',
     downloadPdf: 'PDF downloaden',
     accepted: 'U hebt deze offerte geaccepteerd. Dank u – we nemen contact met u op.',
     expired: 'Deze offerte is verlopen. Beantwoord onze e-mail om een nieuwe aan te vragen.',
@@ -177,6 +228,17 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'REMARQUES',
     acceptOnline: (d) => `Acceptez ce devis en ligne (valable jusqu’au ${d}) :`,
     acceptButton: 'Accepter le devis',
+    billingHeading: 'Coordonnées de facturation',
+    billingIntro: 'Pour la facture. Nous les utilisons uniquement pour cette commande.',
+    billingName: 'Société ou nom',
+    billingAddress: 'Adresse de facturation',
+    billingRegNo: 'Numéro d’immatriculation',
+    billingVatNo: 'Numéro de TVA',
+    optional: 'facultatif',
+    required: 'Veuillez remplir ce champ.',
+    vatInvalid:
+      'Ce numéro de TVA semble incorrect. Indiquez le préfixe du pays, par ex. FR12345678901.',
+    fixBelow: 'Veuillez vérifier les informations ci-dessous.',
     downloadPdf: 'Télécharger le PDF',
     accepted: 'Vous avez accepté ce devis. Merci, nous reviendrons vers vous.',
     expired: 'Ce devis a expiré. Répondez à notre e-mail pour en demander un nouveau.',
@@ -204,6 +266,16 @@ export const QUOTE_LABELS: Record<QuoteLanguage, QuoteLabels> = {
     notes: 'NOTAS',
     acceptOnline: (d) => `Acepte este presupuesto en línea (válido hasta el ${d}):`,
     acceptButton: 'Aceptar presupuesto',
+    billingHeading: 'Datos de facturación',
+    billingIntro: 'Para la factura. Solo los usamos para este pedido.',
+    billingName: 'Empresa o nombre',
+    billingAddress: 'Dirección de facturación',
+    billingRegNo: 'Número de registro',
+    billingVatNo: 'NIF-IVA',
+    optional: 'opcional',
+    required: 'Rellene este campo.',
+    vatInvalid: 'Este NIF-IVA no parece correcto. Use el prefijo del país, p. ej. ESB12345678.',
+    fixBelow: 'Revise los datos a continuación.',
     downloadPdf: 'Descargar PDF',
     accepted: 'Ha aceptado este presupuesto. Gracias, nos pondremos en contacto con usted.',
     expired: 'Este presupuesto ha caducado. Responda a nuestro correo para pedir uno nuevo.',

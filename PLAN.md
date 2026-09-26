@@ -705,6 +705,13 @@ All tables have `tenant_id`, forced RLS and isolation policies like the rest.
 - **Worker (db):** quote drafted in mode 1; auto-sent in mode 2 under the limit, held over it; clarifying question plus owner notification for unmapped items; a sent message has the PDF attached; import parsing keeps only prices present in the text.
 - **API (db):** price list CRUD and CSV import, draft items not quotable, editing lines recomputes totals, the accept link (view, accept, expired, bad token) moves the lead to `quoted` → `accepted` and notifies the owner.
 
+### 21.8 Billing details on the Accept page (founder request 2026-09-26)
+
+- **Form:** before the Accept button the customer gives billing details: company or name (required), billing address (required), and registration and VAT number (optional). The VAT number must look like one (country prefix).
+- **Prefill:** from the lead's stored details, else the buyer on the latest invoice to that e-mail address, else the name on the quote.
+- **Page:** no script, phone-first, in the quote's language; errors are shown next to each field, and nothing is accepted until the form is valid.
+- **Storage:** on accept the details are stored on the lead (`leads.billing_*`; a lead is created if the quote had none). The automatic invoice (§22.11) uses them first, so a first-time customer's invoice can be issued and sent.
+
 ## 22. Documents (beta): invoices, delivery notes, CMR — plan (founder request 2026-09-26)
 
 A per-tenant module, off by default (Settings → "Documents (beta)"). Three document types on one engine: **fields → validation → branded PDF**, in the same style as quotes. Not accounting: no ledger, no bookkeeping export, no e-invoicing formats (Peppol, UBL) yet.
@@ -799,7 +806,7 @@ Forced RLS and isolation policies like every table. Documents are business recor
 - Per-tenant switch `auto_invoice_on_accept`, on by default; it only acts while Documents is on. It lives in Documents → Setup → Automation.
 - The customer's Accept click queues `documents.automation` (`quote_accepted`). The worker runs it once per quote; it does nothing if the owner already made an invoice from that quote.
 - **Invoice:** made from the quote (lines, VAT, currency, language).
-  - Buyer details are copied from this e-mail address's latest issued invoice. These are details the owner already confirmed, so nothing is invented.
+  - Buyer details come from the billing details the customer entered on the Accept page (§21.8), else from this e-mail address's latest issued invoice. Nothing is invented.
   - The invoice is issued ("Ready", numbered). The reply reads "Thank you for accepting quote Q-… Invoice INV-… for … is attached, due …", in six languages.
 - **Mode rules:**
   - Mode 1: the reply waits for approval and the owner gets a `draft_ready` e-mail.

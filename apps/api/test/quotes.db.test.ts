@@ -277,11 +277,34 @@ describe('price list', () => {
 
       // With Documents on, accepting queues the invoice automation (PLAN.md §22.11).
       await owner`update public.tenants set documents_enabled = true where id = ${A.tenantId}`;
+      // Billing details come first: the name is prefilled from the quote, the address is required.
+      expect(view.body).toContain('Billing details');
+      expect(view.body).toMatch(/name="address"[^>]*required/);
+      const missing = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'name=SIA+Ozols&address=&vatNo=40103987654',
+      });
+      expect(missing.statusCode).toBe(400);
+      expect(missing.body).toContain('Please fill this in.');
+      expect(missing.body).toContain('This VAT number looks wrong');
+      expect(missing.body).toContain('value="SIA Ozols"');
+      expect(missing.body).not.toContain('<script');
+      const [still] = await owner<{ status: string }[]>`
+        select status from public.quotes where id = ${quoteId}`;
+      expect(still!.status).toBe('viewed');
+
       const accept = await app.inject({
         method: 'POST',
         url,
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        payload: '',
+        payload: new URLSearchParams({
+          name: ' SIA  Ozols Būve ',
+          address: 'Krasta iela 12, Rīga',
+          regNo: '40103987654',
+          vatNo: 'lv 40103987654',
+        }).toString(),
       });
       await owner`update public.tenants set documents_enabled = false where id = ${A.tenantId}`;
       const jobs = await owner<{ payload: Record<string, unknown> }[]>`
@@ -299,6 +322,23 @@ describe('price list', () => {
         { stage: string }[]
       >`select stage from public.leads where id = ${A.leadId}`;
       expect(lead!.stage).toBe('accepted');
+      const [billing] = await owner`
+        select billing_name, billing_address, billing_reg_no, billing_vat_no from public.leads
+        where id = ${A.leadId}`;
+      expect(billing).toEqual({
+        billing_name: 'SIA Ozols Būve',
+        billing_address: 'Krasta iela 12, Rīga',
+        billing_reg_no: '40103987654',
+        billing_vat_no: 'LV40103987654',
+      });
+      // The next quote to this customer is prefilled from the lead.
+      const { quoteId: next } = await pendingQuote(A, candle, {
+        status: 'sent',
+        validUntil: valid,
+      });
+      const nextView = await app.inject({ method: 'GET', url: link(A.tenantId, next, valid) });
+      expect(nextView.body).toContain('value="SIA Ozols Būve"');
+      expect(nextView.body).toContain('Krasta iela 12, Rīga</textarea>');
       const [n] = await owner<{ kind: string; payload: { quoteId: string } }[]>`
         select kind, payload from public.notifications
         where tenant_id = ${A.tenantId} and kind = 'quote_accepted' and payload->>'quoteId' = ${quoteId}`;
@@ -355,7 +395,20 @@ describe('price list', () => {
       expect(view.body).toContain('PVN 21%');
       expect(view.body).toMatch(/29,04\s€/);
       expect(view.body).not.toContain('Accept quote');
-      const done = await app.inject({ method: 'POST', url, payload: '' });
+      expect(view.body).toContain('Rēķina rekvizīti');
+      const bad = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'name=&address=',
+      });
+      expect(bad.body).toContain('Lūdzu, aizpildiet.');
+      const done = await app.inject({
+        method: 'POST',
+        url,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: 'name=SIA+Ozols&address=R%C4%ABga',
+      });
       expect(done.body).toContain('Jūs apstiprinājāt šo piedāvājumu');
       const pdf = await app.inject({ method: 'GET', url: `${url}/pdf` });
       expect(pdf.headers['content-disposition']).toContain('Piedavajums-Q-2026-');

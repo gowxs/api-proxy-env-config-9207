@@ -77,7 +77,7 @@ export async function runAutomation(
     if (existing) return { skipped: 'invoice_exists' };
     documentId = await createDocument(tx, { tenantId, type: 'invoice', fromQuoteId: p.quoteId });
     await tx`update public.documents set auto_source = 'quote_accepted' where id = ${documentId}`;
-    await buyerFromEarlierInvoice(tx, documentId);
+    await buyerDetails(tx, documentId);
     cover = (d, name) => acceptedInvoiceCover(d, name, q.number);
   } else {
     if (!t.auto_delivery_note_after_payment) return { skipped: 'automation_off' };
@@ -182,13 +182,37 @@ export async function runAutomation(
 
 /**
  * The quote knows the customer's name and e-mail, not their billing details.
- * If the owner already invoiced this e-mail address, the buyer details they
- * confirmed then are used again (nothing is invented; otherwise the owner
- * fills them in).
+ * They come from what the customer typed on the Accept page (stored on the
+ * lead), else from the latest invoice the owner issued to this e-mail
+ * address. Nothing is invented; otherwise the owner fills them in.
  */
-async function buyerFromEarlierInvoice(tx: TransactionSql, documentId: string) {
+async function buyerDetails(tx: TransactionSql, documentId: string) {
   const d = (await loadDocument(tx, { id: documentId }))!;
   const inv = d.data as InvoiceData;
+  const [lead] = d.leadId
+    ? await tx<
+        {
+          billing_name: string | null;
+          billing_address: string | null;
+          billing_reg_no: string | null;
+          billing_vat_no: string | null;
+        }[]
+      >`select billing_name, billing_address, billing_reg_no, billing_vat_no
+        from public.leads where id = ${d.leadId}`
+    : [];
+  if (lead?.billing_name && lead.billing_address) {
+    await writeDocumentData(tx, d, {
+      ...inv,
+      buyer: {
+        name: lead.billing_name,
+        address: lead.billing_address,
+        regNo: lead.billing_reg_no ?? '',
+        vatNo: lead.billing_vat_no ?? '',
+        email: inv.buyer.email,
+      },
+    });
+    return;
+  }
   if (!inv.buyer.email) return;
   const [prev] = await tx<{ buyer: InvoiceData['buyer'] }[]>`
     select data->'buyer' as buyer from public.documents

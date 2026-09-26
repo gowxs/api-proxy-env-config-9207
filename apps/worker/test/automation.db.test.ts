@@ -161,6 +161,30 @@ describe('invoice when a quote is accepted', () => {
     expect(await sendJobs(t)).toEqual([]);
   });
 
+  it('a new customer who gave billing details on the Accept page: issued and sent', async () => {
+    const t = await tenant('auto_send');
+    await owner`update public.leads
+                set billing_name = 'Rūta Kalniņa', billing_address = 'Lāčplēša iela 5, Rīga',
+                    billing_vat_no = 'LV12345678901'
+                where id = ${t.leadId}`;
+    const r = await run(t, {
+      event: 'quote_accepted',
+      quoteId: await acceptedQuote(t, `new-${randomUUID()}@example.test`),
+    });
+    expect(r).toMatchObject({ autoSend: true });
+    if (!('documentId' in r)) throw new Error('no invoice');
+    const d = await withTenant(worker, t.tenantId, (tx) => loadDocument(tx, { id: r.documentId }));
+    expect(d!.status).toBe('issued');
+    expect(d!.data).toMatchObject({
+      buyer: {
+        name: 'Rūta Kalniņa',
+        address: 'Lāčplēša iela 5, Rīga',
+        regNo: '',
+        vatNo: 'LV12345678901',
+      },
+    });
+  });
+
   it('switched off, or Documents off: nothing happens', async () => {
     const t = await tenant('auto_send');
     const email = `buyer-${randomUUID()}@example.test`;
