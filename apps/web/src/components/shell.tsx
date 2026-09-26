@@ -54,7 +54,7 @@ const INTEGRATIONS: Item = { href: '/integrations', label: 'Integrations', icon:
 const SETTINGS: Item = { href: '/settings', label: 'Settings', icon: 'settings' };
 
 const SECTIONS: { title: string; items: Item[] }[] = [
-  { title: 'Work', items: [INBOX, LEADS, QUOTES, DOCUMENTS, PAYMENTS] },
+  { title: 'Work', items: [HOME, INBOX, LEADS, QUOTES, DOCUMENTS, PAYMENTS] },
   { title: 'Setup', items: [KNOWLEDGE, INTEGRATIONS, SETTINGS] },
 ];
 /** Phone: four items and More. */
