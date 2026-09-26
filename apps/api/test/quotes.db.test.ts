@@ -335,6 +335,35 @@ describe('price list', () => {
       expect(q!.status).toBe('sent');
     });
 
+    it("speaks the customer's language (page, notes, PDF name)", async () => {
+      const valid = future();
+      const { quoteId } = await pendingQuote(A, candle, { status: 'sent', validUntil: valid });
+      await owner`update public.quotes set language = 'lv' where id = ${quoteId}`;
+      const url = link(A.tenantId, quoteId, valid);
+      const view = await app.inject({ method: 'GET', url });
+      expect(view.body).toContain('<html lang="lv">');
+      expect(view.body).toContain('Piedāvājums');
+      expect(view.body).toContain('Apstiprināt piedāvājumu');
+      expect(view.body).toContain('PVN 21%');
+      expect(view.body).toMatch(/29,04\s€/);
+      expect(view.body).not.toContain('Accept quote');
+      const done = await app.inject({ method: 'POST', url, payload: '' });
+      expect(done.body).toContain('Jūs apstiprinājāt šo piedāvājumu');
+      const pdf = await app.inject({ method: 'GET', url: `${url}/pdf` });
+      expect(pdf.headers['content-disposition']).toContain('Piedavajums-Q-2026-');
+    });
+
+    it('a bad link answers in the browser language', async () => {
+      const r = await app.inject({
+        method: 'GET',
+        url: '/q/q1.abc.def',
+        headers: { 'accept-language': 'de-DE,de;q=0.9' },
+      });
+      expect(r.statusCode).toBe(404);
+      expect(r.body).toContain('Link ungültig');
+      expect(r.body).toContain('<html lang="de">');
+    });
+
     it('downloads the PDF', async () => {
       const valid = future();
       const { quoteId } = await pendingQuote(A, candle, { status: 'sent', validUntil: valid });

@@ -6,7 +6,12 @@ import {
   formatDate,
   formatMoney,
   formatQty,
+  formatRate,
+  languageFromAcceptHeader,
   loadQuoteDocument,
+  quoteLabels,
+  quoteLang,
+  quoteLocale,
   quoteAcceptUrl,
   quotePdfFileName,
   quotePdfInput,
@@ -15,7 +20,7 @@ import {
   type QuoteClaims,
   type QuoteDocument,
 } from '@noctiv/quotes';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Sql, TransactionSql } from 'postgres';
 
 export interface QuoteLinkDeps {
@@ -44,30 +49,55 @@ const HEADERS = {
   'x-frame-options': 'DENY',
 };
 
-function shell(reply: FastifyReply, code: number, title: string, inner: string, color = '#2F3A56') {
+function shell(
+  reply: FastifyReply,
+  code: number,
+  lang: string,
+  title: string,
+  inner: string,
+  color = '#2F3A56',
+) {
   return reply
     .code(code)
     .headers(HEADERS)
     .send(
-      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head>` +
+      `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head>` +
         `<body style="margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#1F2430;background:#F4F5F7">` +
         `<div style="height:6px;background:${color}"></div>` +
         `<main style="max-width:560px;margin:32px auto;padding:0 16px">${inner}</main></body></html>`,
     );
 }
 
-const message = (reply: FastifyReply, code: number, title: string, body: string) =>
-  shell(
+/** A short page with no quote on it (bad link, not found), in the browser's language. */
+const message = (
+  reply: FastifyReply,
+  req: FastifyRequest,
+  code: number,
+  pick: (t: ReturnType<typeof quoteLabels>) => [string, string],
+) => {
+  const lang = languageFromAcceptHeader(req.headers['accept-language']);
+  const [title, body] = pick(quoteLabels(lang));
+  return shell(
     reply,
     code,
+    lang,
     title,
     `<h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>`,
   );
+};
+const notFound = (reply: FastifyReply, req: FastifyRequest) =>
+  message(reply, req, 404, (t) => [t.notFound, t.replyToEmail]);
 
-const STATUS_NOTE: Record<string, string> = {
-  accepted: 'You accepted this quote. Thank you — we will be in touch.',
-  expired: 'This quote has expired. Reply to our e-mail to ask for a new one.',
-  rejected: 'This quote is no longer available. Reply to our e-mail if you have questions.',
+/** The note under the quote for a decided quote, in the quote's language. */
+const statusNote = (status: string, language: string | null) => {
+  const t = quoteLabels(language);
+  return status === 'accepted'
+    ? t.accepted
+    : status === 'expired'
+      ? t.expired
+      : status === 'rejected'
+        ? t.rejected
+        : null;
 };
 
 function quotePage(
@@ -77,13 +107,17 @@ function quotePage(
   note: string | null,
   canAccept: boolean,
 ) {
-  const money = (c: number) => escapeHtml(formatMoney(c, d.currency));
+  const t = quoteLabels(d.language);
+  const lang = quoteLang(d.language);
+  const locale = quoteLocale(lang);
+  const rate = formatRate(d.vatRate, lang);
+  const money = (c: number) => escapeHtml(formatMoney(c, d.currency, locale));
   const color =
     d.brand.color && /^#[0-9A-Fa-f]{6}$/.test(d.brand.color) ? d.brand.color : '#2F3A56';
   const rows = d.lines
     .map(
       (l) =>
-        `<tr><td style="padding:8px 0;border-bottom:1px solid #E3E6EE">${escapeHtml(l.name)}<br><span style="color:#5B6275;font-size:13px">${escapeHtml(formatQty(l.qty))} ${escapeHtml(l.unit)} × ${money(l.unitPriceCents)}</span></td>` +
+        `<tr><td style="padding:8px 0;border-bottom:1px solid #E3E6EE">${escapeHtml(l.name)}<br><span style="color:#5B6275;font-size:13px">${escapeHtml(formatQty(l.qty, locale))} ${escapeHtml(l.unit)} × ${money(l.unitPriceCents)}</span></td>` +
         `<td style="padding:8px 0;border-bottom:1px solid #E3E6EE;text-align:right;white-space:nowrap">${money(l.lineTotalCents)}</td></tr>`,
     )
     .join('');
@@ -91,18 +125,17 @@ function quotePage(
     `<tr><td style="padding:4px 0;text-align:right;${strong ? 'font-weight:700' : 'color:#5B6275'}">${escapeHtml(label)}</td><td style="padding:4px 0 4px 16px;text-align:right;white-space:nowrap;${strong ? 'font-weight:700' : ''}">${money(v)}</td></tr>`;
   const totals =
     d.vatMode === 'exclusive'
-      ? total('Subtotal', d.subtotalCents) +
-        total(`VAT ${d.vatRate}%`, d.vatCents) +
-        total('Total', d.totalCents, true)
+      ? total(t.subtotal, d.subtotalCents) +
+        total(t.vat(rate), d.vatCents) +
+        total(t.total, d.totalCents, true)
       : d.vatMode === 'inclusive'
-        ? total('Total', d.totalCents, true) + total(`of which VAT ${d.vatRate}%`, d.vatCents)
-        : total('Total', d.totalCents, true);
-  const lang = d.language ?? 'en';
+        ? total(t.total, d.totalCents, true) + total(t.ofWhichVat(rate), d.vatCents)
+        : total(t.total, d.totalCents, true);
   const inner =
     `<section style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.06)">` +
     `<p style="margin:0;color:#5B6275;font-size:14px">${escapeHtml(d.brand.companyName)}</p>` +
-    `<h1 style="margin:4px 0 2px;font-size:22px">Quote ${escapeHtml(d.number)}</h1>` +
-    `<p style="margin:0 0 16px;color:#5B6275;font-size:14px">Valid until ${escapeHtml(formatDate(d.validUntil, lang))}</p>` +
+    `<h1 style="margin:4px 0 2px;font-size:22px">${escapeHtml(t.quote)} <span style="white-space:nowrap">${escapeHtml(d.number)}</span></h1>` +
+    `<p style="margin:0 0 16px;color:#5B6275;font-size:14px">${escapeHtml(t.validUntil)} ${escapeHtml(formatDate(d.validUntil, lang))}</p>` +
     `<table style="width:100%;border-collapse:collapse;font-size:15px">${rows}</table>` +
     `<table style="margin:12px 0 0 auto;border-collapse:collapse;font-size:15px">${totals}</table>` +
     (d.notes
@@ -113,10 +146,10 @@ function quotePage(
       ? `<p style="margin:20px 0;padding:12px 14px;border-radius:8px;background:#fff">${escapeHtml(note)}</p>`
       : '') +
     (canAccept
-      ? `<form method="post" style="margin:20px 0"><button type="submit" style="width:100%;font-size:16px;padding:14px 18px;border:0;border-radius:8px;color:#fff;background:${color};cursor:pointer">Accept quote</button></form>`
+      ? `<form method="post" style="margin:20px 0"><button type="submit" style="width:100%;font-size:16px;padding:14px 18px;border:0;border-radius:8px;color:#fff;background:${color};cursor:pointer">${escapeHtml(t.acceptButton)}</button></form>`
       : '') +
-    `<p style="margin:16px 0;font-size:14px"><a href="${escapeHtml(token)}/pdf" style="color:${color}">Download PDF</a></p>`;
-  return shell(reply, 200, `Quote ${d.number}`, inner, color);
+    `<p style="margin:16px 0;font-size:14px"><a href="${escapeHtml(token)}/pdf" style="color:${color}">${escapeHtml(t.downloadPdf)}</a></p>`;
+  return shell(reply, 200, lang, `${t.quote} ${d.number}`, inner, color);
 }
 
 /**
@@ -128,15 +161,16 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
   const fetchLogo =
     deps.fetchLogo ?? createSafeFetcher({ maxBytes: 1024 * 1024, timeoutMs: 8_000 });
 
-  const claimsOr = (token: string, reply: FastifyReply): QuoteClaims | undefined => {
-    const v = verifyQuoteToken(token, deps.secret);
+  const claimsOr = (
+    req: FastifyRequest<{ Params: { token: string } }>,
+    reply: FastifyReply,
+  ): QuoteClaims | undefined => {
+    const v = verifyQuoteToken(req.params.token, deps.secret);
     if (v.ok) return v.claims;
-    void message(
-      reply,
-      v.reason === 'expired' ? 410 : 404,
-      v.reason === 'expired' ? 'This link has expired' : 'Link not valid',
-      'Reply to the e-mail you received to ask for a new quote.',
-    );
+    void message(reply, req, v.reason === 'expired' ? 410 : 404, (t) => [
+      v.reason === 'expired' ? t.linkExpired : t.linkInvalid,
+      t.askNew,
+    ]);
     return undefined;
   };
 
@@ -147,7 +181,7 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       from public.quotes q join public.tenants t on t.id = q.tenant_id where q.id = ${quoteId}`;
 
   app.get<{ Params: { token: string } }>('/q/:token', async (req, reply) => {
-    const c = claimsOr(req.params.token, reply);
+    const c = claimsOr(req, reply);
     if (!c) return reply;
     const d = await withTenant(deps.sql, c.tenantId, async (tx) => {
       await tx`update public.quotes set status = 'viewed', viewed_at = now()
@@ -155,20 +189,20 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       return loadQuoteDocument(tx, c.quoteId);
     });
     if (!d || !['sent', 'viewed', 'accepted', 'expired', 'rejected'].includes(d.status))
-      return message(reply, 404, 'Quote not found', 'Reply to the e-mail you received.');
+      return notFound(reply, req);
     const [v] = await withTenant(deps.sql, c.tenantId, (tx) => isPastValidity(tx, c.quoteId));
     const status = d.status !== 'accepted' && v?.past ? 'expired' : d.status;
     return quotePage(
       reply,
       req.params.token,
       d,
-      STATUS_NOTE[status] ?? null,
+      statusNote(status, d.language),
       status === 'sent' || status === 'viewed',
     );
   });
 
   app.post<{ Params: { token: string } }>('/q/:token', async (req, reply) => {
-    const c = claimsOr(req.params.token, reply);
+    const c = claimsOr(req, reply);
     if (!c) return reply;
     const d = await withTenant(deps.sql, c.tenantId, async (tx) => {
       const [past] = await isPastValidity(tx, c.quoteId);
@@ -209,12 +243,12 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       return loadQuoteDocument(tx, c.quoteId);
     });
     if (!d || !['sent', 'viewed', 'accepted', 'expired', 'rejected'].includes(d.status))
-      return message(reply, 404, 'Quote not found', 'Reply to the e-mail you received.');
-    return quotePage(reply, req.params.token, d, STATUS_NOTE[d.status] ?? null, false);
+      return notFound(reply, req);
+    return quotePage(reply, req.params.token, d, statusNote(d.status, d.language), false);
   });
 
   app.get<{ Params: { token: string } }>('/q/:token/pdf', async (req, reply) => {
-    const c = claimsOr(req.params.token, reply);
+    const c = claimsOr(req, reply);
     if (!c) return reply;
     const found = await withTenant(deps.sql, c.tenantId, async (tx) => {
       const d = await loadQuoteDocument(tx, c.quoteId);
@@ -223,7 +257,7 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       return { d, allowed };
     });
     if (!found || !['sent', 'viewed', 'accepted', 'expired'].includes(found.d.status))
-      return message(reply, 404, 'Quote not found', 'Reply to the e-mail you received.');
+      return notFound(reply, req);
     const logo = found.allowed ? await fetchQuoteLogo(fetchLogo, found.d.brand.logoUrl) : null;
     const pdf = await renderQuotePdf(
       quotePdfInput(found.d, quoteAcceptUrl(deps.publicApiUrl, req.params.token), logo),
@@ -232,7 +266,7 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       .code(200)
       .headers({
         'content-type': 'application/pdf',
-        'content-disposition': `inline; filename="${quotePdfFileName(found.d.number)}"`,
+        'content-disposition': `inline; filename="${quotePdfFileName(found.d.number, found.d.language)}"`,
         'cache-control': 'no-store',
         'x-robots-tag': 'noindex, nofollow',
         'x-content-type-options': 'nosniff',

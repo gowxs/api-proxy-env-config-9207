@@ -1,3 +1,4 @@
+import { quoteLang, quoteLocale, type QuoteLanguage as Lang } from './labels.ts';
 import { formatMoney, formatQty } from './money.ts';
 import type { Unmapped } from './mapping.ts';
 
@@ -6,19 +7,8 @@ import type { Unmapped } from './mapping.ts';
  * language; code fills in every name, number and date. The model writes none
  * of it (no-invented-facts rule).
  */
-export const QUOTE_LANGUAGES = ['en', 'de', 'lv', 'nl', 'fr', 'es'] as const;
-type Lang = (typeof QUOTE_LANGUAGES)[number];
-const lang = (l: string | null | undefined): Lang =>
-  (QUOTE_LANGUAGES as readonly string[]).includes(l ?? '') ? (l as Lang) : 'en';
-
-const LOCALE: Record<Lang, string> = {
-  en: 'en-GB',
-  de: 'de-DE',
-  lv: 'lv-LV',
-  nl: 'nl-NL',
-  fr: 'fr-FR',
-  es: 'es-ES',
-};
+export { QUOTE_LANGUAGES } from './labels.ts';
+const lang = quoteLang;
 
 const T: Record<
   Lang,
@@ -118,7 +108,7 @@ export function greetingName(fromName: string | null | undefined): string | null
 }
 
 export function formatDate(d: Date, language: string): string {
-  return d.toLocaleDateString(LOCALE[lang(language)], {
+  return d.toLocaleDateString(quoteLocale(language), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -141,8 +131,9 @@ export interface CoverInput {
 /** The reply that carries the quote (the PDF is attached). */
 export function quoteCoverText(i: CoverInput): string {
   const t = T[lang(i.language)];
-  const summary = i.lines.map((l) => `${formatQty(l.qty)} × ${l.name}`).join('; ');
-  const total = formatMoney(i.totalCents, i.currency, LOCALE[lang(i.language)]);
+  const locale = quoteLocale(i.language);
+  const summary = i.lines.map((l) => `${formatQty(l.qty, locale)} × ${l.name}`).join('; ');
+  const total = formatMoney(i.totalCents, i.currency, locale);
   return [
     t.hello(i.customerName),
     '',
@@ -159,6 +150,7 @@ export function clarifyingQuestionText(i: {
   unmapped: Unmapped[];
 }): string {
   const t = T[lang(i.language)];
+  const locale = quoteLocale(i.language);
   const names = [...new Set(i.unmapped.map((u) => `“${u.customerText}”`))].slice(0, 3);
   const joined =
     names.length > 1
@@ -170,10 +162,10 @@ export function clarifyingQuestionText(i: {
       const it = u.item!;
       const range =
         it.minQty !== null && it.maxQty !== null
-          ? `${formatQty(it.minQty)}–${formatQty(it.maxQty)} ${it.unit}`
+          ? `${formatQty(it.minQty, locale)}–${formatQty(it.maxQty, locale)} ${it.unit}`
           : it.minQty !== null
-            ? `≥ ${formatQty(it.minQty)} ${it.unit}`
-            : `≤ ${formatQty(it.maxQty!)} ${it.unit}`;
+            ? `≥ ${formatQty(it.minQty, locale)} ${it.unit}`
+            : `≤ ${formatQty(it.maxQty!, locale)} ${it.unit}`;
       return t.limits(it.name, range);
     });
   return [

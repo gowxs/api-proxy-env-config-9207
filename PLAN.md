@@ -651,7 +651,7 @@ A per-tenant module, off by default (Settings → "Quotes (beta)"). When a custo
 | `tenants.quotes_vat_rate` | percent, numeric(5,2), default 21. |
 | `tenants.quotes_validity_days` | default 14. |
 | `tenants.quotes_auto_send_limit_cents` | default 50 000 (€500). |
-| `tenants.quotes_next_number` | per-tenant counter for `Q-2026-0001`. |
+| Quote numbers | `Q-<year>-<nnnn>`, restarting at 0001 every calendar year (tenant's time zone), unique per tenant: the next number follows the tenant's highest number of the year, with the tenant row locked (decision 2026-09-26; the earlier running counter was dropped). |
 | `price_items` | name, description, unit ("pcs", "hour", "m²"…), `unit_price_cents`, `min_qty`, `max_qty` (optional), `vat_note` (text shown on the line), `status` `draft`/`confirmed`/`archived`, `source` `manual`/`csv`/`file`, `import_id`. Only `confirmed` items can be quoted. |
 | `price_imports` | an uploaded PDF/DOCX price list: file name, extracted text, status `pending`/`parsing`/`ready`/`failed`, item count. Parsing creates `draft` items the owner confirms. |
 | `quotes` | number, thread, lead, draft, status `draft`/`pending_approval`/`sent`/`viewed`/`accepted`/`expired`/`rejected`, currency, VAT mode/rate snapshot, subtotal/VAT/total cents, `valid_until`, notes, `sent_at`, `viewed_at`, `accepted_at`. |
@@ -684,7 +684,7 @@ All tables have `tenant_id`, forced RLS and isolation policies like the rest.
 
 ### 21.5 Output
 
-- **PDF** (worker, `pdfkit`, embedded font with full Latin-extended support): brand colour bar, logo (the allowlisted e-mail-design logo, fetched with the safe fetcher; skipped if unavailable), company name/address/website/phone, quote number and dates, customer, line table (item, qty, unit, unit price, total), subtotal, VAT line, total, validity, notes, "Accept online: <link>". Attached to the reply as `Quote-Q-2026-0001.pdf`; the reply itself uses the tenant's e-mail design.
+- **PDF** (worker, `pdfkit`, embedded font with full Latin-extended support): brand colour bar, logo (the allowlisted e-mail-design logo, fetched with the safe fetcher; skipped if unavailable), company name/address/website/phone, quote number and dates, customer, line table (item, qty, unit, unit price, total), subtotal, VAT line, total, validity, notes, "Accept online: <link>". Attached to the reply as `Quote-Q-2026-0001.pdf` (the word in the quote's language, ASCII: `Angebot-…`, `Piedavajums-…`); the reply itself uses the tenant's e-mail design. The PDF labels, the accept page and its notes follow the quote's language (the customer's: en, de, lv, nl, fr, es; otherwise English), with money, dates, quantities and VAT rates written the local way; a bad or expired link answers in the browser's language (decision 2026-09-26).
 - **Accept link:** `https://app.noctiv.io/api/q/<token>` (HMAC token: tenant, quote, expiry = validity + 30 days). `GET` shows a no-script page with the quote summary and an **Accept quote** button, and marks the quote `viewed` (first open). `POST` accepts: status `accepted`, lead → `accepted`, owner notified (`quote_accepted`). Expired quotes show "expired, ask for a new quote". `GET …/pdf` downloads the same PDF.
 - **Expiry:** the hourly job marks sent/viewed quotes past `valid_until` as `expired`.
 

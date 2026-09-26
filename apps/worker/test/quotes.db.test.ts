@@ -234,6 +234,36 @@ describe('quote drafting', () => {
   });
 });
 
+describe('quote numbers', () => {
+  it('restart every year and stay unique per tenant', async () => {
+    const T = await tenant('quotes-numbers');
+    const other = await tenant('quotes-numbers-other');
+    const year = new Date().getUTCFullYear();
+    const insert = (t: SeededTenant, number: string) =>
+      owner`insert into public.quotes (tenant_id, number, thread_id, status, customer_email, currency,
+                                       vat_mode, vat_rate, subtotal_cents, vat_cents, total_cents, valid_until)
+            values (${t.tenantId}, ${number}, ${t.threadId}, 'sent', 'x@example.test', 'EUR', 'none', 0,
+                    100, 0, 100, current_date + 14)`;
+    // Last year's numbers do not count; another tenant's numbers do not count.
+    await insert(T, `Q-${year - 1}-0041`);
+    await insert(other, `Q-${year}-0077`);
+    const first = await run(
+      T,
+      model(candlesAndBoxes),
+      'Price for 3 lavender candles and 2 gift boxes?',
+    );
+    expect((await quoteFor(first.messageId))!.number).toBe(`Q-${year}-0001`);
+    const second = await run(
+      T,
+      model(candlesAndBoxes),
+      'And 3 lavender candles, 2 gift boxes again?',
+    );
+    expect((await quoteFor(second.messageId))!.number).toBe(`Q-${year}-0002`);
+    // A duplicate number is refused by the database.
+    await expect(insert(T, `Q-${year}-0002`)).rejects.toMatchObject({ code: '23505' });
+  });
+});
+
 describe('quote auto-send (mode 2)', () => {
   let T: SeededTenant;
   beforeAll(async () => {

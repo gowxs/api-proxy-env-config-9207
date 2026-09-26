@@ -176,7 +176,11 @@ export function mailSendHandler(deps: MailSendDeps) {
         quotePdfInput(doc, quoteAcceptUrl(deps.quotes.publicApiUrl, token), logo),
       );
       attachments = [
-        { filename: quotePdfFileName(doc.number), content: pdf, contentType: 'application/pdf' },
+        {
+          filename: quotePdfFileName(doc.number, doc.language),
+          content: pdf,
+          contentType: 'application/pdf',
+        },
       ];
     }
 

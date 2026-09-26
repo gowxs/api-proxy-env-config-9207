@@ -21,6 +21,7 @@ import {
   labelItems,
   loadConfirmedItems,
   loadQuoteDocument,
+  allocateQuoteNumber,
   QUOTE_LANGUAGES,
   quoteAcceptUrl,
   quoteCoverFor,
@@ -230,10 +231,9 @@ async function quote(
   c: StepContext & { deps: NonNullable<PipelineDeps['quotes']> },
 ): Promise<ProcessOutcome> {
   const { tx, tenantId, l } = c;
+  const number = await allocateQuoteNumber(tx, tenantId);
   const [t] = await tx<
     {
-      n: number;
-      year: number;
       valid_until: Date;
       currency: string;
       vat_mode: 'none' | 'exclusive' | 'inclusive';
@@ -241,14 +241,10 @@ async function quote(
       limit_cents: number;
     }[]
   >`
-    update public.tenants set quotes_next_number = quotes_next_number + 1
-    where id = ${tenantId}
-    returning quotes_next_number - 1 as n,
-              extract(year from now() at time zone timezone)::int as year,
-              (now() at time zone timezone)::date + quotes_validity_days as valid_until,
+    select (now() at time zone timezone)::date + quotes_validity_days as valid_until,
               quotes_currency as currency, quotes_vat_mode as vat_mode,
-              quotes_vat_rate::float8 as vat_rate, quotes_auto_send_limit_cents as limit_cents`;
-  const number = `Q-${t!.year}-${String(t!.n).padStart(4, '0')}`;
+              quotes_vat_rate::float8 as vat_rate, quotes_auto_send_limit_cents as limit_cents
+    from public.tenants where id = ${tenantId}`;
   const [q] = await tx<{ id: string }[]>`
     insert into public.quotes (tenant_id, number, thread_id, lead_id, source_message_id, status, language,
                                customer_name, customer_email, currency, vat_mode, vat_rate,

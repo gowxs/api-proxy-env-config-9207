@@ -4,8 +4,15 @@ import {
   clarifyingQuestionText,
   computeTotals,
   decideQuoteSend,
+  formatQty,
   formatQuoteNumber,
+  formatRate,
   labelItems,
+  languageFromAcceptHeader,
+  QUOTE_LABELS,
+  QUOTE_LANGUAGES,
+  quoteLabels,
+  quotePdfFileName,
   lineTotalCents,
   parseMoney,
   parsePriceCsv,
@@ -428,5 +435,84 @@ describe('PDF', () => {
     expect(pdf.length).toBeLessThan(200_000);
     // The accept link is a real link annotation.
     expect(pdf.toString('latin1')).toContain('https://app.noctiv.io/api/q/token');
+  });
+});
+
+describe('translations (PDF and accept page)', () => {
+  it('every language has every label, and none is left in English by mistake', () => {
+    const keys = Object.keys(QUOTE_LABELS.en).sort();
+    for (const l of QUOTE_LANGUAGES) {
+      expect(Object.keys(QUOTE_LABELS[l]).sort()).toEqual(keys);
+      if (l !== 'en') {
+        expect(QUOTE_LABELS[l].acceptButton).not.toBe(QUOTE_LABELS.en.acceptButton);
+        expect(QUOTE_LABELS[l].vat('21')).toContain('21');
+      }
+    }
+  });
+
+  it("follows the quote's language, English otherwise", () => {
+    expect(quoteLabels('lv').acceptButton).toBe('Apstiprināt piedāvājumu');
+    expect(quoteLabels('de').quote).toBe('Angebot');
+    expect(quoteLabels('ja').quote).toBe('Quote');
+    expect(quoteLabels(null).quote).toBe('Quote');
+  });
+
+  it('writes quantities and rates the local way', () => {
+    expect(formatQty(2.5, 'lv-LV')).toBe('2,5');
+    expect(formatQty(2.5, 'en-GB')).toBe('2.5');
+    expect(formatQty(1200, 'de-DE')).toBe('1200');
+    expect(formatRate(5.5, 'de')).toBe('5,5');
+    expect(formatRate(21, 'fr')).toBe('21');
+  });
+
+  it('names the attachment in the language, ASCII only', () => {
+    expect(quotePdfFileName('Q-2026-0001', 'lv')).toBe('Piedavajums-Q-2026-0001.pdf');
+    expect(quotePdfFileName('Q-2026-0001', 'de')).toBe('Angebot-Q-2026-0001.pdf');
+    expect(quotePdfFileName('Q-2026-0001', null)).toBe('Quote-Q-2026-0001.pdf');
+  });
+
+  it('pages without a quote use the browser language', () => {
+    expect(languageFromAcceptHeader('lv-LV,lv;q=0.9,en;q=0.8')).toBe('lv');
+    expect(languageFromAcceptHeader('ja,de;q=0.5')).toBe('de');
+    expect(languageFromAcceptHeader(undefined)).toBe('en');
+  });
+
+  it('renders a PDF in every language', async () => {
+    for (const language of QUOTE_LANGUAGES) {
+      const pdf = await renderQuotePdf({
+        number: 'Q-2026-0001',
+        language,
+        createdAt: new Date('2026-09-26T00:00:00Z'),
+        validUntil: new Date('2026-10-10T00:00:00Z'),
+        customer: { name: 'Anna', email: 'anna@example.com' },
+        currency: 'EUR',
+        vatMode: 'inclusive',
+        vatRatePercent: 5.5,
+        lines: [
+          {
+            name: 'Candle',
+            unit: 'pcs',
+            qty: 2.5,
+            unitPriceCents: 1000,
+            lineTotalCents: 2500,
+            vatNote: null,
+          },
+        ],
+        subtotalCents: 2500,
+        vatCents: 130,
+        totalCents: 2500,
+        notes: null,
+        acceptUrl: 'https://app.noctiv.io/api/q/x',
+        brand: {
+          companyName: 'N',
+          color: null,
+          website: null,
+          phone: null,
+          address: null,
+          logo: null,
+        },
+      });
+      expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    }
   });
 });

@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import PDFDocument from 'pdfkit';
 import { formatMoney, formatQty } from './money.ts';
+import { formatRate, quoteLabels, quoteLocale } from './labels.ts';
 import { formatDate } from './texts.ts';
 
 const require = createRequire(import.meta.url);
@@ -57,7 +58,7 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
     size: 'A4',
     margins: { top: 56, bottom: 56, left: 56, right: 56 },
     info: {
-      Title: `Quote ${q.number}`,
+      Title: `${quoteLabels(q.language).quote} ${q.number}`,
       Author: q.brand.companyName,
       Creator: 'Noctiv',
       CreationDate: q.createdAt,
@@ -90,8 +91,11 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
     q.brand.color && /^#[0-9A-Fa-f]{6}$/.test(q.brand.color) ? q.brand.color : '#2F3A56';
   const L = doc.page.margins.left;
   const W = doc.page.width - L - doc.page.margins.right;
-  const money = (c: number) => formatMoney(c, q.currency);
+  const t = quoteLabels(q.language);
+  const locale = quoteLocale(q.language);
+  const money = (c: number) => formatMoney(c, q.currency, locale);
   const date = (d: Date) => formatDate(d, q.language ?? 'en');
+  const rate = formatRate(q.vatRatePercent, q.language);
 
   // Brand bar.
   doc.rect(0, 0, doc.page.width, 6).fill(brand);
@@ -115,13 +119,13 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
       .fillColor(INK)
       .text(q.brand.companyName, L, y + 12, { width: W / 2 });
   }
-  doc.font('b').fontSize(22).fillColor(INK).text('Quote', L, y, { width: W, align: 'right' });
+  doc.font('b').fontSize(22).fillColor(INK).text(t.quote, L, y, { width: W, align: 'right' });
   doc
     .font('r')
     .fontSize(10)
     .fillColor(MUTED)
     .text(
-      `${q.number}\nDate: ${date(q.createdAt)}\nValid until: ${date(q.validUntil)}`,
+      `${q.number}\n${t.date}: ${date(q.createdAt)}\n${t.validUntil}: ${date(q.validUntil)}`,
       L,
       y + 30,
       {
@@ -140,8 +144,8 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
     .font('s')
     .fontSize(9)
     .fillColor(MUTED)
-    .text('FROM', L, y)
-    .text('FOR', L + W / 2, y);
+    .text(t.from, L, y)
+    .text(t.for, L + W / 2, y);
   doc
     .font('r')
     .fontSize(10)
@@ -154,10 +158,10 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
   const col = { item: L, qty: L + W * 0.52, unit: L + W * 0.64, total: L + W * 0.82 };
   const header = () => {
     doc.font('s').fontSize(9).fillColor(MUTED);
-    doc.text('ITEM', col.item, y);
-    doc.text('QTY', col.qty, y, { width: W * 0.1, align: 'right' });
-    doc.text('UNIT PRICE', col.unit, y, { width: W * 0.16, align: 'right' });
-    doc.text('TOTAL', col.total, y, { width: W * 0.18, align: 'right' });
+    doc.text(t.item, col.item, y);
+    doc.text(t.qty, col.qty - W * 0.06, y, { width: W * 0.16, align: 'right' });
+    doc.text(t.unitPrice, col.unit, y, { width: W * 0.16, align: 'right' });
+    doc.text(t.lineTotal, col.total, y, { width: W * 0.18, align: 'right' });
     y += 16;
     doc
       .moveTo(L, y)
@@ -190,7 +194,7 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
         .fillColor(MUTED)
         .text(l.vatNote, col.item, y + nameH + 2, { width: W * 0.5 });
     doc.fontSize(10).fillColor(INK);
-    doc.text(`${formatQty(l.qty)} ${l.unit}`, col.qty - W * 0.06, y, {
+    doc.text(`${formatQty(l.qty, locale)} ${l.unit}`, col.qty - W * 0.06, y, {
       width: W * 0.16,
       align: 'right',
     });
@@ -217,20 +221,20 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
     y += strong ? 20 : 16;
   };
   if (q.vatMode === 'exclusive') {
-    row('Subtotal', money(q.subtotalCents));
-    row(`VAT ${q.vatRatePercent}%`, money(q.vatCents));
-    row('Total', money(q.totalCents), true);
+    row(t.subtotal, money(q.subtotalCents));
+    row(t.vat(rate), money(q.vatCents));
+    row(t.total, money(q.totalCents), true);
   } else if (q.vatMode === 'inclusive') {
-    row('Total', money(q.totalCents), true);
-    row(`of which VAT ${q.vatRatePercent}%`, money(q.vatCents));
+    row(t.total, money(q.totalCents), true);
+    row(t.ofWhichVat(rate), money(q.vatCents));
   } else {
-    row('Total', money(q.totalCents), true);
+    row(t.total, money(q.totalCents), true);
   }
 
   // Notes, then how to accept.
   y += 12;
   if (q.notes) {
-    doc.font('s').fontSize(9).fillColor(MUTED).text('NOTES', L, y);
+    doc.font('s').fontSize(9).fillColor(MUTED).text(t.notes, L, y);
     doc
       .font('r')
       .fontSize(10)
@@ -238,19 +242,31 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
       .text(q.notes, L, y + 14, { width: W });
     y = doc.y + 16;
   }
-  doc.rect(L, y, W, 54).fill('#F4F5F7');
+  // The box grows with the (translated) heading and the link.
+  const heading = t.acceptOnline(date(q.validUntil));
+  const headingH = doc
+    .font('s')
+    .fontSize(10)
+    .heightOfString(heading, { width: W - 28 });
+  const urlH = doc
+    .font('r')
+    .fontSize(9)
+    .heightOfString(q.acceptUrl, { width: W - 28 });
+  doc.rect(L, y, W, 12 + headingH + 4 + urlH + 12).fill('#F4F5F7');
   doc
     .font('s')
     .fontSize(10)
     .fillColor(INK)
-    .text(`Accept this quote online (valid until ${date(q.validUntil)}):`, L + 14, y + 12, {
-      width: W - 28,
-    });
+    .text(heading, L + 14, y + 12, { width: W - 28 });
   doc
     .font('r')
     .fontSize(9)
     .fillColor(brand)
-    .text(q.acceptUrl, L + 14, y + 28, { width: W - 28, link: q.acceptUrl, underline: true });
+    .text(q.acceptUrl, L + 14, y + 12 + headingH + 4, {
+      width: W - 28,
+      link: q.acceptUrl,
+      underline: true,
+    });
 
   doc.end();
   return done;

@@ -1,7 +1,8 @@
 import type { TransactionSql } from 'postgres';
-import { computeTotals, lineTotalCents, type VatMode } from './money.ts';
+import { computeTotals, formatQuoteNumber, lineTotalCents, type VatMode } from './money.ts';
 import type { PricedItem } from './mapping.ts';
 import type { QuotePdfBrand, QuotePdfInput } from './pdf.ts';
+import { quoteLabels } from './labels.ts';
 import { greetingName, quoteCoverText } from './texts.ts';
 
 /**
@@ -42,6 +43,23 @@ export async function loadConfirmedItems(
     maxQty: num(r.max_qty),
     vatNote: r.vat_note,
   }));
+}
+
+/**
+ * The next quote number for this tenant: numbering restarts every calendar
+ * year (in the tenant's time zone), Q-2026-0001 … then Q-2027-0001. The
+ * tenant row is locked so two quotes can never take the same number; the
+ * unique (tenant_id, number) constraint backs that up.
+ */
+export async function allocateQuoteNumber(tx: TransactionSql, tenantId: string): Promise<string> {
+  const [t] = await tx<{ year: number }[]>`
+    select extract(year from now() at time zone timezone)::int as year
+    from public.tenants where id = ${tenantId} for update`;
+  const year = t!.year;
+  const [m] = await tx<{ n: number }[]>`
+    select coalesce(max(split_part(number, '-', 3)::int), 0)::int + 1 as n
+    from public.quotes where number like ${`Q-${year}-%`}`;
+  return formatQuoteNumber(year, m!.n);
 }
 
 export interface QuoteLineInput {
@@ -212,8 +230,14 @@ export async function loadQuoteDocument(
 export const quoteAcceptUrl = (publicApiUrl: string, token: string) =>
   `${publicApiUrl.replace(/\/+$/, '')}/q/${token}`;
 
-/** File name of the attachment. */
-export const quotePdfFileName = (number: string) => `Quote-${number}.pdf`;
+/**
+ * File name of the attachment, in the quote's language, ASCII only so it is
+ * safe in HTTP headers and every mail client ("Piedāvājums" → "Piedavajums").
+ */
+export const quotePdfFileName = (number: string, language: string | null = null) =>
+  `${quoteLabels(language)
+    .quote.normalize('NFKD')
+    .replace(/[^A-Za-z]/g, '')}-${number}.pdf`;
 
 export function quotePdfInput(
   d: QuoteDocument,

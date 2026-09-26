@@ -90,8 +90,13 @@ export function formatMoney(cents: number, currency: string, locale = 'en-GB'): 
   }
 }
 
-export const formatQty = (qty: number) =>
-  Number.isInteger(qty) ? String(qty) : qty.toFixed(2).replace(/0$/, '');
+/** 3 → "3", 2.5 → "2.5" (or "2,5" with a locale that writes a decimal comma). */
+export const formatQty = (qty: number, locale?: string) =>
+  locale
+    ? new Intl.NumberFormat(locale, { maximumFractionDigits: 2, useGrouping: false }).format(qty)
+    : Number.isInteger(qty)
+      ? String(qty)
+      : qty.toFixed(2).replace(/0$/, '');
 
 /** Q-2026-0007 */
 export const formatQuoteNumber = (year: number, n: number) =>
