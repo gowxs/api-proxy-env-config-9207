@@ -8,6 +8,8 @@ export interface NavData {
   name: string;
   mode: Mode;
   modules: { quotes: boolean; documents: boolean };
+  /** Customer e-mails are waiting to be answered (D5; no technical detail shown). */
+  repliesDelayed?: boolean;
   counts: { drafts: number; escalations: number; unpaid: number; payments: number };
 }
 

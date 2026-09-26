@@ -9,6 +9,7 @@ import {
   quoteAcceptUrl,
   quoteCoverFor,
   signQuoteToken,
+  unitFor,
   writeQuoteLines,
 } from '@noctiv/quotes';
 import type { FastifyInstance } from 'fastify';
@@ -109,10 +110,19 @@ export function quoteSettingsColumns(b: QuoteSettings): Record<string, unknown> 
   return cols;
 }
 
-/** Quotes with their lines, as the dashboard shows them (numbers, not numeric strings). */
-export function selectQuotes(tx: TransactionSql, where: ReturnType<TransactionSql>) {
-  return tx`
-    select q.id, q.number, q.status, q.thread_id, q.draft_id, q.customer_email, q.customer_name,
+/**
+ * Quotes with their lines, as the dashboard shows them (numbers, not numeric
+ * strings). Each line also carries unit_label: the unit as printed after its
+ * quantity in the quote's language ("2 boxes", QA #25).
+ */
+export async function selectQuotes(tx: TransactionSql, where: ReturnType<TransactionSql>) {
+  const rows = await tx<
+    ({ language: string | null; lines: { unit: string; qty: number }[] } & Record<
+      string,
+      unknown
+    >)[]
+  >`
+    select q.id, q.number, q.status, q.language, q.thread_id, q.draft_id, q.customer_email, q.customer_name,
            q.currency, q.vat_mode, q.vat_rate::float8 as vat_rate, q.subtotal_cents, q.vat_cents,
            q.total_cents, q.valid_until, q.notes, q.hold_reasons, q.created_at, q.sent_at,
            q.viewed_at, q.accepted_at,
@@ -126,6 +136,10 @@ export function selectQuotes(tx: TransactionSql, where: ReturnType<TransactionSq
     where ${where}
     order by q.created_at desc
     limit 200`;
+  return rows.map((q) => ({
+    ...q,
+    lines: q.lines.map((l) => ({ ...l, unit_label: unitFor(l.unit, l.qty, q.language) })),
+  }));
 }
 
 const ITEM_COLUMNS = (tx: TransactionSql) =>

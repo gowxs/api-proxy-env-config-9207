@@ -146,6 +146,8 @@ interface Row {
   seller_bank_name: string | null;
   seller_iban: string | null;
   seller_bic: string | null;
+  seller_sort_code: string | null;
+  seller_account_number: string | null;
   seller_country: string | null;
   tenant_name: string;
   brand_company_name: string | null;
@@ -199,6 +201,8 @@ const toRecord = (r: Row): DocumentRecord => ({
     bankName: r.seller_bank_name,
     iban: r.seller_iban,
     bic: r.seller_bic,
+    sortCode: r.seller_sort_code,
+    accountNumber: r.seller_account_number,
     country: r.seller_country,
   },
   brand: {
@@ -220,7 +224,8 @@ const SELECT = (tx: TransactionSql) => tx`
          d.due_date::text as due_date, d.created_at, d.issued_at, d.sent_at, d.paid_at,
          d.delivered_at, d.cancelled_at,
          t.seller_legal_name, t.seller_legal_address, t.seller_reg_no, t.seller_vat_no,
-         t.seller_bank_name, t.seller_iban, t.seller_bic, t.seller_country, t.name as tenant_name,
+         t.seller_bank_name, t.seller_iban, t.seller_bic, t.seller_sort_code,
+         t.seller_account_number, t.seller_country, t.name as tenant_name,
          t.brand_company_name, t.brand_logo_url, t.brand_color, t.brand_website, t.brand_phone,
          (now() at time zone t.timezone)::date::text as today, t.invoice_due_days
   from public.documents d join public.tenants t on t.id = d.tenant_id`;

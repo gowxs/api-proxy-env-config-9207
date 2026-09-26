@@ -97,6 +97,42 @@ describe('sending a new e-mail', () => {
     const out = await owner`
       select 1 from public.messages where thread_id = ${threadId} and direction = 'outbound'`;
     expect(out).toHaveLength(1);
+    expect(th!.next_followup_at).not.toBeNull();
+  });
+
+  it('no follow-up when the owner unticked “Follow up if no reply” (D6)', async () => {
+    const t = await tenant('compose-nofollow');
+    const shop = GREENMAIL_USERS.composeShop;
+    const customer = GREENMAIL_USERS.composeCustomer;
+    const connectionId = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const threadId = randomUUID();
+    const draftId = randomUUID();
+    await owner`insert into public.threads (id, tenant_id, connection_id, subject, followup_stop_reason)
+                values (${threadId}, ${t.tenantId}, ${connectionId}, 'Quick note', 'owner_off')`;
+    await owner`insert into public.drafts (id, tenant_id, thread_id, kind, to_address, subject, body, status, decided_by, decided_at)
+                values (${draftId}, ${t.tenantId}, ${threadId}, 'compose', ${customer.address}, 'Quick note',
+                        'No follow-up for this one.', 'approved', 'owner', now())`;
+    const res = await mailSendHandler({ sql: worker, keys, allowInsecure: true })({
+      id: randomUUID(),
+      tenantId: t.tenantId,
+      queue: QUEUES.mailSend,
+      payload: { draftId, sentVia: 'owner_approval' },
+      attempts: 1,
+      maxAttempts: 5,
+    });
+    expect(res).toEqual({ status: 'sent' });
+    const [th] = await owner<
+      { status: string; next_followup_at: Date | null; followup_stop_reason: string | null }[]
+    >`select status, next_followup_at, followup_stop_reason from public.threads where id = ${threadId}`;
+    expect(th).toEqual({
+      status: 'awaiting_customer',
+      next_followup_at: null,
+      followup_stop_reason: 'owner_off',
+    });
   });
 });
 

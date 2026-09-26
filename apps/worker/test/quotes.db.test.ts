@@ -223,6 +223,73 @@ describe('quote drafting', () => {
     expect(d!.body).toContain('“a wedding cake”');
   });
 
+  it('some items matched (D4): quote for them, no clarifying question; the owner gets a note for the rest', async () => {
+    const { messageId } = await run(
+      T,
+      model(
+        (req) => [
+          { item: labelFor(req, 'Lavender candle'), qty: 3, customer_text: '3 lavender candles' },
+        ],
+        ['a wedding cake'],
+      ),
+      'Price for 3 lavender candles and a wedding cake?',
+    );
+    const q = await quoteFor(messageId);
+    expect(q!.subtotal_cents).toBe(7200);
+    expect(q!.hold_reasons).not.toContain('quote_unmapped');
+    const drafts = await owner<{ kind: string; body: string }[]>`
+      select kind, body from public.drafts where source_message_id = ${messageId}`;
+    expect(drafts.map((d) => d.kind)).toEqual(['quote']);
+    expect(drafts[0]!.body).not.toContain('wedding cake');
+    const [n] = await owner<{ payload: { partial: boolean; quoteSent: boolean } }[]>`
+      select payload from public.notifications
+      where tenant_id = ${T.tenantId} and dedupe_key = ${`quote_needs_you:${messageId}`}`;
+    expect(n!.payload).toMatchObject({ partial: true, quoteSent: false });
+  });
+
+  it('some items matched (D4): a grounded answer for the rest rides in the same e-mail', async () => {
+    const llm = new FakeProvider({
+      responder: (req) => {
+        switch (kindOf(req)) {
+          case 'classify':
+            return quoteRequest;
+          case 'map':
+            return JSON.stringify({
+              lines: [{ item: labelFor(req, 'Gift box'), qty: 2, customer_text: '2 gift boxes' }],
+              unmapped: ['do you ship to Norway'],
+              language: 'en',
+            });
+          case 'verify':
+            return '{"supported":true,"unsupported_claims":[]}';
+          default:
+            expect(req.system).toContain('«do you ship to Norway»');
+            return JSON.stringify({
+              intent: 'shipping',
+              language: 'en',
+              reply: 'Hi Anna,\n\nWe are happy to help with shipping questions by e-mail.',
+              sources: [],
+              confidence: 0.9,
+              action: 'draft',
+              escalate_reason: null,
+            });
+        }
+      },
+    });
+    const { messageId } = await run(T, llm, 'Price for 2 gift boxes? And do you ship to Norway?');
+    const q = await quoteFor(messageId);
+    expect(q!.subtotal_cents).toBe(900);
+    const [d] = await owner<{ kind: string; body: string }[]>`
+      select kind, body from public.drafts where source_message_id = ${messageId}`;
+    expect(d!.kind).toBe('quote');
+    expect(d!.body).toContain('We are happy to help with shipping questions by e-mail.');
+    // The cover greets once.
+    expect(d!.body.match(/Anna/g)).toHaveLength(1);
+    expect(q!.hold_reasons).toContain('partial_answer_check');
+    const notes = await owner`
+      select 1 from public.notifications where dedupe_key = ${`quote_needs_you:${messageId}`}`;
+    expect(notes).toHaveLength(0);
+  });
+
   it('with quotes off, a quote request is answered like any sales inquiry', async () => {
     const off = await tenant('quotes-off');
     await owner`update public.tenants set quotes_enabled = false where id = ${off.tenantId}`;

@@ -19,6 +19,7 @@ import {
   VerifierSchema,
   ZERO_USAGE,
   type Classification,
+  type DataOrigin,
   type EmbeddingProvider,
   type GuardedReply,
   type HeaderMap,
@@ -370,82 +371,17 @@ export async function processMessage(
     llmCalls = q.llmCalls;
   }
 
-  // 5. Retrieve, generate, guard.
-  const knowledge = await retrieveKnowledge(
-    { sql: deps.sql, embeddings: deps.embeddings },
-    { tenantId, query: `${m.subject ?? ''}\n${body}`, origin },
-  );
-  embedTokens += knowledge.usage.inputTokens;
-  const prompt = buildGenerationPrompt({
-    businessName: l.tenant.name,
-    email,
-    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content })),
-    inboundLanguage: classification.language,
-  });
-  const gen = await generateJson(
-    deps.llm,
-    { tier: 'quality', origin, system: prompt.system, parts: prompt.parts, maxOutputTokens: 2048 },
-    GenerationSchema,
-  );
-  usage = addUsage(usage, gen.usage);
-  llmCalls += gen.attempts;
-
-  const context = await withTenant(deps.sql, tenantId, async (tx) => {
-    const [caps] = await tx<{ sender: number; hour: number }[]>`
-      select count(*) filter (where to_address = ${recipient.to} and created_at > now() - interval '24 hours')::int as sender,
-             count(*) filter (where created_at > now() - interval '1 hour')::int as hour
-      from public.outbound_emails where sent_via = 'auto'`;
-    return { caps: caps!, allowlist: await loadAllowlist(tx) };
-  });
-  const guardInput = {
-    tenant: { mode: l.tenant.mode, budgetState: budget.state, allowlist: context.allowlist },
-    inbound: {
-      from: m.from,
-      replyTo,
-      subject: m.subject,
-      messageId: m.messageIdHeader,
-      references: m.references,
-      bodyText: body,
-      // HTML is not stored; the fetch-time signal stands in for it.
-      html: m.htmlHiddenText
-        ? '<div style="display:none">hidden text detected at fetch time</div>'
-        : null,
-    },
+  // 5–6. Retrieve, generate, guard, verify.
+  const g = await generateGrounded(deps, tenantId, l, {
+    body,
+    origin,
     classification,
-    modelOutput: gen.ok ? gen.value : gen.raw,
-    labels: prompt.labels,
-    caps: {
-      senderRepliesLast24h: context.caps.sender,
-      maxPerSender24h: l.tenant.maxPerSender24h,
-      tenantRepliesLastHour: context.caps.hour,
-      maxPerHour: l.tenant.maxPerHour,
-    },
-  };
-  let guarded = guardReply({ ...guardInput, verifier: 'not_run' });
-
-  // 6. Grounding verifier, only for replies that would otherwise be auto-sent (Q6).
-  if (guarded.decision.eligibleForVerification && guarded.replyText) {
-    const cited = knowledge.chunks
-      .filter((c) => guarded.citedChunkIds.includes(c.id))
-      .map((c) => c.content);
-    const v = await generateJson(
-      deps.llm,
-      {
-        tier: 'fast',
-        origin,
-        ...buildVerifierPrompt({ reply: guarded.replyText, excerpts: cited }),
-        maxOutputTokens: 512,
-      },
-      VerifierSchema,
-    );
-    usage = addUsage(usage, v.usage);
-    llmCalls += v.attempts;
-    guarded = guardReply({
-      ...guardInput,
-      verifier:
-        v.ok && v.value.supported && v.value.unsupported_claims.length === 0 ? 'passed' : 'failed',
-    });
-  }
+    budgetState: budget.state,
+  });
+  usage = addUsage(usage, g.usage);
+  llmCalls += g.llmCalls;
+  embedTokens += g.embedTokens;
+  const { guarded, guardInput, knowledge } = g;
 
   const d = l.backlog
     ? {
@@ -535,6 +471,123 @@ export async function processMessage(
     }
   });
   return { status: d.action === 'auto_send' ? 'auto_send' : 'drafted', reasons: d.reasons };
+}
+
+/**
+ * Steps 5–6 of the pipeline: retrieve knowledge, generate, guard, and run
+ * the grounding verifier when the reply would otherwise be auto-sent. Also
+ * used by the quote step for the parts of a request that are not on the
+ * price list (founder decision D4): `focus` limits the reply to them.
+ */
+export async function generateGrounded(
+  deps: PipelineDeps,
+  tenantId: string,
+  l: Loaded,
+  i: {
+    body: string;
+    origin: DataOrigin;
+    classification: Classification;
+    budgetState: 'ok' | 'draft_forced' | 'halted';
+    focus?: string[];
+  },
+) {
+  const m = l.message;
+  const replyTo = m.replyTo ? [m.replyTo] : [];
+  const recipient = resolveReplyRecipient({ from: m.from, replyTo });
+  const email = { fromName: m.fromName, subject: m.subject, bodyText: i.body };
+  const knowledge = await retrieveKnowledge(
+    { sql: deps.sql, embeddings: deps.embeddings },
+    {
+      tenantId,
+      query: i.focus?.length ? i.focus.join('\n') : `${m.subject ?? ''}\n${i.body}`,
+      origin: i.origin,
+    },
+  );
+  const prompt = buildGenerationPrompt({
+    businessName: l.tenant.name,
+    email,
+    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content })),
+    inboundLanguage: i.classification.language,
+    ...(i.focus?.length ? { focus: i.focus } : {}),
+  });
+  const gen = await generateJson(
+    deps.llm,
+    {
+      tier: 'quality',
+      origin: i.origin,
+      system: prompt.system,
+      parts: prompt.parts,
+      maxOutputTokens: 2048,
+    },
+    GenerationSchema,
+  );
+  let usage = gen.usage;
+  let llmCalls = gen.attempts;
+
+  const context = await withTenant(deps.sql, tenantId, async (tx) => {
+    const [caps] = await tx<{ sender: number; hour: number }[]>`
+      select count(*) filter (where to_address = ${recipient.to} and created_at > now() - interval '24 hours')::int as sender,
+             count(*) filter (where created_at > now() - interval '1 hour')::int as hour
+      from public.outbound_emails where sent_via = 'auto'`;
+    return { caps: caps!, allowlist: await loadAllowlist(tx) };
+  });
+  const guardInput = {
+    tenant: { mode: l.tenant.mode, budgetState: i.budgetState, allowlist: context.allowlist },
+    inbound: {
+      from: m.from,
+      replyTo,
+      subject: m.subject,
+      messageId: m.messageIdHeader,
+      references: m.references,
+      bodyText: i.body,
+      // HTML is not stored; the fetch-time signal stands in for it.
+      html: m.htmlHiddenText
+        ? '<div style="display:none">hidden text detected at fetch time</div>'
+        : null,
+    },
+    classification: i.classification,
+    modelOutput: gen.ok ? gen.value : gen.raw,
+    labels: prompt.labels,
+    caps: {
+      senderRepliesLast24h: context.caps.sender,
+      maxPerSender24h: l.tenant.maxPerSender24h,
+      tenantRepliesLastHour: context.caps.hour,
+      maxPerHour: l.tenant.maxPerHour,
+    },
+  };
+  let guarded = guardReply({ ...guardInput, verifier: 'not_run' });
+
+  // Grounding verifier, only for replies that would otherwise be auto-sent (Q6).
+  if (guarded.decision.eligibleForVerification && guarded.replyText) {
+    const cited = knowledge.chunks
+      .filter((c) => guarded.citedChunkIds.includes(c.id))
+      .map((c) => c.content);
+    const v = await generateJson(
+      deps.llm,
+      {
+        tier: 'fast',
+        origin: i.origin,
+        ...buildVerifierPrompt({ reply: guarded.replyText, excerpts: cited }),
+        maxOutputTokens: 512,
+      },
+      VerifierSchema,
+    );
+    usage = addUsage(usage, v.usage);
+    llmCalls += v.attempts;
+    guarded = guardReply({
+      ...guardInput,
+      verifier:
+        v.ok && v.value.supported && v.value.unsupported_claims.length === 0 ? 'passed' : 'failed',
+    });
+  }
+  return {
+    guarded,
+    guardInput,
+    knowledge,
+    usage,
+    llmCalls,
+    embedTokens: knowledge.usage.inputTokens,
+  };
 }
 
 async function writeProcessing(

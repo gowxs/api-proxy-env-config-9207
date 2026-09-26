@@ -98,6 +98,23 @@ describe('settings', () => {
       seller_bic: 'HABALV22',
     });
   });
+
+  it('saves a UK sort code and account number (D2)', async () => {
+    expect((await call('PATCH', A, '', { sellerSortCode: '2000' })).status).toBe(400);
+    expect((await call('PATCH', A, '', { sellerAccountNumber: '1234' })).status).toBe(400);
+    const r = await call('PATCH', A, '', {
+      sellerSortCode: '20-00-00',
+      sellerAccountNumber: '5577 9911',
+    });
+    expect(r.status).toBe(200);
+    expect((await call('GET', A, '')).json).toMatchObject({
+      seller_sort_code: '200000',
+      seller_account_number: '55779911',
+    });
+    expect(
+      (await call('PATCH', A, '', { sellerSortCode: '', sellerAccountNumber: '' })).status,
+    ).toBe(200);
+  });
 });
 
 describe('invoices', () => {

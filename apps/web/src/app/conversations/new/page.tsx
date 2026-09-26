@@ -25,6 +25,7 @@ import { useTenantId } from '@/lib/session';
 interface ComposeInfo {
   from: { address: string; name: string | null } | null;
   documents: Doc[];
+  followup: { afterDays: number } | null;
 }
 interface Assist {
   subject: string;
@@ -127,10 +128,11 @@ function Compose() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [docs, setDocs] = useState<string[]>([]);
+  const [followUp, setFollowUp] = useState(true);
   const send = useAction();
   if (info.error) return <ErrorText>{info.error}</ErrorText>;
   if (!info.data) return <Loading />;
-  const { from, documents } = info.data;
+  const { from, documents, followup } = info.data;
   if (!from)
     return (
       <Notice>
@@ -151,7 +153,7 @@ function Compose() {
         void send.run(async () => {
           const r = await api<{ threadId: string }>(`/v1/tenants/${tenantId}/compose`, {
             method: 'POST',
-            body: { to, subject, body, documentIds: docs },
+            body: { to, subject, body, documentIds: docs, followUp: followup ? followUp : false },
           });
           await reloadNav();
           router.push(`/conversations/${r.threadId}`);
@@ -257,6 +259,25 @@ function Compose() {
           </p>
         )}
       </Card>
+
+      {followup && (
+        <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
+          <input
+            type="checkbox"
+            className="h-5 w-5 shrink-0 accent-indigo-700"
+            checked={followUp}
+            onChange={(e) => setFollowUp(e.target.checked)}
+          />
+          <span className="text-sm">
+            Follow up if no reply
+            <span className="block text-xs text-neutral-500">
+              A short reminder after {followup.afterDays}{' '}
+              {followup.afterDays === 1 ? 'day' : 'days'}, as for replies. It stops when the
+              customer answers.
+            </span>
+          </span>
+        </label>
+      )}
 
       <ErrorText>{send.error}</ErrorText>
       <div className="flex flex-wrap items-center gap-3">

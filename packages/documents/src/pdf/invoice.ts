@@ -1,6 +1,7 @@
 import {
   formatMoney,
   formatQty,
+  unitFor,
   formatRate,
   newPdf,
   PDF_INK as INK,
@@ -14,7 +15,16 @@ import type { Seller } from '../checks.ts';
 import { docLabels, type DocLabels } from '../labels.ts';
 import type { DeliveryNoteData, InvoiceData } from '../schema.ts';
 import type { DocumentTotals, InvoiceTotals } from '../totals.ts';
-import { dateText, header, ibanText, parties, sellerLines, type PdfContext } from './common.ts';
+import {
+  dateText,
+  hasPaymentDetails,
+  header,
+  ibanText,
+  parties,
+  sellerLines,
+  sortCodeText,
+  type PdfContext,
+} from './common.ts';
 
 /** Subtotal / VAT / total rows, right-aligned under the line totals; returns the next y. */
 function drawTotals(
@@ -55,7 +65,7 @@ function drawTotals(
   return y;
 }
 
-/** The grey payment-details box (bank, IBAN, BIC, reference, pay-by line); returns the next y. */
+/** The grey payment-details box (bank, sort code/account, IBAN, BIC, reference, pay-by line); returns the next y. */
 function drawPayment(
   doc: PDFKit.PDFDocument,
   y: number,
@@ -67,6 +77,8 @@ function drawPayment(
   const pay = (
     [
       [t.bank, o.seller.bankName ?? ''],
+      [t.sortCode, sortCodeText(o.seller)],
+      [t.accountNumber, o.seller.accountNumber ?? ''],
       [t.iban, ibanText(o.seller)],
       [t.bic, o.seller.bic ?? ''],
       [t.reference, o.reference],
@@ -181,10 +193,15 @@ export function renderInvoicePdf(i: InvoicePdfInput): Promise<Buffer> {
       .fontSize(10)
       .fillColor(INK)
       .text(l.name, col.item, y, { width: W * 0.44 });
-    doc.text(`${l.qty === null ? '' : formatQty(l.qty, locale)} ${l.unit}`.trim(), col.qty, y, {
-      width: W * 0.16,
-      align: 'right',
-    });
+    doc.text(
+      `${l.qty === null ? '' : formatQty(l.qty, locale)} ${unitFor(l.unit, l.qty, i.language)}`.trim(),
+      col.qty,
+      y,
+      {
+        width: W * 0.16,
+        align: 'right',
+      },
+    );
     const up = i.totals.unitPrices[n];
     doc.text(up === null || up === undefined ? '' : money(up), col.unit, y, {
       width: W * 0.16,
@@ -394,7 +411,7 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
       totals: p.totals,
       totalX: col.total,
     });
-    if (i.seller.iban)
+    if (hasPaymentDetails(i.seller))
       y = drawPayment(doc, y + 10, {
         labels: t,
         seller: i.seller,

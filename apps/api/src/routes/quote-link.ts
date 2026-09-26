@@ -7,6 +7,7 @@ import {
   formatDate,
   formatMoney,
   formatQty,
+  unitFor,
   formatRate,
   languageFromAcceptHeader,
   loadQuoteDocument,
@@ -210,7 +211,7 @@ function quotePage(
   const rows = d.lines
     .map(
       (l) =>
-        `<tr><td style="padding:8px 0;border-bottom:1px solid #E3E6EE">${escapeHtml(l.name)}<br><span style="color:#5B6275;font-size:13px">${escapeHtml(formatQty(l.qty, locale))} ${escapeHtml(l.unit)} × ${money(l.unitPriceCents)}</span></td>` +
+        `<tr><td style="padding:8px 0;border-bottom:1px solid #E3E6EE">${escapeHtml(l.name)}<br><span style="color:#5B6275;font-size:13px">${escapeHtml(formatQty(l.qty, locale))} ${escapeHtml(unitFor(l.unit, l.qty, lang))} × ${money(l.unitPriceCents)}</span></td>` +
         `<td style="padding:8px 0;border-bottom:1px solid #E3E6EE;text-align:right;white-space:nowrap">${money(l.lineTotalCents)}</td></tr>`,
     )
     .join('');
@@ -390,9 +391,13 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
                              ${`quote ${q.number} accepted`})`;
           }
         }
+        // The owner e-mail says whether the invoice follows on its own (QA #28).
+        const [auto] = await tx<{ on: boolean }[]>`
+          select (documents_enabled and auto_invoice_on_accept) as on
+          from public.tenants where id = ${c.tenantId}`;
         await tx`insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
                  values (${c.tenantId}, 'email_owner', 'quote_accepted', ${`quote_accepted:${q.id}`},
-                         ${tx.json({ quoteId: q.id, threadId: q.thread_id, number: q.number, totalCents: q.total_cents, currency: q.currency })})
+                         ${tx.json({ quoteId: q.id, threadId: q.thread_id, number: q.number, totalCents: q.total_cents, currency: q.currency, autoInvoice: Boolean(auto?.on) })})
                  on conflict do nothing`;
         await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
                  values (${c.tenantId}, 'system', 'quote.accepted', 'quote', ${q.id}, ${tx.json({ via: 'customer_link' })})`;

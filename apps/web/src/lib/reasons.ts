@@ -25,6 +25,11 @@ const REASONS: Record<string, string> = {
   unreadable_message: 'Message too large to read',
   budget_halted: 'AI budget used up for today',
   free_tier_refused: 'Not a test mailbox (free AI tier)',
+  quote_over_limit: 'Quote total above your automatic-send limit',
+  quote_unmapped: 'Some items are not on your price list',
+  quote_empty: 'Nothing matched your price list',
+  partial_answer_check: 'Also answers a question outside the price list: check that part',
+  invoice_over_limit: 'Invoice total above your automatic-send limit',
 };
 
 /** What the fact check found without a source (packages/core claims). */

@@ -1,4 +1,5 @@
 import { formatMoney, formatQty } from './money.ts';
+import { unitFor } from './units.ts';
 import { formatRate, quoteLabels, quoteLocale } from './labels.ts';
 import {
   newPdf,
@@ -158,10 +159,15 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
         .fillColor(MUTED)
         .text(l.vatNote, col.item, y + nameH + 2, { width: W * 0.5 });
     doc.fontSize(10).fillColor(INK);
-    doc.text(`${formatQty(l.qty, locale)} ${l.unit}`, col.qty - W * 0.06, y, {
-      width: W * 0.16,
-      align: 'right',
-    });
+    doc.text(
+      `${formatQty(l.qty, locale)} ${unitFor(l.unit, l.qty, q.language)}`,
+      col.qty - W * 0.06,
+      y,
+      {
+        width: W * 0.16,
+        align: 'right',
+      },
+    );
     doc.text(money(l.unitPriceCents), col.unit, y, { width: W * 0.16, align: 'right' });
     doc.text(money(l.lineTotalCents), col.total, y, { width: W * 0.18, align: 'right' });
     y += nameH + noteH + 10;

@@ -4,6 +4,7 @@ import {
   newNonce,
   originForTenantKnowledge,
   stripCitationMarkers,
+  stripSignOff,
   TrainingDataPolicyError,
   type EmbeddingProvider,
   type LlmProvider,
@@ -140,7 +141,7 @@ export function composeAssistHandler(deps: ComposeAssistDeps) {
     return {
       ok: true,
       subject: r.value.subject || (p.subject ?? ''),
-      body: stripCitationMarkers(r.value.body),
+      body: stripSignOff(stripCitationMarkers(r.value.body)),
       sources: [...new Set(cited)].map((c) => (c.length > 160 ? `${c.slice(0, 157)}…` : c)),
       unsupportedNumbers,
     };

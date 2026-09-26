@@ -673,7 +673,7 @@ All tables have `tenant_id`, forced RLS and isolation policies like the rest.
 2. With quotes on, and a `quote_request` that is not on the hard list, the pipeline runs a **mapping** call: the model sees the e-mail and the confirmed price list (as labels `P1…Pn`, names, units, min/max; **no prices**). It returns strict JSON: `lines: [{item: "P3", qty, customer_text}]`, `unmapped: [customer_text]`, `language`.
 3. **Code validates** every line: the label exists and is confirmed; `qty` is a positive number within min/max; `qty` must appear in the customer's e-mail (the number itself or a written-out 1–12), or be 1 when the customer named no quantity. Anything that fails moves to `unmapped`.
 4. **Totals in code, in integer cents:** line = qty × unit price; subtotal = Σ lines; VAT per the tenant's mode and rate (rounded half-up per quote, not per line); total. The quote number, validity date and totals are never produced by the model.
-5. **Unmapped items:** if nothing maps, or anything is unmapped, no quote is made. The reply asks **one** clarifying question (fixed text per language naming what we could not match), and the owner is notified (`quote_needs_you`). That reply follows the normal mode rules (it states no facts).
+5. **Unmapped items:** if nothing maps, no quote is made. The reply asks **one** clarifying question (fixed text per language naming what we could not match), and the owner is notified (`quote_needs_you`). That reply follows the normal mode rules (it states no facts). *Changed by founder decision D4 (2026-09-26), see §24:* when some items map, the quote covers them and the rest is answered in the same e-mail by a grounded reply, or passed to the owner in a one-line note; the clarifying question is only for requests where nothing matched.
 6. **Otherwise** a quote plus a short cover reply (fixed text per language: quote number, total, validity and the accept link, all filled in by code). The cover reply and quote are one `quote` draft.
 
 ### 21.4 Modes and auto-send
@@ -861,3 +861,14 @@ Forced RLS and isolation policies like every table. Documents are business recor
   - `GET /admin/waitlist.csv` with `Authorization: Bearer $WAITLIST_EXPORT_TOKEN`.
   - It contains confirmed sign-ups, plus account owners who switched on "Notify me" in the app.
 - **App:** Settings → Integrations shows the same cards, with a per-tenant "Notify me" switch (`tenants.integrations_notify`).
+
+## 24. Decisions after the QA pass (founder, 2026-09-26)
+
+QA.md lists the findings; these are the decisions and how they were built.
+
+- **D1: totals the code can reproduce.** The fact check (`verifyClaims`) also accepts an amount that code works out from knowledge-base amounts: a price, quantity × price (quantities in digits or number words from the customer's e-mail, 1–1000), or a sum of two or three different such amounts. Nothing else passes; a price is never doubled unless the customer wrote a quantity.
+- **D2: UK bank details.** `tenants.seller_sort_code` (6 digits) and `seller_account_number` (8 digits). A UK seller (country, VAT or IBAN prefix GB) can issue an invoice with an IBAN or with both; other sellers need an IBAN. BIC is optional for everyone. The PDF payment box prints sort code and account number.
+- **D3: app language:** not now.
+- **D4: mixed quote requests.** Matched lines → a quote. The unmatched parts go through the normal grounded reply (`generateGrounded`, the same retrieval, guard and verifier), told to answer only those parts; its text is added under the quote cover. If it cannot be answered, the owner gets `quote_needs_you` with `partial: true`. If the added text would not have been auto-sent on its own, the quote waits for approval (`partial_answer_check`).
+- **D5: AI quota waits.** `app.quota_waits()` lists customer e-mails waiting on the provider's daily quota. Every 5 minutes the worker checks: after 30 minutes the admin gets `quota_wait`, after 4 hours the owner gets `replies_delayed` (each at most once per tenant and day). The app shows "Replies are delayed" whenever e-mails wait. `app.fail_job` no longer counts a quota wait against the retries, for up to 26 hours after the e-mail arrived.
+- **D6: Compose follow-ups.** A "Follow up if no reply" checkbox, on by default. When it is off, the thread gets `followup_stop_reason = 'owner_off'` and sending schedules no follow-up.

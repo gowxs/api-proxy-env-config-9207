@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Button, ErrorText, Field, inputClass, Notice } from './ui';
 
@@ -117,10 +117,13 @@ export function MailboxForm({
   tenantId,
   reconnect,
   onSaved,
+  onTested,
 }: {
   tenantId: string;
   reconnect?: { id: string; email: string; provider: Provider };
   onSaved: () => void;
+  /** Called when the connection test passes or the form changes after it. */
+  onTested?: (ok: boolean) => void;
 }) {
   const [provider, setProvider] = useState<Provider>(reconnect?.provider ?? 'gmail');
   const [email, setEmail] = useState(reconnect?.email ?? '');
@@ -133,6 +136,9 @@ export function MailboxForm({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    onTested?.(result?.status === 'ok');
+  }, [result, onTested]);
 
   const guide = GUIDES[provider];
 

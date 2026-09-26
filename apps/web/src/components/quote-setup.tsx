@@ -506,12 +506,15 @@ export function QuoteSettingsCard({
           });
         }}
       >
-        <Field label="VAT">
+        {/* A fieldset, not <Field> (a <label>): the group label must not attach to the first radio (QA #27). */}
+        <fieldset>
+          <legend className="mb-1 block text-sm font-medium text-neutral-800">VAT</legend>
           <div className="space-y-1">
             {(['exclusive', 'inclusive', 'none'] as VatMode[]).map((m) => (
-              <label key={m} className="flex items-center gap-2 text-sm">
+              <label key={m} className="flex min-h-9 items-center gap-2 text-sm">
                 <input
                   type="radio"
+                  name="quotes-vat-mode"
                   checked={f.vatMode === m}
                   onChange={() => setF({ ...f, vatMode: m })}
                 />
@@ -519,7 +522,7 @@ export function QuoteSettingsCard({
               </label>
             ))}
           </div>
-        </Field>
+        </fieldset>
         <div className="grid grid-cols-2 gap-3">
           {f.vatMode !== 'none' && (
             <Field label="VAT rate (%)">

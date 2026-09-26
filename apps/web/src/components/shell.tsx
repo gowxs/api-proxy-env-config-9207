@@ -383,6 +383,21 @@ function BottomBar() {
   );
 }
 
+/** D5: e-mails waiting on the AI allowance; the owner sees only that replies are delayed. */
+function DelayedBanner() {
+  const { nav } = useNav();
+  if (!nav?.repliesDelayed) return null;
+  return (
+    <div
+      role="status"
+      className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      <strong className="font-semibold">Replies are delayed.</strong> Some customer e-mails have not
+      been answered yet; they will be answered automatically. Nothing was lost.
+    </div>
+  );
+}
+
 function Chrome({ title, children }: { title: string; children: ReactNode }) {
   const { tenant } = useSession();
   return (
@@ -401,6 +416,7 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
           <div className="pb-24 lg:pb-0 lg:pl-60">
             <main className="mx-auto max-w-5xl px-4 py-5 lg:px-8 lg:py-8">
               <BillingBanner />
+              <DelayedBanner />
               <h1 className="mb-4 text-xl font-semibold lg:text-2xl">{title}</h1>
               {children}
             </main>

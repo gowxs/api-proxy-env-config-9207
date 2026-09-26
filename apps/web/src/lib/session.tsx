@@ -8,6 +8,8 @@ export interface TenantSummary {
   id: string;
   name: string;
   onboarding_completed_at: string | null;
+  /** The business website from onboarding (prefills Knowledge → Website). */
+  website_url?: string | null;
   mailboxes: number;
   kb_sources: number;
 }

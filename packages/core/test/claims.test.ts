@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { detectClaims, isSupportedLanguage, numberReadings, verifyClaims } from '../src/index.ts';
+import {
+  derivedAmounts,
+  detectClaims,
+  isSupportedLanguage,
+  numberReadings,
+  quantitiesIn,
+  verifyClaims,
+} from '../src/index.ts';
 import { NBSP } from './fixtures/chars.ts';
 
 const kinds = (text: string) => detectClaims(text).map((c) => c.kind);
@@ -112,6 +119,47 @@ describe('verifyClaims', () => {
     expect(check('Yes, 3 candles for 30 EUR.', 'Can I get 3 candles for 30 EUR?')).toEqual([
       'money:30 eur',
     ]);
+  });
+});
+
+describe('verifyClaims: totals worked out from knowledge-base prices (D1)', () => {
+  const kb = ['Classic candle £18. Gift box £3.95. Large candle £29.'];
+  const check = (reply: string, inboundText: string) =>
+    verifyClaims(reply, { citedSources: kb, inboundText }).unsupported.map(
+      (c) => `${c.kind}:${c.text}`,
+    );
+
+  it('accepts quantity × price with the quantity from the customer e-mail', () => {
+    expect(check('Two classic candles come to £36.', 'Can I have two classic candles?')).toEqual(
+      [],
+    );
+    expect(check('3 candles are £54 in total.', 'I need 3 candles')).toEqual([]);
+    expect(check('Zwei Kerzen kosten 36 £.', 'Ich möchte zwei Kerzen')).toEqual([]);
+  });
+
+  it('accepts sums of different items and of quantity totals', () => {
+    expect(check('With the gift box it is £39.95.', 'two classic candles and a gift box')).toEqual(
+      [],
+    );
+    expect(check('A classic and a large candle: £47.', 'one classic, one large')).toEqual([]);
+    expect(check('Total £68.95.', 'two classic candles, a large one and a gift box')).toEqual([]);
+  });
+
+  it('still blocks amounts the code cannot reproduce', () => {
+    expect(check('Two classic candles come to £37.', 'two classic candles')).toEqual(['money:£37']);
+    // No quantity in the e-mail: a price is never doubled on its own.
+    expect(check('That is £36.', 'a classic candle please')).toEqual(['money:£36']);
+    // A discount the knowledge base does not state.
+    expect(check('Both for £32.40.', 'two classic candles')).toEqual(['money:£32.40']);
+    expect(check('Delivery on 12.11.', '')).toEqual(['date:12.11.']);
+  });
+
+  it('reads quantities in digits and words', () => {
+    expect(quantitiesIn('two candles and 4 boxes, a pair of mugs').sort()).toEqual([2, 4]);
+    const d = derivedAmounts(['18', '3.95'], [2]);
+    for (const a of ['18', '3.95', '36', '7.9', '21.95', '39.95']) expect(d.has(a)).toBe(true);
+    expect(d.has('37')).toBe(false);
+    expect([...derivedAmounts(['18'], [])]).toEqual(['18']);
   });
 });
 

@@ -18,6 +18,8 @@ const composeBody = z
     subject: z.string().trim().min(1).max(200),
     body: z.string().trim().min(1).max(20_000),
     documentIds: z.array(z.uuid()).max(5).default([]),
+    /** D6: follow up if the customer does not reply (default on). */
+    followUp: z.boolean().default(true),
   })
   .strict();
 
@@ -62,8 +64,12 @@ export function composeRoutes(app: FastifyInstance, deps: AppDeps) {
         select email_address, display_name from public.email_connections
         where status = 'connected' order by created_at limit 1`;
       const ready = (await listDocuments(tx, {})).filter((d) => d.status === 'issued');
+      const [t] = await tx<{ followup_after_days: number; followup_max: number }[]>`
+        select followup_after_days, followup_max from public.tenants`;
       return {
         from: conn ? { address: conn.email_address, name: conn.display_name } : null,
+        /** D6: the "Follow up if no reply" checkbox (hidden when follow-ups are off). */
+        followup: t!.followup_max > 0 ? { afterDays: t!.followup_after_days } : null,
         documents: ready.map(documentJson),
       };
     }),
@@ -104,8 +110,8 @@ export function composeRoutes(app: FastifyInstance, deps: AppDeps) {
         await tx`insert into public.lead_events (tenant_id, lead_id, to_stage, actor, actor_user_id, reason)
                  values (${tenantId}, ${lead!.id}, 'received', 'owner', ${req.user!.userId}, 'new e-mail from the inbox')`;
       const [thread] = await tx<{ id: string }[]>`
-        insert into public.threads (tenant_id, connection_id, lead_id, subject)
-        values (${tenantId}, ${conn.id}, ${lead!.id}, ${b.subject})
+        insert into public.threads (tenant_id, connection_id, lead_id, subject, followup_stop_reason)
+        values (${tenantId}, ${conn.id}, ${lead!.id}, ${b.subject}, ${b.followUp ? null : 'owner_off'})
         returning id`;
       const [draft] = await tx<{ id: string }[]>`
         insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body,
@@ -126,7 +132,7 @@ export function composeRoutes(app: FastifyInstance, deps: AppDeps) {
       });
       await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id, metadata)
                values (${tenantId}, 'owner', ${req.user!.userId}, 'email.composed', 'draft', ${draft!.id},
-                       ${tx.json({ threadId: thread!.id, documents: docIds.length })})`;
+                       ${tx.json({ threadId: thread!.id, documents: docIds.length, followUp: b.followUp })})`;
       return { threadId: thread!.id, draftId: draft!.id };
     }),
   );

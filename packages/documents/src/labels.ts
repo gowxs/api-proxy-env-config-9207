@@ -26,6 +26,8 @@ export interface DocLabels {
   ofWhichVat: (rate: string) => string;
   paymentDetails: string;
   bank: string;
+  sortCode: string;
+  accountNumber: string;
   iban: string;
   bic: string;
   reference: string;
@@ -68,6 +70,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `of which VAT ${r}%`,
     paymentDetails: 'PAYMENT DETAILS',
     bank: 'Bank',
+    sortCode: 'Sort code',
+    accountNumber: 'Account number',
     iban: 'IBAN',
     bic: 'BIC',
     reference: 'Payment reference',
@@ -109,6 +113,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `darin enthalten MwSt. ${r} %`,
     paymentDetails: 'ZAHLUNGSDETAILS',
     bank: 'Bank',
+    sortCode: 'Sort Code',
+    accountNumber: 'Kontonummer',
     iban: 'IBAN',
     bic: 'BIC',
     reference: 'Verwendungszweck',
@@ -150,6 +156,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `t. sk. PVN ${r}%`,
     paymentDetails: 'MAKSĀJUMA REKVIZĪTI',
     bank: 'Banka',
+    sortCode: 'Sort code',
+    accountNumber: 'Konta numurs',
     iban: 'Konts (IBAN)',
     bic: 'BIC',
     reference: 'Maksājuma mērķis',
@@ -191,6 +199,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `waarvan btw ${r}%`,
     paymentDetails: 'BETAALGEGEVENS',
     bank: 'Bank',
+    sortCode: 'Sort code',
+    accountNumber: 'Rekeningnummer',
     iban: 'IBAN',
     bic: 'BIC',
     reference: 'Betalingskenmerk',
@@ -231,6 +241,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `dont TVA ${r} %`,
     paymentDetails: 'COORDONNÉES BANCAIRES',
     bank: 'Banque',
+    sortCode: 'Sort code',
+    accountNumber: 'Numéro de compte',
     iban: 'IBAN',
     bic: 'BIC',
     reference: 'Référence de paiement',
@@ -272,6 +284,8 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
     ofWhichVat: (r) => `IVA incluido ${r} %`,
     paymentDetails: 'DATOS DE PAGO',
     bank: 'Banco',
+    sortCode: 'Sort code',
+    accountNumber: 'Número de cuenta',
     iban: 'IBAN',
     bic: 'BIC',
     reference: 'Referencia de pago',

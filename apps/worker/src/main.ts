@@ -20,6 +20,7 @@ import { purgeExpiredContent, tenantDeleteHandler } from './ops/gdpr.ts';
 import { sendWaitlistConfirmations } from './ops/waitlist.ts';
 import { queuePaymentReminders } from './ops/payment-reminders.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
+import { scanQuotaWaits } from './ops/quota.ts';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
@@ -247,6 +248,14 @@ if (config.SYSTEM_SMTP_HOST) {
     'SYSTEM_SMTP_HOST not set: owner and admin notifications stay queued until the system mailer is configured',
   );
 }
+// D5: e-mails waiting on the AI quota — admin alert after 30 min, owner after 4 h.
+const quotaTimer = setInterval(
+  () =>
+    void scanQuotaWaits(db.sql).catch((e: unknown) =>
+      logger.error({ err: String(e) }, 'quota wait scan failed'),
+    ),
+  5 * 60_000,
+);
 // PLAN.md §4.7: follow-ups.scan every 15 minutes.
 const followupTimer = setInterval(
   () =>
@@ -262,6 +271,7 @@ const shutdown = async (signal: string) => {
   clearInterval(refreshTimer);
   clearInterval(housekeepingTimer);
   clearInterval(followupTimer);
+  clearInterval(quotaTimer);
   if (notifyTimer) clearInterval(notifyTimer);
   await manager.stopAll();
   await runner.stop();

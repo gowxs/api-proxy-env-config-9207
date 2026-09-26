@@ -34,6 +34,8 @@ const REASONS: Record<string, string> = {
   quote_over_limit: 'the quote total is above your automatic-send limit',
   quote_unmapped: 'some requested items are not on your price list',
   quote_empty: 'nothing in the request matched your price list',
+  partial_answer_check:
+    'the e-mail also answers a question outside your price list; please check that part',
   quotes_disabled: 'Quotes (beta) is switched off',
   invoice_over_limit: 'the invoice total is above your automatic-send limit',
   documents_disabled: 'Documents (beta) is switched off',
@@ -257,6 +259,29 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         ],
         footer: 'Noctiv admin alert.',
       });
+    case 'quota_wait': {
+      const mins = Math.round((Date.now() - new Date(str(p.since)).getTime()) / 60_000);
+      return render(`[admin] Replies waiting on the AI quota (${n.tenantName})`, {
+        heading: 'Customer e-mails are waiting because the AI provider’s daily quota is used up.',
+        lines: [
+          ['Tenant', `${n.tenantName} (${n.tenantId})`],
+          [
+            'Waiting',
+            `${String(p.waiting ?? '?')} e-mail(s), the oldest for ${Number.isFinite(mins) ? mins : '?'} min`,
+          ],
+        ],
+        note: 'They are retried automatically. Raise the provider quota or switch the model to clear the wait. The owner sees “Replies are delayed” in the app and gets an e-mail after 4 hours. One alert per tenant and day.',
+        footer: 'Noctiv admin alert.',
+      });
+    }
+    case 'replies_delayed':
+      return render('Replies are delayed', {
+        heading: 'Some customer e-mails have not been answered yet.',
+        lines: [['Account', n.tenantName]],
+        note: 'They will be answered automatically as soon as possible; nothing was lost. If a customer is waiting on something urgent, you can reply yourself from your mailbox.',
+        buttons: [['Open dashboard', n.links.dashboard]],
+        footer: FOOTER,
+      });
     case 'job_dead':
       return render(`[admin] Job gave up: ${str(p.queue)} (${n.tenantName})`, {
         heading: 'A background job used up its retries.',
@@ -304,7 +329,9 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
           ['Account', n.tenantName],
           ...(total ? ([['Total', total]] as [string, string][]) : []),
         ],
-        note: 'The lead moved to “accepted”. Reply to the customer to arrange the next steps.',
+        note: p.autoInvoice
+          ? 'The lead moved to “accepted”. The invoice is being prepared automatically; you will see it in Documents (or get a note if something is missing).'
+          : 'The lead moved to “accepted”. Reply to the customer to arrange the next steps.',
         buttons: [['Open conversation', n.links.dashboard]],
         footer: FOOTER,
       });
@@ -364,6 +391,19 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
       const items = Array.isArray(p.unmapped)
         ? p.unmapped.map((u) => `“${untrusted(u, 80)}”`).join(', ')
         : '';
+      if (p.partial)
+        return render('Part of a quote request needs you', {
+          heading: p.quoteSent
+            ? 'The quote was sent for the items on your price list; one part of the request is not answered yet.'
+            : 'A quote is ready for the items on your price list; one part of the request is not answered.',
+          lines: [
+            ['Account', n.tenantName],
+            ...(items ? ([['Not answered', items]] as [string, string][]) : []),
+          ],
+          note: 'Reply to the customer about that part yourself, or add it to your price list or knowledge base.',
+          buttons: [['Open conversation', n.links.dashboard]],
+          footer: FOOTER,
+        });
       return render('A quote request needs you', {
         heading: 'A customer asked for prices on something not on your price list.',
         lines: [

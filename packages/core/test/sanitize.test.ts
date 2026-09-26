@@ -6,6 +6,7 @@ import {
   findLinks,
   sanitizeReply,
   stripCitationMarkers,
+  stripSignOff,
 } from '../src/index.ts';
 import { BOM, RLO, ZWSP } from './fixtures/chars.ts';
 
@@ -91,5 +92,22 @@ describe('citation markers', () => {
     expect(r.text).toBe('Ein Onepager kostet 3.900 €. Die Umsetzung dauert 3–4 Wochen.');
     expect(r.removed).toEqual([]);
     expect(stripCitationMarkers('Plain text [see note].')).toBe('Plain text [see note].');
+  });
+});
+
+describe('stripSignOff (QA #29)', () => {
+  it('drops a closing the model added, with a short name after it', () => {
+    expect(
+      stripSignOff('Hallo Jana,\n\ndas Angebot folgt.\n\nMit freundlichen Grüßen\nMax Muster'),
+    ).toBe('Hallo Jana,\n\ndas Angebot folgt.');
+    expect(stripSignOff('Hi Sam,\n\nThanks for asking.\n\nBest regards,')).toBe(
+      'Hi Sam,\n\nThanks for asking.',
+    );
+  });
+  it('leaves text without a closing, or with real content after it, alone', () => {
+    const plain = 'Hi Sam,\n\nThe candles ship on Monday.';
+    expect(stripSignOff(plain)).toBe(plain);
+    const long = `Hi,\n\nRegards to your team.\n${'x'.repeat(80)}`;
+    expect(stripSignOff(long)).toBe(long);
   });
 });

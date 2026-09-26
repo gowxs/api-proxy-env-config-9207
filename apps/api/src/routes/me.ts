@@ -45,9 +45,14 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
       tenants.map((t) =>
         withTenant(deps.sql, t.tenant_id, async (tx) => {
           const [s] = await tx<
-            { onboarding_completed_at: Date | null; mailboxes: number; kb_sources: number }[]
+            {
+              onboarding_completed_at: Date | null;
+              website_url: string | null;
+              mailboxes: number;
+              kb_sources: number;
+            }[]
           >`
-            select t.onboarding_completed_at,
+            select t.onboarding_completed_at, t.website_url,
                    (select count(*) from public.email_connections)::int as mailboxes,
                    (select count(*) from public.kb_sources)::int as kb_sources
             from public.tenants t`;

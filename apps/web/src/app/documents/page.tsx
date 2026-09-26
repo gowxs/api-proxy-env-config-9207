@@ -73,16 +73,29 @@ function DocumentList() {
           </div>
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button variant="secondary" disabled={a.busy} onClick={() => create('invoice')}>
           New invoice
         </Button>
-        <Button variant="secondary" disabled={a.busy} onClick={() => create('delivery_note')}>
-          New delivery note
-        </Button>
-        <Button variant="secondary" disabled={a.busy} onClick={() => create('cmr')}>
-          New CMR
-        </Button>
+        {/* Goods documents stay one tap away without crowding a services business (QA #26). */}
+        <span className="text-sm text-neutral-500">
+          For goods:{' '}
+          <button
+            className="text-indigo-700 disabled:opacity-50"
+            disabled={a.busy}
+            onClick={() => create('delivery_note')}
+          >
+            delivery note
+          </button>{' '}
+          ·{' '}
+          <button
+            className="text-indigo-700 disabled:opacity-50"
+            disabled={a.busy}
+            onClick={() => create('cmr')}
+          >
+            CMR
+          </button>
+        </span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         <Link className="text-indigo-700" href="/payments">
@@ -96,7 +109,9 @@ function DocumentList() {
       </div>
       <ErrorText>{a.error}</ErrorText>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4" role="tablist">
-        {TABS.map((x) => (
+        {TABS.filter(
+          (x) => x.id === 'all' || x.id === 'invoice' || data.some((d) => d.type === x.id),
+        ).map((x) => (
           <button
             key={x.id}
             role="tab"

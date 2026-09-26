@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { kbErrorText } from '@/lib/kb-errors';
 import { Badge, Button, ErrorText, Field, inputClass, timeAgo, useAction } from './ui';
@@ -38,9 +38,21 @@ function readAsBase64(file: File): Promise<string> {
 }
 
 /** Add a website, files or a note. */
-export function KnowledgeAdd({ tenantId, onAdded }: { tenantId: string; onAdded: () => void }) {
+export function KnowledgeAdd({
+  tenantId,
+  onAdded,
+  defaultUrl,
+}: {
+  tenantId: string;
+  onAdded: () => void;
+  /** The business website entered at sign-up (prefilled once). */
+  defaultUrl?: string | null;
+}) {
   const [tab, setTab] = useState<'website' | 'file' | 'note'>('website');
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(defaultUrl ?? '');
+  useEffect(() => {
+    if (defaultUrl) setUrl((u) => u || defaultUrl);
+  }, [defaultUrl]);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [done, setDone] = useState<string | null>(null);

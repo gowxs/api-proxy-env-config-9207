@@ -4,6 +4,7 @@ import {
   clarifyingQuestionText,
   computeTotals,
   decideQuoteSend,
+  unitFor,
   formatQty,
   formatQuoteNumber,
   formatRate,
@@ -254,6 +255,18 @@ describe('auto-send limit', () => {
         guardReasons: ['sender_cap_reached'],
       }).action,
     ).toBe('draft');
+  });
+
+  it('unmapped parts answered or passed to the owner (D4) do not hold the quote', () => {
+    expect(
+      decideQuoteSend({
+        mode: 'auto_send',
+        mapping: { ...ok, unmapped: [{ customerText: 'diffuser', reason: 'not_on_price_list' }] },
+        totalCents: 100,
+        limitCents: 50000,
+        unmappedHandled: true,
+      }),
+    ).toEqual({ action: 'auto_send', reasons: [] });
   });
 });
 
@@ -514,5 +527,17 @@ describe('translations (PDF and accept page)', () => {
       });
       expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     }
+  });
+});
+
+describe('units after a quantity (QA #25)', () => {
+  it('pluralises common units and leaves the rest as written', () => {
+    expect(unitFor('box', 2, 'en')).toBe('boxes');
+    expect(unitFor('box', 1, 'en')).toBe('box');
+    expect(unitFor('Box', 2.5, 'en')).toBe('Boxes');
+    expect(unitFor('Stunde', 4, 'de')).toBe('Stunden');
+    expect(unitFor('pcs', 3, 'en')).toBe('pcs');
+    expect(unitFor('m²', 3, 'en')).toBe('m²');
+    expect(unitFor('hour', 2, 'fr')).toBe('hours');
   });
 });

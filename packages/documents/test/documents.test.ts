@@ -135,6 +135,46 @@ describe('what is missing before issuing', () => {
       'Line 1: price is missing',
     ]);
   });
+  it('UK sellers can use sort code and account number instead of an IBAN (D2)', () => {
+    const uk: Seller = {
+      ...seller,
+      vatNo: 'GB123456789',
+      country: 'United Kingdom',
+      iban: null,
+      bic: null,
+      sortCode: '',
+      accountNumber: '',
+    };
+    expect(documentProblems('invoice', invoice(), uk, o)).toEqual([
+      'Your bank details are missing: sort code and account number, or IBAN (Documents → Setup)',
+    ]);
+    expect(
+      documentProblems(
+        'invoice',
+        invoice(),
+        { ...uk, sortCode: '20-00-00', accountNumber: '55779911' },
+        o,
+      ),
+    ).toEqual([]);
+    expect(
+      documentProblems(
+        'invoice',
+        invoice(),
+        { ...uk, sortCode: '2000', accountNumber: '55779911' },
+        o,
+      ),
+    ).toHaveLength(1);
+    // Not for sellers outside the UK, and BIC stays optional for everyone.
+    expect(
+      documentProblems(
+        'invoice',
+        invoice(),
+        { ...seller, iban: null, bic: null, sortCode: '200000', accountNumber: '55779911' },
+        o,
+      ),
+    ).toEqual(['Your IBAN is missing (Documents → Setup)']);
+    expect(documentProblems('invoice', invoice(), { ...seller, bic: null }, o)).toEqual([]);
+  });
   it('reverse charge needs the buyer’s VAT number (with any VAT mode)', () => {
     const d = invoice({
       reverseCharge: true,
@@ -344,6 +384,21 @@ describe('PDFs', () => {
       expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
       expect(pages(pdf)).toBe(1);
     }
+  });
+  it('an invoice with UK sort code and account number', async () => {
+    const data = invoice();
+    const pdf = await renderInvoicePdf({
+      ...ctx,
+      seller: { ...seller, iban: null, bic: null, sortCode: '200000', accountNumber: '55779911' },
+      language: 'en',
+      data,
+      currency: 'GBP',
+      vatMode: 'exclusive',
+      vatRatePercent: 20,
+      totals: invoiceTotals(data, { mode: 'exclusive', ratePercent: 20 }),
+      dueDate: '2026-10-10',
+    });
+    expect(pages(pdf)).toBe(1);
   });
   it('a delivery note with signature boxes', async () => {
     const pdf = await renderDeliveryNotePdf({

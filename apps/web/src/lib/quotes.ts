@@ -38,6 +38,8 @@ export interface QuoteLine {
   price_item_id: string | null;
   name: string;
   unit: string;
+  /** The unit as printed after the quantity ("2 boxes"). */
+  unit_label?: string;
   qty: number;
   unit_price_cents: number;
   line_total_cents: number;

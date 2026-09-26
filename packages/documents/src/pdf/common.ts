@@ -1,6 +1,6 @@
 import { PDF_INK as INK, PDF_MUTED as MUTED, formatDate } from '@noctiv/quotes';
 import type { Seller } from '../checks.ts';
-import { formatIban } from '../checks.ts';
+import { formatIban, formatSortCode } from '../checks.ts';
 
 export interface DocBrand {
   companyName: string;
@@ -85,6 +85,9 @@ export const sellerLines = (s: Seller, regNo: string, vatNo: string) => [
 ];
 
 export const ibanText = (s: Seller) => (s.iban ? formatIban(s.iban) : '');
+export const sortCodeText = (s: Seller) => (s.sortCode ? formatSortCode(s.sortCode) : '');
+/** Bank details to print: an IBAN, or a UK sort code and account number. */
+export const hasPaymentDetails = (s: Seller) => !!s.iban || (!!s.sortCode && !!s.accountNumber);
 
 export const dateText = (iso: string | Date | null, language: string | null) =>
   iso

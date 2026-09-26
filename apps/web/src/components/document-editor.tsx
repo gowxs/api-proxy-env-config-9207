@@ -199,17 +199,25 @@ function PartyFields({ ctx, base, withEmail }: { ctx: Ctx; base: string; withEma
 
 function SellerCard({ doc }: { doc: Doc }) {
   const s = doc.seller;
-  const rows: [string, string | null][] = [
+  const ukAccount = !!(s.sortCode || s.accountNumber);
+  // [label, value, optional]: optional rows show a dash instead of “missing”.
+  const rows: [string, string | null, boolean?][] = [
     ['Name', s.legalName],
     ['Address', s.legalAddress],
     ['Reg. no.', s.regNo],
     ['VAT no.', s.vatNo],
     ...(doc.type === 'invoice'
       ? ([
-          ['Bank', s.bankName],
-          ['IBAN', s.iban],
-          ['BIC', s.bic],
-        ] as [string, string | null][])
+          ['Bank', s.bankName, true],
+          ...(ukAccount
+            ? [
+                ['Sort code', s.sortCode ?? null],
+                ['Account no.', s.accountNumber ?? null],
+              ]
+            : []),
+          ...(ukAccount && !s.iban ? [] : [['IBAN', s.iban]]),
+          ['BIC', s.bic, true],
+        ] as [string, string | null, boolean?][])
       : []),
   ];
   return (
@@ -228,10 +236,12 @@ function SellerCard({ doc }: { doc: Doc }) {
       }
     >
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-sm">
-        {rows.map(([k, v]) => (
+        {rows.map(([k, v, optional]) => (
           <div key={k} className="contents">
             <dt className="text-neutral-500">{k}</dt>
-            <dd className={cx('min-w-0 break-words', !v && 'text-red-700')}>{v || 'missing'}</dd>
+            <dd className={cx('min-w-0 break-words', !v && !optional && 'text-red-700')}>
+              {v || (optional ? '—' : 'missing')}
+            </dd>
           </div>
         ))}
       </dl>
@@ -521,6 +531,12 @@ function InvoiceForm({ ctx, tenantId }: { ctx: Ctx; tenantId: string }) {
   const rc = Boolean(ctx.data.reverseCharge);
   const t = previewTotals(ctx.doc, lines, rc);
   const cur = ctx.doc.currency;
+  // Reverse charge is for a business buyer in another country (QA #26): offered
+  // once the buyer's VAT number shows a different country than yours.
+  const prefix = (v: unknown) =>
+    typeof v === 'string' ? (/^\s*([A-Za-z]{2})/.exec(v)?.[1]?.toUpperCase() ?? null) : null;
+  const buyerCountry = prefix((ctx.data.buyer as { vatNo?: string } | undefined)?.vatNo);
+  const crossBorder = !!buyerCountry && buyerCountry !== prefix(ctx.doc.seller.vatNo);
   return (
     <>
       <SellerCard doc={ctx.doc} />
@@ -574,23 +590,25 @@ function InvoiceForm({ ctx, tenantId }: { ctx: Ctx; tenantId: string }) {
             label="Payment reference"
             hint="Empty: the invoice number is used."
           />
-          <label className="flex items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1 size-4"
-              checked={rc}
-              disabled={ctx.locked}
-              onChange={(e) => ctx.set('reverseCharge', e.target.checked)}
-            />
-            <span>
-              Reverse charge (EU business buyer)
-              <span className="block text-xs text-neutral-500">
-                No VAT; the invoice carries the standard note. Needs both VAT numbers.
-                {ctx.doc.vat_mode === 'inclusive' &&
-                  ' Your prices include VAT, so each price is recalculated to net.'}
+          {(rc || crossBorder) && (
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1 size-4"
+                checked={rc}
+                disabled={ctx.locked}
+                onChange={(e) => ctx.set('reverseCharge', e.target.checked)}
+              />
+              <span>
+                Reverse charge (EU business buyer)
+                <span className="block text-xs text-neutral-500">
+                  No VAT; the invoice carries the standard note. Needs both VAT numbers.
+                  {ctx.doc.vat_mode === 'inclusive' &&
+                    ' Your prices include VAT, so each price is recalculated to net.'}
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          )}
           <Text ctx={ctx} path="notes" label="Notes (optional)" multiline />
         </div>
       </Card>

@@ -85,6 +85,7 @@ describe('account and onboarding', () => {
         id: created.json.id,
         name: 'Lumen Studio',
         onboarding_completed_at: null,
+        website_url: 'https://lumen.example',
         mailboxes: 0,
         kb_sources: 0,
       },

@@ -110,6 +110,8 @@ interface SendPlan {
   };
   tenant: { timezone: string; followupAfterDays: number; followupMax: number };
   followupsSent: number;
+  /** The owner switched follow-ups off for this conversation (Compose, D6). */
+  followupsOff: boolean;
   /** A 'quote' draft: the quote to attach as a PDF. */
   quote: { doc: QuoteDocument; logoAllowed: boolean } | null;
   /** A 'document' draft: the invoice, delivery note or CMR to attach. */
@@ -336,12 +338,13 @@ async function planSend(
       timezone: string;
       followup_after_days: number;
       followup_max: number;
+      followup_stop_reason: string | null;
       max_replies_per_hour: number;
       max_ai_replies_per_sender_24h: number;
     }[]
   >`
     select d.id, d.status, d.kind, d.to_address, d.subject, d.body, d.decided_by, d.thread_id, d.source_message_id,
-           th.connection_id, th.lead_id, th.followups_sent, th.status as thread_status, th.last_outbound_at,
+           th.connection_id, th.lead_id, th.followups_sent, th.followup_stop_reason, th.status as thread_status, th.last_outbound_at,
            t.status as tenant_status, app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
            t.email_template, t.brand_company_name, t.brand_logo_url, t.brand_color, t.brand_website,
            t.brand_phone, t.brand_address, t.brand_social_links,
@@ -581,6 +584,7 @@ async function planSend(
         followupMax: d.followup_max,
       },
       followupsSent: d.followups_sent,
+      followupsOff: d.followup_stop_reason === 'owner_off',
       quote,
       document,
       attachedDocuments,
@@ -690,14 +694,15 @@ async function finalizeSent(
   }
   const isFollowup = plan.draft.kind === 'followup';
   const sentCount = isFollowup ? plan.followupsSent + 1 : 0;
-  const more = sentCount < plan.tenant.followupMax;
+  const more = sentCount < plan.tenant.followupMax && !plan.followupsOff;
   const next = more
     ? nextFollowupAt(now, plan.tenant.followupAfterDays, plan.tenant.timezone)
     : null;
+  const stop = more ? null : plan.followupsOff ? 'owner_off' : 'max_reached';
   await tx`
     update public.threads
     set status = 'awaiting_customer', last_outbound_at = ${now}, followups_sent = ${sentCount},
-        next_followup_at = ${next}, followup_stop_reason = ${more ? null : 'max_reached'}
+        next_followup_at = ${next}, followup_stop_reason = ${stop}
     where id = ${plan.threadId}`;
   if (plan.leadId) {
     await setLeadStage(

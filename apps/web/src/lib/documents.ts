@@ -94,6 +94,8 @@ export interface Seller {
   bankName: string | null;
   iban: string | null;
   bic: string | null;
+  sortCode?: string | null;
+  accountNumber?: string | null;
   country: string | null;
 }
 

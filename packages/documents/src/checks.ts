@@ -9,6 +9,9 @@ export interface Seller {
   bankName: string | null;
   iban: string | null;
   bic: string | null;
+  /** UK domestic payments (founder decision D2): six and eight digits. */
+  sortCode?: string | null;
+  accountNumber?: string | null;
   country: string | null;
 }
 
@@ -31,6 +34,30 @@ export function ibanValid(raw: string): boolean {
 /** EU VAT number shape: two-letter country prefix and 2–13 characters (e.g. LV40003123456). */
 export const vatNoValid = (raw: string) => /^[A-Z]{2}[0-9A-Z+*]{2,13}$/.test(compact(raw));
 
+export const sortCodeValid = (raw: string) => /^\d{6}$/.test(raw.replace(/[\s-]/g, ''));
+export const accountNumberValid = (raw: string) => /^\d{8}$/.test(raw.replace(/\s/g, ''));
+export const formatSortCode = (raw: string) =>
+  raw.replace(/[\s-]/g, '').replace(/^(\d{2})(\d{2})(\d{2})$/, '$1-$2-$3');
+
+/** A UK seller: by country, VAT number or IBAN prefix. */
+export function isUkSeller(s: Pick<Seller, 'country' | 'vatNo' | 'iban'>): boolean {
+  if (
+    s.country &&
+    /^\s*(united kingdom|uk|u\.k\.|gb|great britain|england|scotland|wales|northern ireland)\s*$/i.test(
+      s.country,
+    )
+  )
+    return true;
+  return [s.vatNo, s.iban].some((v) => !!v && /^\s*gb/i.test(v));
+}
+
+/** UK sort code and account number, both present and well-formed. */
+export const hasUkAccount = (s: Seller) =>
+  !!s.sortCode &&
+  !!s.accountNumber &&
+  sortCodeValid(s.sortCode) &&
+  accountNumberValid(s.accountNumber);
+
 export const formatIban = (raw: string) =>
   compact(raw)
     .replace(/(.{4})/g, '$1 ')
@@ -44,8 +71,14 @@ function sellerProblems(s: Seller, o: { needVat: boolean; needBank: boolean }): 
   if (o.needVat && blank(s.vatNo)) p.push(`Your VAT number is missing${where}`);
   if (!blank(s.vatNo) && !vatNoValid(s.vatNo!)) p.push(`Your VAT number looks wrong${where}`);
   if (o.needBank) {
-    if (blank(s.iban)) p.push(`Your IBAN is missing${where}`);
-    else if (!ibanValid(s.iban!)) p.push(`Your IBAN is not valid${where}`);
+    const uk = isUkSeller(s);
+    if (!blank(s.iban) && !ibanValid(s.iban!)) p.push(`Your IBAN is not valid${where}`);
+    else if (blank(s.iban) && !(uk && hasUkAccount(s)))
+      p.push(
+        uk
+          ? `Your bank details are missing: sort code and account number, or IBAN${where}`
+          : `Your IBAN is missing${where}`,
+      );
   }
   return p;
 }

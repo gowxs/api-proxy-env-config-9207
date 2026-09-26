@@ -42,6 +42,7 @@ const ISO_DATE_RE = wordRegex(String.raw`\d{4}-\d{1,2}-\d{1,2}`);
 const NUMERIC_DATE_RE = wordRegex(
   String.raw`\d{1,2}[./]\d{1,2}[./](?:\d{4}|\d{2})|\d{1,2}\.\d{1,2}\.(?!\d)`,
 );
+const CURRENCY_BEFORE_RE = /[$€£]\s?$|\b(?:eur|gbp|usd|chf)\s?$/iu;
 const MONTH_INDEX = MONTHS.map((names) => new RegExp(`^(?:${alt(names)})$`, 'iu'));
 const MONTH_ANY = alt(MONTHS.flat());
 const MONTH_DATE_RE = wordRegex(
@@ -104,12 +105,13 @@ export function detectClaims(input: string): Claim[] {
     re: RegExp,
     kind: ClaimKind,
     extra: (raw: string, m: RegExpMatchArray) => Partial<Claim>,
+    skip?: (m: RegExpMatchArray) => boolean,
   ) => {
     re.lastIndex = 0;
     for (const m of text.matchAll(re)) {
       const start = m.index;
       const end = start + m[0].length;
-      if (overlaps(start, end)) continue;
+      if (overlaps(start, end) || skip?.(m)) continue;
       taken.push([start, end]);
       claims.push({
         kind,
@@ -125,7 +127,15 @@ export function detectClaims(input: string): Claim[] {
   const withNumbers = (raw: string) => ({ numbers: findNumbers(raw).map((n) => n.readings) });
 
   addSpanClaims(ISO_DATE_RE, 'date', (raw) => ({ dateKeys: numericDateKeys(raw) }));
-  addSpanClaims(NUMERIC_DATE_RE, 'date', (raw) => ({ dateKeys: numericDateKeys(raw) }));
+  // "12.11." is a date; "£39.95." at the end of a sentence is an amount.
+  addSpanClaims(
+    NUMERIC_DATE_RE,
+    'date',
+    (raw) => ({ dateKeys: numericDateKeys(raw) }),
+    (m) =>
+      /^\d{1,2}\.\d{1,2}\.$/.test(m[0]) &&
+      (!numericDateKeys(m[0]).length || CURRENCY_BEFORE_RE.test(text.slice(0, m.index))),
+  );
   addSpanClaims(MONEY_RE, 'money', withNumbers);
   addSpanClaims(PERCENT_RE, 'percentage', withNumbers);
   addSpanClaims(DURATION_RE, 'duration', withNumbers);
@@ -229,6 +239,71 @@ export function collectEvidence(texts: string[]): Evidence {
   };
 }
 
+/** Small quantities written as words, in the languages replies are written in. */
+const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
+  (
+    [
+      ['two|a pair of|zwei|divi|twee|deux|dos', 2],
+      ['three|drei|trīs|drie|trois|tres', 3],
+      ['four|vier|četri|quatre|cuatro', 4],
+      ['five|fünf|pieci|vijf|cinq|cinco', 5],
+      ['six|sechs|seši|zes|seis', 6],
+      ['seven|sieben|septiņi|zeven|siete', 7],
+      ['eight|acht|astoņi|huit|ocho', 8],
+      ['nine|neun|deviņi|negen|neuf|nueve', 9],
+      ['ten|zehn|desmit|tien|dix|diez', 10],
+      ['eleven|elf|vienpadsmit|onze', 11],
+      ['twelve|zwölf|divpadsmit|twaalf|douze|doce', 12],
+    ] as [string, number][]
+  ).flatMap(([words, n]) => words.split('|').map((w) => [w, n])),
+);
+const WORD_RE = new RegExp(
+  `(?<![\\p{L}])(${Object.keys(NUMBER_WORDS)
+    .sort((a, b) => b.length - a.length)
+    .join('|')})(?![\\p{L}])`,
+  'giu',
+);
+
+/** Quantities the customer wrote: whole numbers up to 1,000, digits or words. */
+export function quantitiesIn(text: string): number[] {
+  const folded = foldForMatching(text);
+  const q = new Set<number>();
+  for (const n of findNumbers(folded))
+    for (const r of n.readings) {
+      const v = Number(r);
+      if (Number.isInteger(v) && v >= 1 && v <= 1000) q.add(v);
+    }
+  for (const m of text.toLowerCase().matchAll(WORD_RE)) q.add(NUMBER_WORDS[m[1]!]!);
+  return [...q];
+}
+
+const MAX_PRICES = 60;
+const MAX_TERMS_FOR_TRIPLES = 40;
+
+/**
+ * Founder decision D1 (2026-09-26): an amount the reply works out is backed
+ * if code can reproduce it from knowledge-base amounts: a price, quantity ×
+ * price (quantities from the customer's e-mail), or a sum of two or three
+ * different ones. A price is never doubled unless the customer wrote a
+ * quantity. Anything else stays unsupported.
+ */
+export function derivedAmounts(prices: Iterable<string>, quantities: number[]): Set<string> {
+  const cents = [...new Set([...prices].map((p) => Math.round(Number(p) * 100)))]
+    .filter((c) => Number.isFinite(c) && c > 0 && c <= 100_000_000)
+    .slice(0, MAX_PRICES);
+  const terms = new Set<number>(cents);
+  for (const c of cents) for (const q of quantities) if (q > 1) terms.add(c * q);
+  const list = [...terms];
+  const out = new Set<number>(list);
+  for (let i = 0; i < list.length; i++)
+    for (let j = i + 1; j < list.length; j++) {
+      out.add(list[i]! + list[j]!);
+      if (list.length <= MAX_TERMS_FOR_TRIPLES)
+        for (let k = j + 1; k < list.length; k++) out.add(list[i]! + list[j]! + list[k]!);
+    }
+  return new Set([...out].map((c) => String(Math.round(c) / 100)));
+}
+
 export interface ClaimVerification {
   claims: Claim[];
   unsupported: Claim[];
@@ -251,10 +326,13 @@ export function verifyClaims(
   const backedBy = (numbers: string[][], ...pools: Set<string>[]) =>
     numbers.every((readings) => readings.some((r) => pools.some((p) => p.has(r))));
 
+  let derived: Set<string> | undefined;
   const unsupported = claims.filter((c) => {
     switch (c.kind) {
       case 'money':
-        return !backedBy(c.numbers, evidence.money);
+        if (backedBy(c.numbers, evidence.money)) return false;
+        derived ??= derivedAmounts(evidence.money, quantitiesIn(inboundText));
+        return !backedBy(c.numbers, evidence.money, derived);
       case 'percentage':
         return !backedBy(c.numbers, evidence.percentages);
       case 'duration':

@@ -96,7 +96,8 @@ export function QuoteBlock({
                   <span className="tabular-nums">{money(l.line_total_cents, quote.currency)}</span>
                 </div>
                 <div className="text-xs text-neutral-500">
-                  {qtyText(l.qty)} {l.unit} × {money(l.unit_price_cents, quote.currency)}
+                  {qtyText(l.qty)} {l.unit_label ?? l.unit} ×{' '}
+                  {money(l.unit_price_cents, quote.currency)}
                   {l.customer_text && <> · asked: “{l.customer_text}”</>}
                 </div>
               </li>

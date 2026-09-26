@@ -81,3 +81,23 @@ export function sanitizeReply(reply: string, allow: Allowlist): SanitizedReply {
   out += visible.slice(last);
   return { text: removed.length ? tidy(out) : visible.trim(), removed };
 }
+
+const SIGN_OFF =
+  /^(best|kind|warm|many thanks and best)?\s*regards|^best wishes|^all the best|^sincerely|^yours (sincerely|faithfully|truly)|^cheers|^mit freundlichen grüßen|^freundliche grüße|^viele grüße|^beste grüße|^liebe grüße|^herzliche grüße|^ar cieņu|^ar laba vēlējumiem|^met vriendelijke groet(en)?|^vriendelijke groet(en)?|^groeten|^cordialement|^bien cordialement|^bien à vous|^salutations|^(un )?saludo(s)?( cordiales)?|^atentamente|^cordiales saludos/iu;
+
+/**
+ * Drops a closing the model added itself ("Best regards,\nAnna") — the
+ * signature is added automatically (QA #29). Only a closing among the last
+ * four lines, followed by at most two short lines (a name, a company).
+ */
+export function stripSignOff(text: string): string {
+  const lines = text.replace(/\s+$/, '').split('\n');
+  for (let i = lines.length - 1; i >= Math.max(1, lines.length - 4); i--) {
+    const line = lines[i]!.trim();
+    if (!SIGN_OFF.test(line) || line.length > 60) continue;
+    const after = lines.slice(i + 1).filter((l) => l.trim());
+    if (after.length > 2 || after.some((l) => l.trim().length > 60)) return text;
+    return lines.slice(0, i).join('\n').replace(/\s+$/, '');
+  }
+  return text;
+}

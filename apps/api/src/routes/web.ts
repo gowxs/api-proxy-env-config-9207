@@ -198,7 +198,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                quotes_enabled, quotes_currency, quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate,
                quotes_validity_days, quotes_auto_send_limit_cents,
                documents_enabled, seller_legal_name, seller_legal_address, seller_reg_no, seller_vat_no,
-               seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days,
+               seller_bank_name, seller_iban, seller_bic, seller_sort_code, seller_account_number,
+               seller_country, invoice_due_days,
                doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify,
                auto_invoice_on_accept, auto_delivery_note_after_payment
         from public.tenants`;
@@ -320,9 +321,14 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           escalations: number;
           unpaid: number;
           payments: number;
+          delayed: boolean;
         }[]
       >`
         select t.name, t.mode, t.quotes_enabled, t.documents_enabled,
+               -- D5: customer e-mails waiting on the AI quota (no technical detail for the owner).
+               exists (select 1 from public.jobs
+                       where queue = 'mail.process' and status in ('queued', 'running')
+                         and last_error like 'model call failed: quota_exhausted%') as delayed,
                (select count(*) from public.drafts where status = 'pending_approval')::int as drafts,
                (select count(*) from public.escalations where resolved_at is null)::int as escalations,
                (select count(*) from public.documents where payable and status in ('issued', 'sent'))::int as unpaid,
@@ -332,6 +338,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         name: n!.name,
         mode: n!.mode,
         modules: { quotes: n!.quotes_enabled, documents: n!.documents_enabled },
+        repliesDelayed: n!.delayed,
         counts: {
           drafts: n!.drafts,
           escalations: n!.escalations,

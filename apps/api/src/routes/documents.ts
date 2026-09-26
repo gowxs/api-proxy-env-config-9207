@@ -70,6 +70,18 @@ export const documentSettingsShape = {
       .toUpperCase()
       .regex(/^[A-Z0-9]{8}([A-Z0-9]{3})?$/, 'BIC: 8 or 11 letters and digits'),
   ),
+  sellerSortCode: blank(
+    z
+      .string()
+      .transform((s) => s.replace(/[\s-]/g, ''))
+      .pipe(z.string().regex(/^\d{6}$/, 'Sort code: 6 digits, e.g. 20-00-00')),
+  ),
+  sellerAccountNumber: blank(
+    z
+      .string()
+      .transform((s) => s.replace(/\s/g, ''))
+      .pipe(z.string().regex(/^\d{8}$/, 'Account number: 8 digits')),
+  ),
   sellerCountry: blank(z.string().trim().max(60)),
   invoiceDueDays: z.number().int().min(0).max(365),
   docPrefixInvoice: prefix,
@@ -93,6 +105,8 @@ export function documentSettingsColumns(b: DocumentSettings): Record<string, unk
     ['sellerBankName', 'seller_bank_name'],
     ['sellerIban', 'seller_iban'],
     ['sellerBic', 'seller_bic'],
+    ['sellerSortCode', 'seller_sort_code'],
+    ['sellerAccountNumber', 'seller_account_number'],
     ['sellerCountry', 'seller_country'],
     ['invoiceDueDays', 'invoice_due_days'],
     ['docPrefixInvoice', 'doc_prefix_invoice'],

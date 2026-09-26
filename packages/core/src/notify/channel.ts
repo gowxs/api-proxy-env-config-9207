@@ -20,6 +20,9 @@ export type NotificationKind =
   | 'payment_proposed'
   /** Documents automation: an invoice / delivery note was made but needs the owner's details. */
   | 'document_needs_you'
+  /** Customer e-mails waiting on the AI provider's daily quota (D5): admin after 30 min, owner after 4 h. */
+  | 'quota_wait'
+  | 'replies_delayed'
   /** One-off check that the system mailer reaches the owner (queued by an operator). */
   | 'test';
 

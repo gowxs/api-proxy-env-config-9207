@@ -7,6 +7,7 @@ import {
   generateJson,
   newNonce,
   resolveReplyRecipient,
+  stripSignOff,
   untrustedEmailRule,
   type Classification,
   type DataOrigin,
@@ -35,7 +36,7 @@ import type { TransactionSql } from 'postgres';
 import { QUEUES } from '../queues.ts';
 import { setLeadStage } from './leads.ts';
 import type { Loaded, PipelineDeps, ProcessOutcome } from './process.ts';
-import { notifyOwner } from './process.ts';
+import { generateGrounded, notifyOwner } from './process.ts';
 
 export interface QuoteStepInput {
   classification: Classification;
@@ -57,6 +58,12 @@ export type QuoteStepResult =
  * either draft a quote (totals in code, fixed cover text) or ask one
  * clarifying question and tell the owner. Nothing on the price list or
  * nothing recognisable → the normal reply path handles the message.
+ *
+ * Some items matched, some not (founder decision D4): the quote covers the
+ * matched items; the rest is answered in the same e-mail by a normal
+ * grounded reply when the knowledge base answers it, otherwise the owner
+ * gets a one-line note. The clarifying question is only for requests where
+ * nothing matched.
  */
 export async function draftQuote(
   deps: PipelineDeps,
@@ -104,6 +111,36 @@ export async function draftQuote(
     ? i.classification.language
     : null;
 
+  // D4: the parts not on the price list get a grounded answer, if there is one.
+  let rest: Rest | null = null;
+  let step = { ...i, usage, llmCalls };
+  if (mapping.lines.length && mapping.unmapped.length) {
+    const g = await generateGrounded(deps, tenantId, l, {
+      body: i.body,
+      origin: i.origin,
+      classification: i.classification,
+      budgetState: i.budgetState,
+      focus: mapping.unmapped.map((u) => u.customerText),
+    });
+    step = {
+      ...step,
+      usage: addUsage(step.usage, g.usage),
+      llmCalls: step.llmCalls + g.llmCalls,
+      embedTokens: step.embedTokens + g.embedTokens,
+    };
+    const d = g.guarded.decision;
+    rest =
+      g.guarded.replyText && d.action !== 'escalate' && !g.guarded.unsupportedClaims.length
+        ? {
+            text: stripSignOff(withoutGreeting(g.guarded.replyText)),
+            chunkIds: g.guarded.citedChunkIds,
+            // Anything but the tenant mode holding it: a person checks the whole e-mail.
+            needsCheck:
+              d.action !== 'auto_send' && d.reasons.some((r) => r !== 'tenant_draft_only'),
+          }
+        : { text: null, chunkIds: [], needsCheck: false };
+  }
+
   return withTenant(deps.sql, tenantId, async (tx) => {
     const [caps] = await tx<{ sender: number; hour: number }[]>`
       select count(*) filter (where to_address = ${recipient.to} and created_at > now() - interval '24 hours')::int as sender,
@@ -118,11 +155,39 @@ export async function draftQuote(
     if (!language) guardReasons.push('unsupported_language');
     if (l.backlog) guardReasons.push('arrived_while_paused');
 
-    const common = { tx, tenantId, l, leadId, envelope, mapping, i, usage, llmCalls };
-    if (mapping.unmapped.length || !mapping.lines.length)
+    const common = {
+      tx,
+      tenantId,
+      l,
+      leadId,
+      envelope,
+      mapping,
+      i: step,
+      usage: step.usage,
+      llmCalls: step.llmCalls,
+    };
+    if (!mapping.lines.length)
       return { outcome: await clarify({ ...common, language, guardReasons }) };
-    return { outcome: await quote({ ...common, language, guardReasons, deps: deps.quotes! }) };
+    return {
+      outcome: await quote({ ...common, language, guardReasons, rest, deps: deps.quotes! }),
+    };
   });
+}
+
+/** D4: the answer for the parts a quote does not cover (text null: nothing to say). */
+interface Rest {
+  text: string | null;
+  chunkIds: string[];
+  needsCheck: boolean;
+}
+
+/** The quote cover already greets the customer; drop the reply's own greeting line. */
+const GREETING =
+  /^(hi|hello|hey|dear|good (morning|afternoon|evening)|hallo|guten tag|liebe[rs]?|sehr geehrte[rs]?|labdien|sveiki|labrīt|beste|geachte|goedendag|bonjour|bonsoir|cher|chère|hola|estimad[oa]|buenos días|buenas tardes)\b[^\n]{0,60}$/iu;
+export function withoutGreeting(text: string): string {
+  const lines = text.trim().split('\n');
+  if (lines.length > 1 && GREETING.test(lines[0]!.trim())) lines.shift();
+  return lines.join('\n').trim();
 }
 
 interface StepContext {
@@ -144,13 +209,15 @@ async function insertDraft(
   kind: 'reply' | 'quote',
   body: string,
   autoSend: boolean,
+  chunkIds: string[] = [],
 ): Promise<string> {
   const m = c.l.message;
   const [draft] = await c.tx<{ id: string }[]>`
     insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body,
-                               status, decided_by, decided_at)
+                               source_chunk_ids, status, decided_by, decided_at)
     values (${c.tenantId}, ${m.threadId}, ${m.id}, ${kind}, ${c.envelope.to}, ${c.envelope.subject}, ${body},
-            ${autoSend ? 'approved' : 'pending_approval'}, ${autoSend ? 'auto' : null}, ${autoSend ? new Date() : null})
+            ${chunkIds}::uuid[], ${autoSend ? 'approved' : 'pending_approval'}, ${autoSend ? 'auto' : null},
+            ${autoSend ? new Date() : null})
     returning id`;
   if (autoSend) {
     await enqueue(c.tx, {
@@ -189,7 +256,7 @@ async function finish(c: StepContext, action: 'auto_send' | 'draft', reasons: st
   });
 }
 
-/** Something could not be matched: one clarifying question (fixed text), and the owner is told. */
+/** Nothing could be matched: one clarifying question (fixed text), and the owner is told. */
 async function clarify(c: StepContext): Promise<ProcessOutcome> {
   const text = clarifyingQuestionText({
     language: c.language,
@@ -226,9 +293,13 @@ async function clarify(c: StepContext): Promise<ProcessOutcome> {
   return { status: autoSend ? 'auto_send' : 'drafted', reasons: ['quote_unmapped', ...reasons] };
 }
 
-/** Every line mapped: a quote with totals from the price list, and the fixed cover reply. */
+/**
+ * A quote with totals from the price list and the fixed cover reply, for the
+ * matched lines. Unmatched parts (D4): the grounded answer is added below
+ * the cover, or the owner gets a one-line note.
+ */
 async function quote(
-  c: StepContext & { deps: NonNullable<PipelineDeps['quotes']> },
+  c: StepContext & { deps: NonNullable<PipelineDeps['quotes']>; rest: Rest | null },
 ): Promise<ProcessOutcome> {
   const { tx, tenantId, l } = c;
   const number = await allocateQuoteNumber(tx, tenantId);
@@ -263,16 +334,20 @@ async function quote(
     mapping: c.mapping,
     totalCents: totals.totalCents,
     limitCents: t!.limit_cents,
-    guardReasons: c.guardReasons,
+    guardReasons: [...c.guardReasons, ...(c.rest?.needsCheck ? ['partial_answer_check'] : [])],
+    unmappedHandled: c.rest !== null,
   });
   const doc = (await loadQuoteDocument(tx, q!.id))!;
   const token = signQuoteToken(
     { tenantId, quoteId: q!.id, validUntil: doc.validUntil },
     c.deps.secret,
   );
-  const cover = quoteCoverFor(doc, quoteAcceptUrl(c.deps.publicApiUrl, token));
+  const cover = [
+    quoteCoverFor(doc, quoteAcceptUrl(c.deps.publicApiUrl, token)),
+    ...(c.rest?.text ? [c.rest.text] : []),
+  ].join('\n\n');
   const autoSend = decision.action === 'auto_send';
-  const draftId = await insertDraft(c, 'quote', cover, autoSend);
+  const draftId = await insertDraft(c, 'quote', cover, autoSend, c.rest?.chunkIds ?? []);
   await tx`update public.quotes set draft_id = ${draftId}, hold_reasons = ${decision.reasons}
            where id = ${q!.id}`;
   await finish(c, decision.action, decision.reasons);
@@ -294,6 +369,26 @@ async function quote(
       unverifiedSuggestion: false,
       ref: { draftId, messageId: l.message.id, quoteId: q!.id },
     });
+  }
+  if (c.rest && !c.rest.text) {
+    // D4: the knowledge base does not answer the rest — one line for the owner.
+    const full = l.tenant.notifyFullText;
+    await tx`
+      insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
+      values (${tenantId}, 'email_owner', 'quote_needs_you', ${`quote_needs_you:${l.message.id}`},
+              ${tx.json({
+                threadId: l.message.threadId,
+                draftId,
+                messageId: l.message.id,
+                quoteId: q!.id,
+                partial: true,
+                quoteSent: autoSend,
+                unmappedCount: c.mapping.unmapped.length,
+                ...(full
+                  ? { unmapped: c.mapping.unmapped.map((u) => u.customerText).slice(0, 5) }
+                  : {}),
+              })})
+      on conflict (tenant_id, dedupe_key) do nothing`;
   }
   return { status: autoSend ? 'auto_send' : 'drafted', reasons: decision.reasons };
 }

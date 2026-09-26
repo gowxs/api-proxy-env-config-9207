@@ -71,6 +71,7 @@ describe('new e-mail', () => {
     expect(r.json.from.address).toMatch(/@/);
     expect(r.json.documents.map((d: { id: string }) => d.id)).toContain(id);
     expect(r.json.documents.every((d: { status: string }) => d.status === 'issued')).toBe(true);
+    expect(r.json.followup).toEqual({ afterDays: expect.any(Number) });
   });
 
   it('starts a new conversation and lead, queues the send, links the documents', async () => {
@@ -120,6 +121,23 @@ describe('new e-mail', () => {
     const [th2] = await owner<{ lead_id: string }[]>`
       select lead_id from public.threads where id = ${plain.json.threadId}`;
     expect(th2!.lead_id).toBe(th!.lead_id);
+  });
+
+  it('“Follow up if no reply” is on by default and can be switched off (D6)', async () => {
+    const to = `nf-${randomUUID()}@example.test`;
+    const on = await call('POST', A, '/compose', { to, subject: 'A', body: 'Hi' });
+    const off = await call('POST', A, '/compose', {
+      to,
+      subject: 'B',
+      body: 'Hi',
+      followUp: false,
+    });
+    const rows = await owner<{ id: string; followup_stop_reason: string | null }[]>`
+      select id, followup_stop_reason from public.threads
+      where id in (${on.json.threadId}, ${off.json.threadId})`;
+    const reason = (id: string) => rows.find((r) => r.id === id)!.followup_stop_reason;
+    expect(reason(on.json.threadId)).toBeNull();
+    expect(reason(off.json.threadId)).toBe('owner_off');
   });
 
   it('refuses drafts, other tenants’ documents, bad addresses and the own mailbox', async () => {

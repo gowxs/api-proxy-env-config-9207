@@ -116,7 +116,15 @@ function BusinessStep({ onDone }: { onDone: () => Promise<void> }) {
   );
 }
 
-function KnowledgeStep({ tenantId, onNext }: { tenantId: string; onNext: () => void }) {
+function KnowledgeStep({
+  tenantId,
+  website,
+  onNext,
+}: {
+  tenantId: string;
+  website: string | null;
+  onNext: () => void;
+}) {
   const { data, reload } = useLoad(
     () => api<KbSource[]>(`/v1/tenants/${tenantId}/kb/sources`),
     [tenantId],
@@ -131,7 +139,12 @@ function KnowledgeStep({ tenantId, onNext }: { tenantId: string; onNext: () => v
         The assistant only states facts it finds here — prices, delivery times, policies. Anything
         else goes to you.
       </p>
-      <KnowledgeAdd tenantId={tenantId} onAdded={() => void reload()} />
+      <KnowledgeAdd
+        tenantId={tenantId}
+        // Prefilled only while nothing is added yet, so it is not suggested twice.
+        defaultUrl={data && data.length === 0 ? website : null}
+        onAdded={() => void reload()}
+      />
       <Card title="Added">
         <SourceList
           tenantId={tenantId}
@@ -192,6 +205,7 @@ function Wizard() {
   const { tenant, refresh } = useSession();
   const initial = !tenant ? 0 : tenant.mailboxes === 0 ? 1 : 2;
   const [step, setStep] = useState(initial);
+  const [tested, setTested] = useState(false);
 
   useEffect(() => {
     if (tenant?.onboarding_completed_at) router.replace('/');
@@ -234,21 +248,26 @@ function Wizard() {
           </p>
           <MailboxForm
             tenantId={tenant.id}
+            onTested={setTested}
             onSaved={() => {
               void refresh();
               setStep(2);
             }}
           />
-          <Button variant="ghost" className="w-full" onClick={() => setStep(2)}>
-            {tenant.mailboxes > 0
-              ? 'Continue with the connected mailbox'
-              : 'Skip for now — connect it later in Settings'}
-          </Button>
+          {/* After a passing test the only next step is "Save mailbox". */}
+          {!tested && (
+            <Button variant="ghost" className="w-full" onClick={() => setStep(2)}>
+              {tenant.mailboxes > 0
+                ? 'Continue with the connected mailbox'
+                : 'Skip for now — connect it later in Settings'}
+            </Button>
+          )}
         </div>
       )}
       {step === 2 && tenant && (
         <KnowledgeStep
           tenantId={tenant.id}
+          website={tenant.website_url ?? null}
           onNext={() => {
             void refresh();
             setStep(3);

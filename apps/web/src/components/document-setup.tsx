@@ -18,6 +18,8 @@ export interface DocSettings {
   seller_bank_name: string | null;
   seller_iban: string | null;
   seller_bic: string | null;
+  seller_sort_code: string | null;
+  seller_account_number: string | null;
   seller_country: string | null;
   invoice_due_days: number;
   doc_prefix_invoice: string;
@@ -45,9 +47,20 @@ const FIELDS: [keyof DocSettings, string, string, string?][] = [
     'With the country prefix, e.g. GB123456789 or DE123456789',
   ],
   ['seller_bank_name', 'sellerBankName', 'Bank'],
+  ['seller_sort_code', 'sellerSortCode', 'Sort code', '6 digits, e.g. 20-00-00'],
+  ['seller_account_number', 'sellerAccountNumber', 'Account number', '8 digits'],
   ['seller_iban', 'sellerIban', 'IBAN'],
-  ['seller_bic', 'sellerBic', 'BIC / SWIFT'],
+  ['seller_bic', 'sellerBic', 'BIC / SWIFT', 'Optional'],
 ];
+
+/** UK sellers (by country, VAT number or IBAN) are paid by sort code and account number. */
+const UK_COUNTRY =
+  /^\s*(united kingdom|uk|u\.k\.|gb|great britain|england|scotland|wales|northern ireland)\s*$/i;
+const isUk = (f: Record<string, string>) =>
+  UK_COUNTRY.test(f.sellerCountry ?? '') ||
+  /^\s*gb/i.test(f.sellerVatNo ?? '') ||
+  /^\s*gb/i.test(f.sellerIban ?? '');
+const UK_ONLY = new Set(['sellerSortCode', 'sellerAccountNumber']);
 
 export function SellerCard({
   s,
@@ -98,7 +111,7 @@ export function SellerCard({
         <p className="text-sm text-neutral-600">
           Printed on every invoice, delivery note and CMR as the seller, supplier or sender.
         </p>
-        {FIELDS.map(([, key, label, hint]) =>
+        {FIELDS.filter(([, key]) => isUk(f) || !UK_ONLY.has(key)).map(([, key, label, hint]) =>
           key === 'sellerLegalAddress' ? (
             <Field key={key} label={label} hint={hint}>
               <textarea
@@ -108,7 +121,15 @@ export function SellerCard({
               />
             </Field>
           ) : (
-            <Field key={key} label={label} hint={hint}>
+            <Field
+              key={key}
+              label={label}
+              hint={
+                key === 'sellerIban' && isUk(f)
+                  ? 'Not needed if you give sort code and account number'
+                  : hint
+              }
+            >
               <input
                 className={inputClass}
                 value={f[key]}
