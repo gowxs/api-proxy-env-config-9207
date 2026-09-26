@@ -7,7 +7,7 @@ import {
   type TenantMode,
 } from '@noctiv/core';
 import { enqueue, withTenant } from '@noctiv/db';
-import { documentJson, listDocuments } from '@noctiv/documents';
+import { documentJson, listDocuments, prefixLocks } from '@noctiv/documents';
 import { loadAllowlist } from '@noctiv/kb';
 import {
   BlockedUrlError,
@@ -22,7 +22,7 @@ import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
 import { HttpError } from './http-error.ts';
-import { documentSettingsColumns, documentSettingsShape } from './documents.ts';
+import { checkPrefixChanges, documentSettingsColumns, documentSettingsShape } from './documents.ts';
 import { quoteSettingsColumns, quoteSettingsShape, selectQuotes } from './quotes.ts';
 
 /** Queue names shared with the worker (apps/worker/src/queues.ts). */
@@ -183,9 +183,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                quotes_enabled, quotes_currency, quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate,
                quotes_validity_days, quotes_auto_send_limit_cents,
                documents_enabled, seller_legal_name, seller_legal_address, seller_reg_no, seller_vat_no,
-               seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days
+               seller_bank_name, seller_iban, seller_bic, seller_country, invoice_due_days,
+               doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr
         from public.tenants`;
-      return t;
+      return { ...t, doc_prefix_locks: await prefixLocks(tx) };
     }),
   );
 
@@ -221,6 +222,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         quoteSettingsColumns(b),
         documentSettingsColumns(b),
       );
+      await checkPrefixChanges(tx, cols);
       if (Object.keys(cols).length) {
         await tx`update public.tenants set ${tx(cols)} where id = ${tenantId}`;
         await audit(tx, tenantId, req.user!.userId, 'settings.updated', 'tenant', tenantId, {

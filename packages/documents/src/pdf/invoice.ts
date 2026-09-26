@@ -10,10 +10,96 @@ import {
   quoteLocale,
   type VatMode,
 } from '@noctiv/quotes';
-import { docLabels } from '../labels.ts';
+import type { Seller } from '../checks.ts';
+import { docLabels, type DocLabels } from '../labels.ts';
 import type { DeliveryNoteData, InvoiceData } from '../schema.ts';
-import type { InvoiceTotals } from '../totals.ts';
+import type { DocumentTotals, InvoiceTotals } from '../totals.ts';
 import { dateText, header, ibanText, parties, sellerLines, type PdfContext } from './common.ts';
+
+/** Subtotal / VAT / total rows, right-aligned under the line totals; returns the next y. */
+function drawTotals(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  o: {
+    labels: DocLabels;
+    money: (c: number) => string;
+    rate: string;
+    vatMode: VatMode;
+    totals: DocumentTotals;
+    totalX: number;
+  },
+): number {
+  const L = doc.page.margins.left;
+  const W = doc.page.width - L - doc.page.margins.right;
+  const t = o.labels;
+  y += 6;
+  const row = (label: string, value: string, strong = false) => {
+    doc
+      .font(strong ? 'b' : 'r')
+      .fontSize(strong ? 12 : 10)
+      .fillColor(strong ? INK : MUTED)
+      .text(label, L + W * 0.4, y, { width: W * 0.4, align: 'right' });
+    doc.fillColor(INK).text(value, o.totalX, y, { width: W * 0.18, align: 'right' });
+    y += strong ? 20 : 16;
+  };
+  const tt = o.totals;
+  if (o.vatMode === 'none') row(t.total, o.money(tt.totalCents), true);
+  else if (o.vatMode === 'exclusive') {
+    row(t.subtotal, o.money(tt.subtotalCents));
+    row(t.vat(o.rate), o.money(tt.vatCents));
+    row(t.total, o.money(tt.totalCents), true);
+  } else {
+    row(t.total, o.money(tt.totalCents), true);
+    row(t.ofWhichVat(o.rate), o.money(tt.vatCents));
+  }
+  return y;
+}
+
+/** The grey payment-details box (bank, IBAN, BIC, reference, pay-by line); returns the next y. */
+function drawPayment(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  o: { labels: DocLabels; seller: Seller; reference: string; payBy: string | null; brand: string },
+): number {
+  const L = doc.page.margins.left;
+  const W = doc.page.width - L - doc.page.margins.right;
+  const t = o.labels;
+  const pay = (
+    [
+      [t.bank, o.seller.bankName ?? ''],
+      [t.iban, ibanText(o.seller)],
+      [t.bic, o.seller.bic ?? ''],
+      [t.reference, o.reference],
+    ] as [string, string][]
+  ).filter(([, v]) => v);
+  const boxH = 30 + pay.length * 14 + (o.payBy ? 16 : 0);
+  doc.rect(L, y, W, boxH).fill('#F4F5F7');
+  doc
+    .font('s')
+    .fontSize(9)
+    .fillColor(MUTED)
+    .text(t.paymentDetails, L + 14, y + 12);
+  let py = y + 28;
+  for (const [k, v] of pay) {
+    doc
+      .font('r')
+      .fontSize(10)
+      .fillColor(MUTED)
+      .text(k, L + 14, py, { width: 130 });
+    doc
+      .font('s')
+      .fillColor(INK)
+      .text(v, L + 150, py, { width: W - 164 });
+    py += 14;
+  }
+  if (o.payBy)
+    doc
+      .font('s')
+      .fontSize(10)
+      .fillColor(o.brand)
+      .text(o.payBy, L + 14, py + 2, { width: W - 28 });
+  return y + boxH + 16;
+}
 
 export interface InvoicePdfInput extends PdfContext {
   data: InvoiceData;
@@ -99,7 +185,8 @@ export function renderInvoicePdf(i: InvoicePdfInput): Promise<Buffer> {
       width: W * 0.16,
       align: 'right',
     });
-    doc.text(l.unitPriceCents === null ? '' : money(l.unitPriceCents), col.unit, y, {
+    const up = i.totals.unitPrices[n];
+    doc.text(up === null || up === undefined ? '' : money(up), col.unit, y, {
       width: W * 0.16,
       align: 'right',
     });
@@ -117,68 +204,26 @@ export function renderInvoicePdf(i: InvoicePdfInput): Promise<Buffer> {
       .stroke();
   });
 
-  // Totals.
-  y += 6;
-  const row = (label: string, value: string, strong = false) => {
-    doc
-      .font(strong ? 'b' : 'r')
-      .fontSize(strong ? 12 : 10)
-      .fillColor(strong ? INK : MUTED)
-      .text(label, L + W * 0.4, y, { width: W * 0.4, align: 'right' });
-    doc.fillColor(INK).text(value, col.total, y, { width: W * 0.18, align: 'right' });
-    y += strong ? 20 : 16;
-  };
-  const rate = formatRate(i.vatRatePercent, i.language);
-  const tt = i.totals;
-  if (d.reverseCharge || i.vatMode === 'none') row(t.total, money(tt.totalCents), true);
-  else if (i.vatMode === 'exclusive') {
-    row(t.subtotal, money(tt.subtotalCents));
-    row(t.vat(rate), money(tt.vatCents));
-    row(t.total, money(tt.totalCents), true);
-  } else {
-    row(t.total, money(tt.totalCents), true);
-    row(t.ofWhichVat(rate), money(tt.vatCents));
-  }
+  y = drawTotals(doc, y, {
+    labels: t,
+    money,
+    rate: formatRate(i.vatRatePercent, i.language),
+    vatMode: d.reverseCharge ? 'none' : i.vatMode,
+    totals: i.totals,
+    totalX: col.total,
+  });
   if (d.reverseCharge) {
     y += 4;
     doc.font('s').fontSize(9).fillColor(INK).text(t.reverseCharge, L, y, { width: W });
     y = doc.y + 8;
   }
-
-  // Payment details.
-  y += 10;
-  const pay: [string, string][] = [
-    [t.bank, i.seller.bankName ?? ''],
-    [t.iban, ibanText(i.seller)],
-    [t.bic, i.seller.bic ?? ''],
-    [t.reference, d.paymentReference || i.number],
-  ].filter(([, v]) => v) as [string, string][];
-  const boxH = 30 + pay.length * 14 + 16;
-  doc.rect(L, y, W, boxH).fill('#F4F5F7');
-  doc
-    .font('s')
-    .fontSize(9)
-    .fillColor(MUTED)
-    .text(t.paymentDetails, L + 14, y + 12);
-  let py = y + 28;
-  for (const [k, v] of pay) {
-    doc
-      .font('r')
-      .fontSize(10)
-      .fillColor(MUTED)
-      .text(k, L + 14, py, { width: 130 });
-    doc
-      .font('s')
-      .fillColor(INK)
-      .text(v, L + 150, py, { width: W - 164 });
-    py += 14;
-  }
-  doc
-    .font('s')
-    .fontSize(10)
-    .fillColor(brand)
-    .text(t.payBy(dateText(i.dueDate, i.language)), L + 14, py + 2, { width: W - 28 });
-  y += boxH + 16;
+  y = drawPayment(doc, y + 10, {
+    labels: t,
+    seller: i.seller,
+    reference: d.paymentReference || i.number,
+    payBy: t.payBy(dateText(i.dueDate, i.language)),
+    brand,
+  });
 
   if (d.notes.trim()) {
     doc.font('s').fontSize(9).fillColor(MUTED).text(t.notes, L, y);
@@ -194,12 +239,20 @@ export function renderInvoicePdf(i: InvoicePdfInput): Promise<Buffer> {
 
 export interface DeliveryNotePdfInput extends PdfContext {
   data: DeliveryNoteData;
+  /** Pavadzīme-rēķins: prices, totals and payment details. */
+  priced?: {
+    currency: string;
+    vatMode: VatMode;
+    vatRatePercent: number;
+    totals: DocumentTotals;
+  };
 }
 
 export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> {
   const t = docLabels(i.language);
+  const title = i.priced ? t.deliveryNoteInvoice : t.deliveryNote;
   const { doc, done } = newPdf({
-    title: `${t.deliveryNote} ${i.number}`,
+    title: `${title} ${i.number}`,
     author: i.seller.legalName ?? i.brand.companyName,
     createdAt: i.issueDate,
   });
@@ -210,7 +263,7 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
   const d = i.data;
   doc.rect(0, 0, doc.page.width, 6).fill(brand);
 
-  let y = header(doc, i, t.deliveryNote, [
+  let y = header(doc, i, title, [
     [t.date, dateText(i.issueDate, i.language)],
     ...(d.deliveryDate
       ? ([[t.deliveryDate, dateText(d.deliveryDate, i.language)]] as [string, string][])
@@ -255,41 +308,70 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
     y = doc.y + 16;
   }
 
-  // Lines: No., item, qty, unit.
-  const col = { n: L, item: L + 26, qty: L + W * 0.66, unit: L + W * 0.84 };
-  doc.font('s').fontSize(9).fillColor(MUTED);
-  doc.text('#', col.n, y);
-  doc.text(t.item, col.item, y);
-  doc.text(t.qty, col.qty, y, { width: W * 0.16, align: 'right' });
-  doc.text(t.unit, col.unit, y, { width: W * 0.16 });
-  y += 16;
-  doc
-    .moveTo(L, y)
-    .lineTo(L + W, y)
-    .strokeColor(RULE)
-    .lineWidth(1)
-    .stroke();
-  y += 8;
+  // Lines: No., item, qty, unit (and with prices: unit price, total).
+  const p = i.priced;
+  const money = (c: number) => formatMoney(c, p?.currency ?? 'EUR', locale);
+  const col = p
+    ? {
+        n: L,
+        item: L + 26,
+        qty: L + W * 0.46,
+        unit: L + W * 0.6,
+        price: L + W * 0.66,
+        total: L + W * 0.82,
+      }
+    : { n: L, item: L + 26, qty: L + W * 0.66, unit: L + W * 0.84, price: 0, total: 0 };
+  const itemW = p ? W * 0.4 : W * 0.6;
+  const head = () => {
+    doc.font('s').fontSize(9).fillColor(MUTED);
+    doc.text('#', col.n, y);
+    doc.text(t.item, col.item, y);
+    doc.text(t.qty, col.qty, y, { width: W * 0.12, align: 'right' });
+    doc.text(t.unit, col.unit + 6, y, { width: W * 0.1 });
+    if (p) {
+      doc.text(t.unitPrice, col.price, y, { width: W * 0.16, align: 'right' });
+      doc.text(t.lineTotal, col.total, y, { width: W * 0.18, align: 'right' });
+    }
+    y += 16;
+    doc
+      .moveTo(L, y)
+      .lineTo(L + W, y)
+      .strokeColor(RULE)
+      .lineWidth(1)
+      .stroke();
+    y += 8;
+  };
+  head();
   d.lines.forEach((l, n) => {
-    const h = doc
-      .font('r')
-      .fontSize(10)
-      .heightOfString(l.name, { width: W * 0.6 });
+    const h = doc.font('r').fontSize(10).heightOfString(l.name, { width: itemW });
     if (y + h + 12 > doc.page.height - 200) {
       doc.addPage();
       y = 56;
+      head();
     }
     doc
       .font('r')
       .fontSize(10)
       .fillColor(MUTED)
       .text(String(n + 1), col.n, y);
-    doc.fillColor(INK).text(l.name, col.item, y, { width: W * 0.6 });
+    doc.fillColor(INK).text(l.name, col.item, y, { width: itemW });
     doc.text(l.qty === null ? '' : formatQty(l.qty, locale), col.qty, y, {
-      width: W * 0.16,
+      width: W * 0.12,
       align: 'right',
     });
-    doc.text(l.unit, col.unit, y, { width: W * 0.16 });
+    doc.text(l.unit, col.unit + 6, y, { width: W * 0.1 });
+    if (p) {
+      const up = p.totals.unitPrices[n];
+      const lt = p.totals.lineTotals[n];
+      doc.text(up === null || up === undefined ? '' : money(up), col.price, y, {
+        width: W * 0.16,
+        align: 'right',
+      });
+      doc.text(lt === null || lt === undefined ? '' : money(lt), col.total, y, {
+        width: W * 0.18,
+        align: 'right',
+      });
+    }
     y += h + 10;
     doc
       .moveTo(L, y - 4)
@@ -298,6 +380,24 @@ export function renderDeliveryNotePdf(i: DeliveryNotePdfInput): Promise<Buffer> 
       .lineWidth(0.5)
       .stroke();
   });
+  if (p) {
+    y = drawTotals(doc, y, {
+      labels: t,
+      money,
+      rate: formatRate(p.vatRatePercent, i.language),
+      vatMode: p.vatMode,
+      totals: p.totals,
+      totalX: col.total,
+    });
+    if (i.seller.iban)
+      y = drawPayment(doc, y + 10, {
+        labels: t,
+        seller: i.seller,
+        reference: i.number,
+        payBy: null,
+        brand,
+      });
+  }
 
   if (d.notes.trim()) {
     y += 10;

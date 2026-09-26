@@ -12,6 +12,9 @@ import {
   listDocuments,
   loadDocument,
   parseData,
+  PREFIX_COLUMN,
+  PREFIX_PATTERN,
+  prefixLocks,
   renderDocumentPdf,
   vatNoValid,
   writeDocumentData,
@@ -34,6 +37,12 @@ const idParams = z.object({ tenantId: z.uuid(), id: z.uuid() });
 
 const blank = <T extends z.ZodTypeAny>(t: T) =>
   z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), t.nullable());
+
+const prefix = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(PREFIX_PATTERN, 'Number prefix: 1–10 letters or digits, e.g. INV');
 
 /** Seller details and the module switch (merged into PATCH /v1/tenants/:id). */
 export const documentSettingsShape = {
@@ -59,6 +68,9 @@ export const documentSettingsShape = {
   ),
   sellerCountry: blank(z.string().trim().max(60)),
   invoiceDueDays: z.number().int().min(0).max(365),
+  docPrefixInvoice: prefix,
+  docPrefixDeliveryNote: prefix,
+  docPrefixCmr: prefix,
 };
 type DocumentSettings = Partial<{
   [K in keyof typeof documentSettingsShape]: z.output<(typeof documentSettingsShape)[K]>;
@@ -76,6 +88,9 @@ export function documentSettingsColumns(b: DocumentSettings): Record<string, unk
     ['sellerBic', 'seller_bic'],
     ['sellerCountry', 'seller_country'],
     ['invoiceDueDays', 'invoice_due_days'],
+    ['docPrefixInvoice', 'doc_prefix_invoice'],
+    ['docPrefixDeliveryNote', 'doc_prefix_delivery_note'],
+    ['docPrefixCmr', 'doc_prefix_cmr'],
   ];
   const cols: Record<string, unknown> = {};
   for (const [k, col] of map) {
@@ -87,6 +102,32 @@ export function documentSettingsColumns(b: DocumentSettings): Record<string, unk
         : v;
   }
   return cols;
+}
+
+const TYPE_NAME = { invoice: 'invoice', delivery_note: 'delivery note', cmr: 'CMR' } as const;
+
+/**
+ * A prefix may change only while no document of that type was issued this
+ * year (no gaps, no mixed series), and the three prefixes stay distinct.
+ */
+export async function checkPrefixChanges(tx: TransactionSql, cols: Record<string, unknown>) {
+  const types = (Object.keys(PREFIX_COLUMN) as (keyof typeof PREFIX_COLUMN)[]).filter(
+    (t) => cols[PREFIX_COLUMN[t]] !== undefined,
+  );
+  if (!types.length) return;
+  const [cur] = await tx<Record<string, string>[]>`
+    select doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr from public.tenants`;
+  const locks = await prefixLocks(tx);
+  for (const t of types) {
+    if (cols[PREFIX_COLUMN[t]] !== cur![PREFIX_COLUMN[t]] && locks[t])
+      throw new HttpError(
+        409,
+        `The ${TYPE_NAME[t]} prefix is fixed for this year: a ${TYPE_NAME[t]} was already issued with it.`,
+      );
+  }
+  const next = Object.values(PREFIX_COLUMN).map((c) => (cols[c] as string | undefined) ?? cur![c]);
+  if (new Set(next).size !== next.length)
+    throw new HttpError(400, 'Each document type needs its own prefix.');
 }
 
 /** A document can still change while nothing has gone out with it. */

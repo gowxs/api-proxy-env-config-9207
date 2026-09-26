@@ -33,12 +33,16 @@ export interface DeliveryLine {
   name: string;
   unit: string;
   qty: number | null;
+  /** Only with prices (pavadzīme-rēķins). */
+  unitPriceCents: number | null;
 }
 export interface DeliveryNoteData {
   receiver: Party;
   loadingAddress: string;
   deliveryAddress: string;
   deliveryDate: string | null;
+  /** Pavadzīme-rēķins: prices and totals on the note (default off). */
+  withPrices: boolean;
   lines: DeliveryLine[];
   vehicle: string;
   driver: string;

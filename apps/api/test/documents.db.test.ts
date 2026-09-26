@@ -186,12 +186,26 @@ describe('invoices', () => {
         deliveryAddress: 'Krasta iela 12, Rīga',
         loadingAddress: 'Brīvības iela 1, Rīga',
         lines: [
-          { name: 'Lavender candle', unit: 'pcs', qty: 20 },
-          { name: 'Gift box', unit: 'box', qty: 2.5 },
+          { name: 'Lavender candle', unit: 'pcs', qty: 20, unitPriceCents: 2400 },
+          { name: 'Gift box', unit: 'box', qty: 2.5, unitPriceCents: 650 },
         ],
       },
     });
-    expect(JSON.stringify(d.data)).not.toContain('unitPriceCents');
+    // Prices come along but are shown only when the owner turns on the pavadzīme-rēķins.
+    expect(d.data.withPrices).toBe(false);
+    expect(d.total_cents).toBe(0);
+    const priced = await call('PATCH', A, `/documents/${r.json.id}`, {
+      data: { ...d.data, withPrices: true },
+    });
+    expect(priced.json).toMatchObject({
+      subtotal_cents: 49625,
+      vat_cents: 10421,
+      total_cents: 60046,
+    });
+    const issued = await call('POST', A, `/documents/${r.json.id}/issue`, {});
+    expect(issued.status).toBe(200);
+    const pdf = await call('GET', A, `/documents/${r.json.id}/pdf`);
+    expect(pdf.headers['content-disposition']).toContain('Precu-pavadzime-rekins-DN-');
   });
 
   it('an invoice from an accepted quote copies its lines, VAT and customer', async () => {
@@ -356,5 +370,82 @@ describe('CMR from an e-mail', () => {
     expect(conv.documents.length).toBeGreaterThan(2);
     const dash = (await call('GET', A, '/dashboard')).json;
     expect(dash.documents).toMatchObject({ enabled: true, currency: 'EUR' });
+  });
+});
+
+describe('number prefixes', () => {
+  beforeAll(async () => {
+    await owner`update public.tenants
+                set documents_enabled = true, seller_legal_name = 'SIA Other', seller_legal_address = 'Rīga',
+                    seller_vat_no = 'LV40003999999', seller_iban = 'LV80BANK0000435195001'
+                where id = ${B.tenantId}`;
+  });
+
+  it('are validated and distinct', async () => {
+    expect((await call('GET', B, '')).json).toMatchObject({
+      doc_prefix_invoice: 'INV',
+      doc_prefix_delivery_note: 'DN',
+      doc_prefix_cmr: 'CMR',
+      doc_prefix_locks: { invoice: false, delivery_note: false, cmr: false },
+    });
+    expect((await call('PATCH', B, '', { docPrefixInvoice: 'RĒĶ' })).status).toBe(400);
+    expect((await call('PATCH', B, '', { docPrefixInvoice: 'R-1' })).status).toBe(400);
+    expect((await call('PATCH', B, '', { docPrefixInvoice: 'TOOLONGPREFIX' })).status).toBe(400);
+    const dup = await call('PATCH', B, '', { docPrefixInvoice: 'DN' });
+    expect(dup.status).toBe(400);
+    expect(dup.json.error).toBe('Each document type needs its own prefix.');
+    expect((await call('PATCH', B, '', { docPrefixInvoice: 'rek' })).status).toBe(200);
+  });
+
+  it('numbers use the prefix, which is then fixed for the year', async () => {
+    const c = await call('POST', B, '/documents', { type: 'invoice', threadId: B.threadId });
+    await call('PATCH', B, `/documents/${c.json.id}`, { data: readyInvoice });
+    const issued = await call('POST', B, `/documents/${c.json.id}/issue`, {});
+    expect(issued.json.number).toBe(`REK-${year}-0001`);
+    expect((await call('GET', B, '')).json.doc_prefix_locks).toEqual({
+      invoice: true,
+      delivery_note: false,
+      cmr: false,
+    });
+    const locked = await call('PATCH', B, '', { docPrefixInvoice: 'FAKT' });
+    expect(locked.status).toBe(409);
+    expect(locked.json.error).toContain('fixed for this year');
+    // Saving the same prefix again is fine; other types can still change.
+    expect(
+      (await call('PATCH', B, '', { docPrefixInvoice: 'REK', docPrefixDeliveryNote: 'PAV' }))
+        .status,
+    ).toBe(200);
+    const dn = await call('POST', B, '/documents', { type: 'delivery_note', threadId: B.threadId });
+    await call('PATCH', B, `/documents/${dn.json.id}`, {
+      data: {
+        receiver: { name: 'R', address: 'A', regNo: '', vatNo: '' },
+        deliveryAddress: 'A',
+        lines: [{ name: 'Candle', unit: 'pcs', qty: 1, unitPriceCents: null }],
+      },
+    });
+    expect((await call('POST', B, `/documents/${dn.json.id}/issue`, {})).json.number).toBe(
+      `PAV-${year}-0001`,
+    );
+  });
+
+  it('reverse charge with VAT-inclusive prices invoices net prices without VAT', async () => {
+    await owner`update public.tenants set quotes_vat_mode = 'inclusive' where id = ${B.tenantId}`;
+    const c = await call('POST', B, '/documents', { type: 'invoice', threadId: B.threadId });
+    const r = await call('PATCH', B, `/documents/${c.json.id}`, {
+      data: {
+        ...readyInvoice,
+        reverseCharge: true,
+        buyer: { ...readyInvoice.buyer, vatNo: 'DE123456789' },
+      },
+    });
+    // 24.00 → 19.83 net, 6.50 → 5.37: 396.60 + 13.43 = 410.03, no VAT.
+    expect(r.json).toMatchObject({
+      vat_mode: 'inclusive',
+      subtotal_cents: 41003,
+      vat_cents: 0,
+      total_cents: 41003,
+      problems: [],
+    });
+    expect((await call('POST', B, `/documents/${c.json.id}/issue`, {})).status).toBe(200);
   });
 });

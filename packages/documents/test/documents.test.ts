@@ -6,6 +6,7 @@ import {
   documentCoverText,
   documentFileName,
   documentProblems,
+  documentTotalsOf,
   emptyData,
   ibanValid,
   invoiceTotals,
@@ -67,6 +68,7 @@ describe('invoice totals', () => {
   it('VAT added once on the whole invoice', () => {
     // 20 × 24.00 + 2.5 × 6.50 = 480 + 16.25 = 496.25; VAT 21 % = 104.21 (half-up); 600.46.
     expect(invoiceTotals(invoice(), { mode: 'exclusive', ratePercent: 21 })).toEqual({
+      unitPrices: [2400, 650],
       lineTotals: [48000, 1625],
       subtotalCents: 49625,
       vatCents: 10421,
@@ -81,6 +83,23 @@ describe('invoice totals', () => {
     expect(
       invoiceTotals(invoice({ reverseCharge: true }), { mode: 'exclusive', ratePercent: 21 }),
     ).toMatchObject({ vatCents: 0, totalCents: 49625 });
+  });
+  it('reverse charge with VAT-inclusive prices: unit prices are recalculated to net', () => {
+    // 24.00 incl. 21 % → 19.83 net; 6.50 → 5.37. 20 × 19.83 = 396.60; 2.5 × 5.37 = 13.425 → 13.43.
+    expect(
+      invoiceTotals(invoice({ reverseCharge: true }), { mode: 'inclusive', ratePercent: 21 }),
+    ).toEqual({
+      unitPrices: [1983, 537],
+      lineTotals: [39660, 1343],
+      subtotalCents: 41003,
+      vatCents: 0,
+      totalCents: 41003,
+    });
+    // With prices already net nothing is recalculated.
+    expect(
+      invoiceTotals(invoice({ reverseCharge: true }), { mode: 'exclusive', ratePercent: 21 })
+        .unitPrices,
+    ).toEqual([2400, 650]);
   });
   it('incomplete lines do not count yet', () => {
     const t = invoiceTotals(
@@ -116,14 +135,13 @@ describe('what is missing before issuing', () => {
       'Line 1: price is missing',
     ]);
   });
-  it('reverse charge needs the buyer’s VAT number and prices without VAT', () => {
+  it('reverse charge needs the buyer’s VAT number (with any VAT mode)', () => {
     const d = invoice({
       reverseCharge: true,
       buyer: { name: 'B', address: 'A', regNo: '', vatNo: '', email: '' },
     });
     expect(documentProblems('invoice', d, seller, { vatMode: 'inclusive', today })).toEqual([
       'Reverse charge needs the buyer’s VAT number',
-      'Reverse charge is not available while your prices include VAT',
     ]);
   });
   it('no VAT number needed when there is no VAT', () => {
@@ -148,6 +166,19 @@ describe('what is missing before issuing', () => {
     expect(p).toContain('Box 11: gross weight is missing');
     expect(p).toContain('Box 16: carrier address is missing');
     expect(p).toContain('Box 21: date the note is made out is missing');
+  });
+  it('a delivery note with prices needs a price on every line', () => {
+    const d = {
+      ...parseData('delivery_note', {}),
+      withPrices: true,
+      receiver: { name: 'R', address: 'A', regNo: '', vatNo: '' },
+      deliveryAddress: 'A',
+      lines: [{ name: 'Candle', unit: 'pcs', qty: 2, unitPriceCents: null }],
+    };
+    expect(documentProblems('delivery_note', d, { ...seller, vatNo: null }, o)).toEqual([
+      'Your VAT number is missing (Settings → Documents)',
+      'Line 1: price is missing',
+    ]);
   });
   it('delivery note', () => {
     expect(documentProblems('delivery_note', emptyData('delivery_note'), seller, o)).toEqual([
@@ -186,6 +217,26 @@ describe('texts', () => {
         number: 'CMR-2026-0003',
       }),
     ).toBe('Hallo,\n\nanbei erhalten Sie den CMR-Frachtbrief CMR-2026-0003.');
+  });
+  it('the reply for a delivery note with prices names the total', () => {
+    expect(
+      documentCoverText({
+        type: 'delivery_note',
+        priced: true,
+        language: 'lv',
+        customerName: null,
+        number: 'DN-2026-0002',
+        total: '600,46 €',
+      }),
+    ).toBe('Labdien!\n\nPielikumā ir preču pavadzīme-rēķins DN-2026-0002 par summu 600,46 €.');
+    expect(
+      documentFileName({
+        type: 'delivery_note',
+        number: 'DN-2026-0002',
+        language: 'lv',
+        data: { ...parseData('delivery_note', {}), withPrices: true },
+      }),
+    ).toBe('Precu-pavadzime-rekins-DN-2026-0002.pdf');
   });
   it('file names in the language, ASCII only', () => {
     expect(documentFileName({ type: 'invoice', number: 'INV-2026-0001', language: 'lv' })).toBe(
@@ -303,11 +354,37 @@ describe('PDFs', () => {
         ...parseData('delivery_note', {}),
         receiver: { name: 'SIA Ozols', address: 'Rīga', regNo: '', vatNo: '' },
         deliveryAddress: 'Rīga',
-        lines: [{ name: 'Lavender candle', unit: 'pcs', qty: 20 }],
+        lines: [{ name: 'Lavender candle', unit: 'pcs', qty: 20, unitPriceCents: null }],
         vehicle: 'KL-4410',
       },
     });
     expect(pages(pdf)).toBe(1);
+  });
+  it('a delivery note with prices (pavadzīme-rēķins)', async () => {
+    const data = {
+      ...parseData('delivery_note', {}),
+      withPrices: true,
+      receiver: { name: 'SIA Ozols', address: 'Rīga', regNo: '', vatNo: '' },
+      deliveryAddress: 'Rīga',
+      lines: [
+        { name: 'Lavender candle', unit: 'pcs', qty: 20, unitPriceCents: 2400 },
+        { name: 'Gift box', unit: 'box', qty: 2.5, unitPriceCents: 650 },
+      ],
+    };
+    const totals = documentTotalsOf('delivery_note', data, 'exclusive', 21);
+    expect(totals).toMatchObject({ subtotalCents: 49625, vatCents: 10421, totalCents: 60046 });
+    const pdf = await renderDeliveryNotePdf({
+      ...ctx,
+      number: 'DN-2026-0002',
+      language: 'lv',
+      data,
+      priced: { currency: 'EUR', vatMode: 'exclusive', vatRatePercent: 21, totals },
+    });
+    expect(pages(pdf)).toBe(1);
+    // Without the option a delivery note has no totals.
+    expect(
+      documentTotalsOf('delivery_note', { ...data, withPrices: false }, 'exclusive', 21).totalCents,
+    ).toBe(0);
   });
   it('a CMR has four copies', async () => {
     const data: CmrData = {

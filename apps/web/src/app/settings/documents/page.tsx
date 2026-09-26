@@ -30,6 +30,11 @@ interface DocSettings {
   seller_bic: string | null;
   seller_country: string | null;
   invoice_due_days: number;
+  doc_prefix_invoice: string;
+  doc_prefix_delivery_note: string;
+  doc_prefix_cmr: string;
+  /** Per type: a document was issued this year, so its prefix is fixed until next year. */
+  doc_prefix_locks: { invoice: boolean; delivery_note: boolean; cmr: boolean };
   quotes_currency: string;
   quotes_vat_mode: VatMode;
   quotes_vat_rate: number;
@@ -59,8 +64,17 @@ function SellerCard({
     Object.fromEntries([
       ...FIELDS.map(([col, key]) => [key, (s[col] as string | null) ?? '']),
       ['invoiceDueDays', String(s.invoice_due_days)],
+      ['docPrefixInvoice', s.doc_prefix_invoice],
+      ['docPrefixDeliveryNote', s.doc_prefix_delivery_note],
+      ['docPrefixCmr', s.doc_prefix_cmr],
     ]),
   );
+  const year = new Date().getFullYear();
+  const prefixes: [string, string, keyof DocSettings['doc_prefix_locks']][] = [
+    ['docPrefixInvoice', 'Invoices', 'invoice'],
+    ['docPrefixDeliveryNote', 'Delivery notes', 'delivery_note'],
+    ['docPrefixCmr', 'CMR notes', 'cmr'],
+  ];
   const a = useAction();
   const [saved, setSaved] = useState(false);
   return (
@@ -71,6 +85,9 @@ function SellerCard({
           e.preventDefault();
           void a.run(async () => {
             const { invoiceDueDays, ...rest } = f;
+            // Locked prefixes are not sent (they cannot change this year).
+            for (const [key, , type] of prefixes)
+              if (s.doc_prefix_locks[type]) delete (rest as Record<string, string>)[key];
             await api(`/v1/tenants/${tenantId}`, {
               method: 'PATCH',
               body: { ...rest, invoiceDueDays: Number(invoiceDueDays) },
@@ -110,6 +127,35 @@ function SellerCard({
             onChange={(e) => setF({ ...f, invoiceDueDays: e.target.value })}
           />
         </Field>
+        <fieldset className="space-y-2">
+          <legend className="mb-1 text-sm font-medium text-neutral-800">Number prefixes</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {prefixes.map(([key, label, type]) => (
+              <label key={key} className="block">
+                <span className="mb-1 block text-xs text-neutral-600">{label}</span>
+                <input
+                  className={`${inputClass} uppercase`}
+                  value={f[key]}
+                  maxLength={10}
+                  disabled={s.doc_prefix_locks[type]}
+                  aria-label={`${label} number prefix`}
+                  onChange={(e) => setF({ ...f, [key]: e.target.value.toUpperCase() })}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-neutral-500">
+            Numbers read {f.docPrefixInvoice || 'INV'}-{year}-0001 and restart every year. Letters
+            and digits only. A prefix is fixed for the rest of the year once a document of that type
+            has been issued
+            {prefixes.some(([, , t]) => s.doc_prefix_locks[t]) &&
+              ` (${prefixes
+                .filter(([, , t]) => s.doc_prefix_locks[t])
+                .map(([, l]) => l.toLowerCase())
+                .join(', ')}: fixed for ${year})`}
+            .
+          </p>
+        </fieldset>
         <p className="text-xs text-neutral-500">
           VAT: {VAT_LABEL[s.quotes_vat_mode]}
           {s.quotes_vat_mode !== 'none' && `, ${s.quotes_vat_rate}%`} · {s.quotes_currency}. Shared

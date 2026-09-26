@@ -53,8 +53,17 @@ export const DeliveryNoteSchema = z.strictObject({
   loadingAddress: text(500),
   deliveryAddress: text(500),
   deliveryDate: isoDate,
+  /** Pavadzīme-rēķins: the lines carry prices and the note shows totals (default off). */
+  withPrices: z.boolean().default(false),
   lines: z
-    .array(z.strictObject({ name: text(200), unit: text(30), qty }))
+    .array(
+      z.strictObject({
+        name: text(200),
+        unit: text(30),
+        qty,
+        unitPriceCents: z.number().int().min(0).max(1_000_000_000).nullable().default(null),
+      }),
+    )
     .max(100)
     .default([]),
   vehicle: text(40),
@@ -129,7 +138,10 @@ export function emptyData(type: DocType): DocData {
       lines: [{ name: '', unit: 'pcs', qty: 1, unitPriceCents: null }],
     };
   if (type === 'delivery_note')
-    return { ...(d as DeliveryNoteData), lines: [{ name: '', unit: 'pcs', qty: 1 }] };
+    return {
+      ...(d as DeliveryNoteData),
+      lines: [{ name: '', unit: 'pcs', qty: 1, unitPriceCents: null }],
+    };
   return {
     ...(d as CmrData),
     goods: [

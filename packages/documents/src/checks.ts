@@ -62,8 +62,6 @@ function invoiceProblems(
     p.push('Buyer: the VAT number looks wrong');
   if (d.reverseCharge) {
     if (blank(d.buyer.vatNo)) p.push('Reverse charge needs the buyer’s VAT number');
-    if (o.vatMode === 'inclusive')
-      p.push('Reverse charge is not available while your prices include VAT');
   }
   if (!d.lines.length) p.push('Add at least one line');
   d.lines.forEach((l, i) => {
@@ -77,8 +75,9 @@ function invoiceProblems(
   return p;
 }
 
-function deliveryNoteProblems(d: DeliveryNoteData, s: Seller): string[] {
-  const p = sellerProblems(s, { needVat: false, needBank: false });
+function deliveryNoteProblems(d: DeliveryNoteData, s: Seller, vatMode: VatMode): string[] {
+  // With prices it is also an invoice (pavadzīme-rēķins): VAT number when VAT applies.
+  const p = sellerProblems(s, { needVat: d.withPrices && vatMode !== 'none', needBank: false });
   if (blank(d.receiver.name)) p.push('Receiver: name is missing');
   if (blank(d.receiver.address)) p.push('Receiver: address is missing');
   if (blank(d.deliveryAddress)) p.push('Delivery address is missing');
@@ -88,6 +87,7 @@ function deliveryNoteProblems(d: DeliveryNoteData, s: Seller): string[] {
     if (blank(l.name)) p.push(`${n}: item is missing`);
     if (l.qty === null) p.push(`${n}: quantity is missing`);
     if (blank(l.unit)) p.push(`${n}: unit is missing`);
+    if (d.withPrices && l.unitPriceCents === null) p.push(`${n}: price is missing`);
   });
   return p;
 }
@@ -134,6 +134,7 @@ export function documentProblems(
   o: { vatMode: VatMode; today: string },
 ): string[] {
   if (type === 'invoice') return invoiceProblems(data as InvoiceData, seller, o);
-  if (type === 'delivery_note') return deliveryNoteProblems(data as DeliveryNoteData, seller);
+  if (type === 'delivery_note')
+    return deliveryNoteProblems(data as DeliveryNoteData, seller, o.vatMode);
   return cmrProblems(data as CmrData);
 }

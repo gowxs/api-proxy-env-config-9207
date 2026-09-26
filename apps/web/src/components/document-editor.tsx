@@ -44,10 +44,22 @@ function setPath<T>(o: T, path: string, value: unknown): T {
 }
 
 /** Client-side preview only; the API recomputes and stores the real totals. */
+/**
+ * The unit price the document will print: under reverse charge with
+ * VAT-inclusive prices it is recalculated to net (as the API does).
+ */
+function printedUnitPrice(doc: Doc, reverseCharge: boolean, cents: number | null) {
+  if (cents === null) return null;
+  if (!reverseCharge || doc.vat_mode !== 'inclusive') return cents;
+  const bp = Math.round(doc.vat_rate * 100);
+  return Math.floor((2 * cents * 10_000 + 10_000 + bp) / (2 * (10_000 + bp)));
+}
+const lineTotal = (qty: number | null, unit: number | null) =>
+  qty !== null && unit !== null ? Math.floor((2 * Math.round(qty * 100) * unit + 100) / 200) : null;
+
 function previewTotals(doc: Doc, lines: InvoiceLine[], reverseCharge: boolean) {
   const sub = lines.reduce(
-    (t, l) =>
-      t + (l.qty !== null && l.unitPriceCents !== null ? Math.round(l.qty * l.unitPriceCents) : 0),
+    (t, l) => t + (lineTotal(l.qty, printedUnitPrice(doc, reverseCharge, l.unitPriceCents)) ?? 0),
     0,
   );
   if (reverseCharge || doc.vat_mode === 'none') return { sub, vat: 0, total: sub };
@@ -293,9 +305,18 @@ function InvoiceLines({ ctx, tenantId }: { ctx: Ctx; tenantId: string }) {
               <span />
             )}
             <span className="font-semibold tabular-nums">
-              {l.qty !== null && l.unitPriceCents !== null
-                ? money(Math.round(l.qty * l.unitPriceCents), ctx.doc.currency)
-                : '—'}
+              {(() => {
+                const up = printedUnitPrice(
+                  ctx.doc,
+                  Boolean(ctx.data.reverseCharge),
+                  l.unitPriceCents,
+                );
+                const lt = lineTotal(l.qty, up);
+                if (lt === null) return '—';
+                return up !== l.unitPriceCents
+                  ? `${money(up!, ctx.doc.currency)} net × ${l.qty} = ${money(lt, ctx.doc.currency)}`
+                  : money(lt, ctx.doc.currency);
+              })()}
             </span>
           </div>
         </div>
@@ -346,48 +367,90 @@ function InvoiceLines({ ctx, tenantId }: { ctx: Ctx; tenantId: string }) {
 
 function DeliveryLines({ ctx }: { ctx: Ctx }) {
   const lines = (ctx.data.lines as DeliveryLine[]) ?? [];
+  const priced = Boolean(ctx.data.withPrices);
   const setLines = (l: DeliveryLine[]) => ctx.set('lines', l);
   const upd = (i: number, patch: Partial<DeliveryLine>) =>
     setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const t = priced ? previewTotals(ctx.doc, lines, false) : null;
+  const cur = ctx.doc.currency;
   return (
     <div className="space-y-3">
       {lines.map((l, i) => (
-        <div key={i} className="grid grid-cols-[1fr_4.5rem_4.5rem] gap-2">
-          <input
-            aria-label={`Item ${i + 1}`}
-            className={inputClass}
-            value={l.name}
-            placeholder="Item"
-            disabled={ctx.locked}
-            onChange={(e) => upd(i, { name: e.target.value })}
-          />
-          <input
-            aria-label={`Quantity of line ${i + 1}`}
-            className={inputClass}
-            inputMode="decimal"
-            defaultValue={l.qty === null ? '' : String(l.qty).replace('.', ',')}
-            placeholder="Qty"
-            disabled={ctx.locked}
-            onChange={(e) => upd(i, { qty: parseNumber(e.target.value) })}
-          />
-          <input
-            aria-label={`Unit of line ${i + 1}`}
-            className={inputClass}
-            value={l.unit}
-            placeholder="Unit"
-            disabled={ctx.locked}
-            onChange={(e) => upd(i, { unit: e.target.value })}
-          />
+        <div key={i} className="space-y-2">
+          <div className="grid grid-cols-[1fr_4.5rem_4.5rem] gap-2">
+            <input
+              aria-label={`Item ${i + 1}`}
+              className={inputClass}
+              value={l.name}
+              placeholder="Item"
+              disabled={ctx.locked}
+              onChange={(e) => upd(i, { name: e.target.value })}
+            />
+            <input
+              aria-label={`Quantity of line ${i + 1}`}
+              className={inputClass}
+              inputMode="decimal"
+              defaultValue={l.qty === null ? '' : String(l.qty).replace('.', ',')}
+              placeholder="Qty"
+              disabled={ctx.locked}
+              onChange={(e) => upd(i, { qty: parseNumber(e.target.value) })}
+            />
+            <input
+              aria-label={`Unit of line ${i + 1}`}
+              className={inputClass}
+              value={l.unit}
+              placeholder="Unit"
+              disabled={ctx.locked}
+              onChange={(e) => upd(i, { unit: e.target.value })}
+            />
+          </div>
+          {priced && (
+            <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+              <input
+                aria-label={`Unit price of line ${i + 1}`}
+                className={inputClass}
+                inputMode="decimal"
+                defaultValue={priceText(l.unitPriceCents)}
+                placeholder={`Unit price (${cur})`}
+                disabled={ctx.locked}
+                onChange={(e) => upd(i, { unitPriceCents: parsePrice(e.target.value) })}
+              />
+              <span className="min-w-20 text-right text-sm font-semibold tabular-nums">
+                {(() => {
+                  const lt = lineTotal(l.qty, l.unitPriceCents);
+                  return lt === null ? '—' : money(lt, cur);
+                })()}
+              </span>
+            </div>
+          )}
         </div>
       ))}
       {!ctx.locked && (
         <Button
           type="button"
           variant="secondary"
-          onClick={() => setLines([...lines, { name: '', unit: 'pcs', qty: 1 }])}
+          onClick={() =>
+            setLines([...lines, { name: '', unit: 'pcs', qty: 1, unitPriceCents: null }])
+          }
         >
           Add line
         </Button>
+      )}
+      {t && (
+        <dl className="space-y-1 border-t border-neutral-200 pt-3 text-sm">
+          {ctx.doc.vat_mode === 'exclusive' && (
+            <div className="flex justify-between">
+              <dt className="text-neutral-500">
+                Subtotal · VAT {ctx.doc.vat_rate}% {money(t.vat, cur)}
+              </dt>
+              <dd className="tabular-nums">{money(t.sub, cur)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between text-base font-semibold">
+            <dt>Total</dt>
+            <dd className="tabular-nums">{money(t.total, cur)}</dd>
+          </div>
+        </dl>
       )}
     </div>
   );
@@ -515,15 +578,15 @@ function InvoiceForm({ ctx, tenantId }: { ctx: Ctx; tenantId: string }) {
               type="checkbox"
               className="mt-1 size-4"
               checked={rc}
-              disabled={ctx.locked || ctx.doc.vat_mode === 'inclusive'}
+              disabled={ctx.locked}
               onChange={(e) => ctx.set('reverseCharge', e.target.checked)}
             />
             <span>
               Reverse charge (EU business buyer)
               <span className="block text-xs text-neutral-500">
-                {ctx.doc.vat_mode === 'inclusive'
-                  ? 'Not available while your prices include VAT.'
-                  : 'No VAT; the invoice carries the standard note. Needs both VAT numbers.'}
+                No VAT; the invoice carries the standard note. Needs both VAT numbers.
+                {ctx.doc.vat_mode === 'inclusive' &&
+                  ' Your prices include VAT, so each price is recalculated to net.'}
               </span>
             </span>
           </label>
@@ -553,6 +616,21 @@ function DeliveryNoteForm({ ctx }: { ctx: Ctx }) {
         </div>
       </Card>
       <Card title="Goods">
+        <label className="mb-3 flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 size-4"
+            checked={Boolean(ctx.data.withPrices)}
+            disabled={ctx.locked}
+            onChange={(e) => ctx.set('withPrices', e.target.checked)}
+          />
+          <span>
+            Show prices and totals (pavadzīme-rēķins)
+            <span className="block text-xs text-neutral-500">
+              The delivery note then also works as the invoice for these goods.
+            </span>
+          </span>
+        </label>
         <DeliveryLines ctx={ctx} />
       </Card>
       <Card title="Notes">

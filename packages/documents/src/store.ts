@@ -16,18 +16,44 @@ import {
   type DocType,
   type InvoiceData,
 } from './schema.ts';
-import { invoiceTotals } from './totals.ts';
+import { documentTotals, invoiceTotals, type DocumentTotals } from './totals.ts';
 
 /**
  * Database side of documents, shared by the API and the worker. Always
  * called inside the tenant's RLS context (withTenant).
  */
 
+/** The default number prefix per type; each business may set its own. */
 export const NUMBER_PREFIX: Record<DocType, string> = {
   invoice: 'INV',
   delivery_note: 'DN',
   cmr: 'CMR',
 };
+/** The tenant column holding each type's prefix. */
+export const PREFIX_COLUMN: Record<DocType, string> = {
+  invoice: 'doc_prefix_invoice',
+  delivery_note: 'doc_prefix_delivery_note',
+  cmr: 'doc_prefix_cmr',
+};
+/** A prefix: 1–10 capital letters or digits (no hyphen: it separates the number's parts). */
+export const PREFIX_PATTERN = /^[A-Z0-9]{1,10}$/;
+
+/**
+ * Per type: has a document already been issued this year (tenant time zone)?
+ * Then its prefix is fixed until the next year, so numbering has no gaps.
+ */
+export async function prefixLocks(tx: TransactionSql): Promise<Record<DocType, boolean>> {
+  const rows = await tx<{ type: DocType }[]>`
+    select distinct d.type from public.documents d join public.tenants t on t.id = d.tenant_id
+    where d.number is not null
+      and extract(year from d.issue_date) = extract(year from now() at time zone t.timezone)`;
+  const set = new Set(rows.map((r) => r.type));
+  return {
+    invoice: set.has('invoice'),
+    delivery_note: set.has('delivery_note'),
+    cmr: set.has('cmr'),
+  };
+}
 
 export interface DocumentRecord {
   id: string;
@@ -252,6 +278,23 @@ const counterparty = (type: DocType, data: DocData): string | null => {
   return n.trim() || null;
 };
 
+/** Invoices and priced delivery notes (pavadzīme-rēķins) have totals; other documents none. */
+export function documentTotalsOf(
+  type: DocType,
+  data: DocData,
+  vatMode: VatMode,
+  vatRate: number,
+): DocumentTotals {
+  if (type === 'invoice')
+    return invoiceTotals(data as InvoiceData, { mode: vatMode, ratePercent: vatRate });
+  if (type === 'delivery_note' && (data as DeliveryNoteData).withPrices)
+    return documentTotals((data as DeliveryNoteData).lines, {
+      mode: vatMode,
+      ratePercent: vatRate,
+    });
+  return { unitPrices: [], lineTotals: [], subtotalCents: 0, vatCents: 0, totalCents: 0 };
+}
+
 /** Stores a document's fields with the derived totals and counterparty. */
 export async function writeDocumentData(
   tx: TransactionSql,
@@ -259,10 +302,7 @@ export async function writeDocumentData(
   data: DocData,
   language?: string,
 ) {
-  const t =
-    d.type === 'invoice'
-      ? invoiceTotals(data as InvoiceData, { mode: d.vatMode, ratePercent: d.vatRate })
-      : { subtotalCents: 0, vatCents: 0, totalCents: 0 };
+  const t = documentTotalsOf(d.type, data, d.vatMode, d.vatRate);
   await tx`
     update public.documents
     set data = ${tx.json(data as never)}, subtotal_cents = ${t.subtotalCents}, vat_cents = ${t.vatCents},
@@ -272,20 +312,21 @@ export async function writeDocumentData(
     where id = ${d.id}`;
 }
 
-/** The next number of this type: INV-2026-0001 …, restarting each year (tenant row locked). */
+/** The next number of this type: INV-2026-0001 … (the tenant's prefix), restarting each year (tenant row locked). */
 export async function allocateDocumentNumber(
   tx: TransactionSql,
   tenantId: string,
   type: DocType,
 ): Promise<{ number: string; today: string }> {
-  const [t] = await tx<{ year: number; today: string }[]>`
+  const [t] = await tx<{ year: number; today: string; prefix: string }[]>`
     select extract(year from now() at time zone timezone)::int as year,
-           (now() at time zone timezone)::date::text as today
+           (now() at time zone timezone)::date::text as today,
+           ${tx(PREFIX_COLUMN[type])} as prefix
     from public.tenants where id = ${tenantId} for update`;
-  const prefix = `${NUMBER_PREFIX[type]}-${t!.year}-`;
+  const prefix = `${t!.prefix}-${t!.year}-`;
   const [m] = await tx<{ n: number }[]>`
     select coalesce(max(split_part(number, '-', 3)::int), 0)::int + 1 as n
-    from public.documents where number like ${`${prefix}%`}`;
+    from public.documents where type = ${type} and number like ${`${prefix}%`}`;
   return { number: `${prefix}${String(m!.n).padStart(4, '0')}`, today: t!.today };
 }
 
@@ -399,7 +440,13 @@ export async function createDocument(tx: TransactionSql, c: CreateInput): Promis
       },
       loadingAddress: t!.seller_legal_address ?? '',
       deliveryAddress: inv.buyer.address,
-      lines: inv.lines.map((l) => ({ name: l.name, unit: l.unit, qty: l.qty })),
+      // Prices are copied too, and shown only if the owner turns on the pavadzīme-rēķins.
+      lines: inv.lines.map((l) => ({
+        name: l.name,
+        unit: l.unit,
+        qty: l.qty,
+        unitPriceCents: l.unitPriceCents,
+      })),
     };
   } else if (c.fromMessageId) {
     if (c.type !== 'cmr')
@@ -502,16 +549,28 @@ export function documentCover(d: DocumentRecord, customerName: string | null): s
     number: d.number ?? '',
     total: formatMoney(d.totalCents, d.currency, locale),
     due: dateText(d.dueDate, d.language),
+    priced: d.type === 'delivery_note' && (d.data as DeliveryNoteData).withPrices,
   });
 }
 
 /** File name in the document's language, ASCII only ("Rekins-INV-2026-0001.pdf"). */
-export function documentFileName(d: Pick<DocumentRecord, 'type' | 'number' | 'language'>): string {
+export function documentFileName(
+  d: Pick<DocumentRecord, 'type' | 'number' | 'language'> & { data?: DocData },
+): string {
   const t = docLabels(d.language);
-  const word = d.type === 'cmr' ? 'CMR' : d.type === 'invoice' ? t.invoice : t.deliveryNote;
+  const priced =
+    d.type === 'delivery_note' && Boolean((d.data as DeliveryNoteData | undefined)?.withPrices);
+  const word =
+    d.type === 'cmr'
+      ? 'CMR'
+      : d.type === 'invoice'
+        ? t.invoice
+        : priced
+          ? t.deliveryNoteInvoice
+          : t.deliveryNote;
   const ascii = word
     .normalize('NFKD')
-    .replace(/[^A-Za-z ]/g, '')
+    .replace(/[^A-Za-z -]/g, '')
     .trim()
     .replace(/\s+/g, '-');
   return d.type === 'cmr' ? `${d.number ?? 'draft'}.pdf` : `${ascii}-${d.number ?? 'draft'}.pdf`;
@@ -540,8 +599,23 @@ export function renderDocumentPdf(d: DocumentRecord, logo: Buffer | null): Promi
       dueDate: d.dueDate,
     });
   }
-  if (d.type === 'delivery_note')
-    return renderDeliveryNotePdf({ ...ctx, data: d.data as DeliveryNoteData });
+  if (d.type === 'delivery_note') {
+    const data = d.data as DeliveryNoteData;
+    return renderDeliveryNotePdf({
+      ...ctx,
+      data,
+      ...(data.withPrices
+        ? {
+            priced: {
+              currency: d.currency,
+              vatMode: d.vatMode,
+              vatRatePercent: d.vatRate,
+              totals: documentTotals(data.lines, { mode: d.vatMode, ratePercent: d.vatRate }),
+            },
+          }
+        : {}),
+    });
+  }
   return renderCmrPdf({
     number: d.number,
     issueDate,

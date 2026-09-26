@@ -4,6 +4,8 @@ import { quoteLang, type QuoteLanguage } from '@noctiv/quotes';
 export interface DocLabels {
   invoice: string;
   deliveryNote: string;
+  /** The delivery note with prices and totals (pavadzīme-rēķins). */
+  deliveryNoteInvoice: string;
   date: string;
   dueDate: string;
   supplyDate: string;
@@ -45,6 +47,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   en: {
     invoice: 'Invoice',
     deliveryNote: 'Delivery note',
+    deliveryNoteInvoice: 'Delivery note and invoice',
     date: 'Date',
     dueDate: 'Due date',
     supplyDate: 'Supply date',
@@ -85,6 +88,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   de: {
     invoice: 'Rechnung',
     deliveryNote: 'Lieferschein',
+    deliveryNoteInvoice: 'Lieferschein und Rechnung',
     date: 'Datum',
     dueDate: 'Fällig am',
     supplyDate: 'Leistungsdatum',
@@ -125,6 +129,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   lv: {
     invoice: 'Rēķins',
     deliveryNote: 'Preču pavadzīme',
+    deliveryNoteInvoice: 'Preču pavadzīme-rēķins',
     date: 'Datums',
     dueDate: 'Apmaksas termiņš',
     supplyDate: 'Piegādes datums',
@@ -165,6 +170,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   nl: {
     invoice: 'Factuur',
     deliveryNote: 'Pakbon',
+    deliveryNoteInvoice: 'Pakbon en factuur',
     date: 'Datum',
     dueDate: 'Vervaldatum',
     supplyDate: 'Leveringsdatum',
@@ -204,6 +210,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   fr: {
     invoice: 'Facture',
     deliveryNote: 'Bon de livraison',
+    deliveryNoteInvoice: 'Bon de livraison et facture',
     date: 'Date',
     dueDate: 'Échéance',
     supplyDate: 'Date de livraison',
@@ -244,6 +251,7 @@ export const DOC_LABELS: Record<QuoteLanguage, DocLabels> = {
   es: {
     invoice: 'Factura',
     deliveryNote: 'Albarán',
+    deliveryNoteInvoice: 'Albarán y factura',
     date: 'Fecha',
     dueDate: 'Vencimiento',
     supplyDate: 'Fecha de operación',
