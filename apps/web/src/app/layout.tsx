@@ -33,7 +33,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // data-session is set before hydration by the session check on / (app/page.tsx).
+    <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">{children}</body>
     </html>
   );

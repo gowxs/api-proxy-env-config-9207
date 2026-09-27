@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+/* app.noctiv.io/ (app/page.tsx): public page unless a session is stored. */
+html[data-session] .public-only,
+html:not([data-session]) .session-only,
+html[data-home] .session-only {
+  display: none;
+}
+.home-loading::after {
+  content: 'Loading…';
+}
