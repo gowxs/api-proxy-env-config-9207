@@ -238,6 +238,23 @@ describe('Paddle webhook', () => {
     expect((await get(B)).json).toMatchObject({ status: 'active', entitled: true });
   });
 
+  it('a comped business stays comped through subscription events (e.g. the final cancel)', async () => {
+    const C = await seedTenant(owner, 'bill-comped', { embeddingAxis: 112 });
+    await owner`update public.tenants set billing_status = 'comped' where id = ${C.tenantId}`;
+    const r = await deliver(
+      subEvent(C, {
+        type: 'subscription.canceled',
+        status: 'canceled',
+        sub: 'sub_c1',
+        ctm: 'ctm_c',
+        at: new Date(Date.UTC(2026, 9, 27)).toISOString(),
+      }),
+    );
+    expect(r.json.result).toBe('applied_comped');
+    expect((await get(C)).json).toMatchObject({ status: 'comped', entitled: true });
+    expect((await row(C)).paddle_subscription_id).toBe('sub_c1');
+  });
+
   it('unknown subscriptions and other event types are acknowledged without changes', async () => {
     expect(
       (await deliver(subEvent(null, { sub: 'sub_nobody', ctm: 'ctm_nobody' }))).json.result,
