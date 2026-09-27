@@ -21,6 +21,15 @@ import { describeReason } from '../notify/templates.ts';
  * returns plain lines rendered by code — the numbers the assistant may use.
  * Text that came from customers is wrapped as data (customerText).
  */
+const PROVIDER_NAMES: Record<string, string> = {
+  gmail: 'Gmail',
+  google_workspace: 'Google Workspace',
+  yahoo: 'Yahoo Mail',
+  hostinger: 'Hostinger',
+  generic: 'other IMAP/SMTP',
+  outlook: 'Outlook',
+};
+
 export interface ToolContext {
   tx: TransactionSql;
   tenantId: string;
@@ -237,15 +246,20 @@ export async function runTool(
       ];
     }
     case 'mailbox_check': {
-      const boxes = await tx<{ id: string; email_address: string }[]>`
-        select id, email_address from public.email_connections where status = 'connected' order by created_at limit 3`;
+      const boxes = await tx<{ id: string; email_address: string; provider: string }[]>`
+        select id, email_address, provider from public.email_connections where status = 'connected'
+        order by created_at limit 3`;
       if (!boxes.length)
-        return ['No connected mailbox to check. Connect one in Settings → Mailboxes.'];
-      const out: string[] = [];
+        return [
+          'No mailbox is connected yet. During setup: the "Connect mailbox" button below the chat; later: Settings → Mailboxes.',
+        ];
+      const out: string[] = [
+        `Connected mailboxes: ${boxes.length} (already connected: do not ask the owner to connect it again)`,
+      ];
       for (const b of boxes) {
         const r = await c.checkMailbox(b.id);
         out.push(
-          `${b.email_address}: ${r.ok ? 'connection OK (IMAP and SMTP login work)' : `connection failed (${r.code ?? 'unknown error'})`}`,
+          `${b.email_address} (provider: ${PROVIDER_NAMES[b.provider] ?? b.provider}): ${r.ok ? 'connection OK (IMAP and SMTP login work)' : `connection failed (${r.code ?? 'unknown error'})`}`,
         );
       }
       return out;

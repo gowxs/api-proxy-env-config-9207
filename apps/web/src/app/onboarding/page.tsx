@@ -3,12 +3,14 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AssistantChat } from '@/components/assistant';
+import { browserLocale } from '@/lib/assistant';
 import { KnowledgeAdd, SourceList, type KbSource } from '@/components/knowledge';
 import { Logo } from '@/components/logo';
 import { MailboxForm } from '@/components/mailbox-form';
 import {
   Button,
   Card,
+  cx,
   ErrorText,
   Field,
   inputClass,
@@ -30,7 +32,7 @@ function timezones(): string[] {
   }
 }
 
-function BusinessStep({ onDone }: { onDone: () => Promise<void> }) {
+function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> }) {
   const { me } = useSession();
   const guess = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [name, setName] = useState('');
@@ -48,7 +50,7 @@ function BusinessStep({ onDone }: { onDone: () => Promise<void> }) {
         e.preventDefault();
         void run(async () => {
           const w = website.trim();
-          await api('/v1/tenants', {
+          const created = await api<{ id: string }>('/v1/tenants', {
             method: 'POST',
             body: {
               name: name.trim(),
@@ -57,7 +59,7 @@ function BusinessStep({ onDone }: { onDone: () => Promise<void> }) {
               ...(me.inviteRequired ? { inviteCode: invite.trim() } : {}),
             },
           });
-          await onDone();
+          await onDone(created.id);
         });
       }}
     >
@@ -242,21 +244,71 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
   const router = useRouter();
   const { tenant, refresh } = useSession();
   const { busy, error, run } = useAction();
+  // Settings is only reachable after setup, so the mailbox is connected here.
+  const [connecting, setConnecting] = useState(false);
   if (!tenant)
     return (
       <div className="space-y-4">
         <p className="text-sm text-neutral-600">
           First your business name; the assistant takes it from there.
         </p>
-        <BusinessStep onDone={refresh} />
+        <BusinessStep
+          onDone={async (tenantId) => {
+            // Starting the conversation now also marks this business as set up with the assistant.
+            await api(`/v1/tenants/${tenantId}/assistant/new`, {
+              method: 'POST',
+              body: { purpose: 'onboarding', locale: browserLocale() },
+            });
+            await refresh();
+          }}
+        />
       </div>
     );
   return (
     <div className="flex h-[calc(100dvh-9rem)] min-h-[28rem] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white">
       <div className="min-h-0 flex-1">
-        <AssistantChat tenantId={tenant.id} purpose="onboarding" onApplied={() => void refresh()} />
+        {connecting ? (
+          <div className="h-full space-y-4 overflow-y-auto p-4">
+            <p className="text-sm text-neutral-600">
+              Connect the mailbox your customers write to. You need an App Password — ask the
+              assistant how to get one for your provider.
+            </p>
+            <MailboxForm
+              tenantId={tenant.id}
+              onSaved={() => {
+                void refresh();
+                setConnecting(false);
+              }}
+            />
+            <Button variant="ghost" className="w-full" onClick={() => setConnecting(false)}>
+              Back to the assistant
+            </Button>
+          </div>
+        ) : (
+          <AssistantChat
+            tenantId={tenant.id}
+            purpose="onboarding"
+            onApplied={() => void refresh()}
+          />
+        )}
       </div>
-      <div className="flex items-center gap-3 border-t border-neutral-200 p-3">
+      {!connecting && (
+        <div className="border-t border-neutral-200 px-3 py-2.5 text-sm">
+          {tenant.mailboxes > 0 ? (
+            <span className="text-neutral-600">✓ Mailbox connected</span>
+          ) : (
+            <button className="font-medium text-indigo-700" onClick={() => setConnecting(true)}>
+              Connect mailbox
+            </button>
+          )}
+        </div>
+      )}
+      <div
+        className={cx(
+          'flex items-center gap-3 border-t border-neutral-200 p-3',
+          connecting && 'hidden',
+        )}
+      >
         <Button
           className="flex-1"
           disabled={busy}
@@ -282,18 +334,54 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
   );
 }
 
+const PATH_KEY = 'noctiv.onboarding.path';
+function savedPath(): 'assistant' | 'manual' | null {
+  try {
+    const v = localStorage.getItem(PATH_KEY);
+    return v === 'assistant' || v === 'manual' ? v : null;
+  } catch {
+    return null;
+  }
+}
+function savePath(p: 'assistant' | 'manual') {
+  try {
+    localStorage.setItem(PATH_KEY, p);
+  } catch {
+    // Private mode: the choice is simply not remembered.
+  }
+}
+
 function Wizard() {
   const router = useRouter();
   const { tenant, refresh } = useSession();
   const initial = !tenant ? 0 : tenant.mailboxes === 0 ? 1 : 2;
   const [step, setStep] = useState(initial);
-  const [path, setPath] = useState<'choose' | 'assistant' | 'manual'>(tenant ? 'manual' : 'choose');
+  // A business created on the assistant path comes back to the assistant after a reload.
+  const [path, setPathState] = useState<'choose' | 'assistant' | 'manual' | 'resolving'>(() =>
+    !tenant ? 'choose' : (savedPath() ?? 'resolving'),
+  );
+  const setPath = (p: 'assistant' | 'manual') => {
+    savePath(p);
+    setPathState(p);
+  };
   const [tested, setTested] = useState(false);
+
+  useEffect(() => {
+    if (path !== 'resolving' || !tenant) return;
+    let live = true;
+    api<{ conversation: unknown }>(`/v1/tenants/${tenant.id}/assistant?purpose=onboarding`)
+      .then((r) => live && setPathState(r.conversation ? 'assistant' : 'manual'))
+      .catch(() => live && setPathState('manual'));
+    return () => {
+      live = false;
+    };
+  }, [path, tenant]);
 
   useEffect(() => {
     if (tenant?.onboarding_completed_at) router.replace('/');
   }, [tenant, router]);
 
+  if (path === 'resolving') return null;
   if (path !== 'manual')
     return (
       <main className="mx-auto max-w-lg px-4 py-6">

@@ -84,6 +84,7 @@ interface Words {
   noteCard: string;
   priceCard: string;
   cannot: string;
+  errors: { free_tier_refused: string; budget_halted: string; model_error: string };
 }
 
 export const WORDS: Record<AssistantLocale, Words> = {
@@ -114,6 +115,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
     noteCard: 'Add to your knowledge base',
     priceCard: 'Add to your price list',
     cannot: 'I can’t send e-mails, approve drafts, create documents or change billing.',
+    errors: {
+      free_tier_refused:
+        'The assistant is not available on the current AI plan yet. Everything else works as usual; set up manually for now.',
+      budget_halted: 'Today’s AI budget is used up. The assistant is back tomorrow.',
+      model_error: 'The assistant could not answer right now. Try again in a moment.',
+    },
   },
   de: {
     title: 'Noctiv Assistent',
@@ -147,6 +154,13 @@ export const WORDS: Record<AssistantLocale, Words> = {
     priceCard: 'Zur Preisliste hinzufügen',
     cannot:
       'Ich kann keine E-Mails senden, keine Entwürfe freigeben, keine Dokumente erstellen und die Abrechnung nicht ändern.',
+    errors: {
+      free_tier_refused:
+        'Der Assistent ist im aktuellen KI-Tarif noch nicht verfügbar. Alles andere funktioniert wie gewohnt; richten Sie Noctiv vorerst manuell ein.',
+      budget_halted: 'Das heutige KI-Budget ist aufgebraucht. Der Assistent ist morgen wieder da.',
+      model_error:
+        'Der Assistent konnte gerade nicht antworten. Versuchen Sie es gleich noch einmal.',
+    },
   },
   lv: {
     title: 'Noctiv asistents',
@@ -179,6 +193,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
     priceCard: 'Pievienot cenrādim',
     cannot:
       'Es nevaru sūtīt e-pastus, apstiprināt melnrakstus, veidot dokumentus vai mainīt norēķinus.',
+    errors: {
+      free_tier_refused:
+        'Asistents pašreizējā MI plānā vēl nav pieejams. Viss pārējais darbojas kā parasti; pagaidām iestatiet Noctiv manuāli.',
+      budget_halted: 'Šodienas MI budžets ir izlietots. Asistents atgriezīsies rīt.',
+      model_error: 'Asistents šobrīd nevarēja atbildēt. Mēģiniet vēlreiz pēc brīža.',
+    },
   },
   nl: {
     title: 'Noctiv Assistent',
@@ -208,6 +228,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
     priceCard: 'Toevoegen aan je prijslijst',
     cannot:
       'Ik kan geen e-mails versturen, concepten goedkeuren, documenten maken of de facturering wijzigen.',
+    errors: {
+      free_tier_refused:
+        'De assistent is nog niet beschikbaar in het huidige AI-abonnement. Al het andere werkt gewoon; stel Noctiv voorlopig handmatig in.',
+      budget_halted: 'Het AI-budget van vandaag is op. De assistent is morgen terug.',
+      model_error: 'De assistent kon nu niet antwoorden. Probeer het zo opnieuw.',
+    },
   },
   fr: {
     title: 'Assistant Noctiv',
@@ -241,6 +267,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
     priceCard: 'Ajouter à votre liste de prix',
     cannot:
       'Je ne peux pas envoyer d’e-mails, approuver des brouillons, créer des documents ni modifier la facturation.',
+    errors: {
+      free_tier_refused:
+        'L’assistant n’est pas encore disponible avec l’offre IA actuelle. Tout le reste fonctionne normalement ; configurez Noctiv manuellement pour l’instant.',
+      budget_halted: 'Le budget IA du jour est épuisé. L’assistant revient demain.',
+      model_error: 'L’assistant n’a pas pu répondre pour le moment. Réessayez dans un instant.',
+    },
   },
   es: {
     title: 'Asistente Noctiv',
@@ -273,5 +305,11 @@ export const WORDS: Record<AssistantLocale, Words> = {
     priceCard: 'Añadir a tu lista de precios',
     cannot:
       'No puedo enviar correos, aprobar borradores, crear documentos ni cambiar la facturación.',
+    errors: {
+      free_tier_refused:
+        'El asistente aún no está disponible con el plan de IA actual. Todo lo demás funciona con normalidad; por ahora, configura Noctiv manualmente.',
+      budget_halted: 'El presupuesto de IA de hoy se ha agotado. El asistente vuelve mañana.',
+      model_error: 'El asistente no ha podido responder ahora. Inténtalo de nuevo en un momento.',
+    },
   },
 };

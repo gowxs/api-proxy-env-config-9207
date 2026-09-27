@@ -12,7 +12,7 @@ import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AutoSendDialog } from '@/components/auto-send-dialog';
 import { Button, cx, ErrorText } from '@/components/ui';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import {
   browserLocale,
   INTL_LOCALE,
@@ -270,10 +270,13 @@ export function AssistantChat({
       messages: [...(t?.messages ?? []), optimistic],
     }));
     try {
-      const r = await api<{
-        conversation: AssistantThread['conversation'];
-        messages: AssistantMessage[];
-      }>(`/v1/tenants/${tenantId}/assistant/messages`, {
+      type Turn = {
+        pending?: boolean;
+        jobId?: string;
+        conversation?: AssistantThread['conversation'];
+        messages?: AssistantMessage[];
+      };
+      const first = await api<Turn>(`/v1/tenants/${tenantId}/assistant/messages`, {
         method: 'POST',
         body: {
           text: body,
@@ -283,12 +286,37 @@ export function AssistantChat({
           contextPath: pathname,
         },
       });
+      const conversation = first.conversation ?? null;
+      let messages = first.messages ?? [];
+      // A slow answer (several lookups): fetched when it is ready.
+      if (first.pending && first.jobId) {
+        setThread((t) => ({
+          conversation,
+          messages: [...(t?.messages ?? []).filter((m) => m.id !== optimistic.id), ...messages],
+        }));
+        const until = Date.now() + 180_000;
+        let done: Turn | null = null;
+        while (!done && Date.now() < until) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const r = await api<Turn>(`/v1/tenants/${tenantId}/assistant/turns/${first.jobId}`);
+          if (!r.pending) done = r;
+        }
+        if (!done) throw new Error(w.errors.model_error);
+        messages = done.messages ?? [];
+        setThread((t) => ({
+          conversation: done.conversation ?? conversation,
+          messages: [...(t?.messages ?? []), ...messages],
+        }));
+        return;
+      }
       setThread((t) => ({
-        conversation: r.conversation,
-        messages: [...(t?.messages ?? []).filter((m) => m.id !== optimistic.id), ...r.messages],
+        conversation,
+        messages: [...(t?.messages ?? []).filter((m) => m.id !== optimistic.id), ...messages],
       }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      const code = e instanceof ApiError ? e.code : undefined;
+      const known = code ? (w.errors as Record<string, string>)[code] : undefined;
+      setError(known ?? (e instanceof Error ? e.message : w.errors.model_error));
     } finally {
       setBusy(false);
     }

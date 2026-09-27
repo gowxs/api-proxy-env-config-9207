@@ -17,6 +17,7 @@ import {
   type NormalizedProposal,
   type PromptPart,
   type TokenUsage,
+  type Logger,
 } from '@noctiv/core';
 import { currentBudget, recordUsage, withTenant, type Job } from '@noctiv/db';
 import type { Sql } from 'postgres';
@@ -30,6 +31,7 @@ export interface AssistantDeps {
     tenantId: string,
     connectionId: string,
   ) => Promise<{ ok: boolean; code?: string | null }>;
+  logger?: Logger;
 }
 
 export type AssistantTurnResult =
@@ -55,6 +57,35 @@ const UNSURE: Record<AssistantLanguage, string> = {
   fr: 'Désolé, je n’ai pas pu répondre de façon fiable. Pouvez-vous reformuler ?',
   es: 'Lo siento, no pude responder con seguridad. ¿Puedes preguntarlo de otra forma?',
 };
+
+const NO_CARD: Record<AssistantLanguage, string> = {
+  en: '(Some of this is not shown as a card: it is already set, or I could not use the values as given.)',
+  de: '(Ein Teil davon erscheint nicht als Karte: Es ist bereits so eingestellt, oder ich konnte die Werte so nicht übernehmen.)',
+  lv: '(Daļa no tā netiek rādīta kā kartīte: tas jau ir iestatīts, vai es nevarēju izmantot norādītās vērtības.)',
+  nl: '(Een deel hiervan staat niet op een kaart: het is al zo ingesteld, of ik kon de waarden niet zo gebruiken.)',
+  fr: '(Une partie n’apparaît pas sous forme de carte : c’est déjà réglé, ou je n’ai pas pu utiliser les valeurs telles quelles.)',
+  es: '(Parte de esto no aparece como tarjeta: ya está configurado o no pude usar los valores tal como se dieron.)',
+};
+
+/** One line per earlier card, for the model: what it was and what the owner did. */
+function describeCard(c: {
+  type: string;
+  title: string;
+  payload: Record<string, unknown>;
+  status: string;
+  error: string | null;
+}): string {
+  const what =
+    c.type === 'settings'
+      ? ((c.payload.lines as [string, string][] | undefined) ?? [])
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('; ')
+      : c.type === 'knowledge_note'
+        ? `knowledge note "${String(c.payload.title ?? '')}"`
+        : `price items: ${((c.payload.items as { name: string }[] | undefined) ?? []).map((i) => i.name).join(', ')}`;
+  const why = c.status === 'failed' && c.error ? ` (reason: ${c.error.slice(0, 200)})` : '';
+  return `  [CARD (${c.status}): ${c.title} — ${what}${why}]`;
+}
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 
@@ -84,12 +115,27 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       const [conv] = await tx<{ locale: AssistantLanguage; purpose: 'app' | 'onboarding' }[]>`
         select locale, purpose from public.assistant_conversations where id = ${conversationId}`;
       const history = await tx<
-        { role: 'owner' | 'assistant'; text: string; context_path: string | null }[]
+        { id: string; role: 'owner' | 'assistant'; text: string; context_path: string | null }[]
       >`
-        select role, text, context_path from (
-          select role, text, context_path, created_at from public.assistant_messages
+        select id, role, text, context_path from (
+          select id, role, text, context_path, created_at from public.assistant_messages
           where conversation_id = ${conversationId} order by created_at desc limit 16) h
         order by created_at`;
+      // The cards already on screen and what the owner did with them.
+      const cards = history.length
+        ? await tx<
+            {
+              message_id: string;
+              type: string;
+              title: string;
+              payload: Record<string, unknown>;
+              status: string;
+              error: string | null;
+            }[]
+          >`
+            select message_id, type, title, payload, status, error from public.assistant_proposals
+            where message_id in ${tx(history.map((m) => m.id))} order by created_at`
+        : [];
       const mailboxes = await tx<{ is_test_mailbox: boolean }[]>`
         select is_test_mailbox from public.email_connections where status = 'connected'`;
       // An owner message that never got an answer (a failed turn) is not answered later.
@@ -103,6 +149,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
         t: t!,
         conv: conv!,
         history: answered,
+        cards,
         budget: (await currentBudget(tx, tenantId)).state,
         origin: originForTenantKnowledge(
           mailboxes.map((m) => ({ isTestMailbox: m.is_test_mailbox })),
@@ -137,9 +184,20 @@ export function assistantTurnHandler(deps: AssistantDeps) {
     const threadHint = latest?.context_path?.match(
       /^\/(?:conversations|escalations)\/([^/?#]+)/,
     )?.[1];
+    // The settings as they are now, so the model does not propose what is already set.
+    const now = currentSettings(t);
+    const settingsLine = `Current settings: ${SHOWN_SETTINGS.map(
+      (k) =>
+        `${k}=${typeof now[k] === 'string' && /^\d+\.\d+$/.test(now[k]) ? Number(now[k]) : String(now[k])}`,
+    ).join('; ')}`;
+    evidence.add(settingsLine, 'tool');
     const conversation = [
+      settingsLine,
       `<<<CONVERSATION_${nonce}>>>`,
-      ...ctx.history.map((m) => `${m.role === 'owner' ? 'OWNER' : 'ASSISTANT'}: ${m.text}`),
+      ...ctx.history.flatMap((m) => [
+        `${m.role === 'owner' ? 'OWNER' : 'ASSISTANT'}: ${m.text}`,
+        ...ctx.cards.filter((c) => c.message_id === m.id).map(describeCard),
+      ]),
       `<<<END_CONVERSATION_${nonce}>>>`,
       latest?.context_path ? `The owner is on the page ${latest.context_path}.` : '',
       threadHint && UUID.test(threadHint) ? `Conversation id of that page: ${threadHint}` : '',
@@ -174,6 +232,15 @@ export function assistantTurnHandler(deps: AssistantDeps) {
         );
       } catch (e) {
         if (e instanceof TrainingDataPolicyError) return { ok: false, error: 'free_tier_refused' };
+        // The error only: never the prompt or the owner's text.
+        deps.logger?.warn(
+          {
+            tenantId,
+            step,
+            err: e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 500) : 'error',
+          },
+          'assistant model call failed',
+        );
         await record(deps, tenantId, usage, calls);
         return { ok: false, error: 'model_error' };
       }
@@ -241,7 +308,9 @@ export function assistantTurnHandler(deps: AssistantDeps) {
         }),
       )
       .filter((p): p is NormalizedProposal => p !== null);
-    const reply = final.reply.trim() || UNSURE[language];
+    let reply = final.reply.trim() || UNSURE[language];
+    // The model proposed something that did not pass the checks: no card appears.
+    if (final.proposals.length > proposals.length) reply = `${reply}\n\n${NO_CARD[language]}`;
 
     const messageId = await withTenant(deps.sql, tenantId, async (tx) => {
       const [m] = await tx<{ id: string }[]>`
@@ -303,6 +372,20 @@ function isTimezone(tz: string): boolean {
 }
 
 /** Current values under the API field names, for "old → new" on the cards. */
+/** Settings the model sees on every turn (the rest via tools). */
+const SHOWN_SETTINGS = [
+  'timezone',
+  'quotesCurrency',
+  'quotesVatRate',
+  'quotesVatMode',
+  'mode',
+  'followupAfterDays',
+  'followupMax',
+  'quotesEnabled',
+  'documentsEnabled',
+  'weeklyReportEnabled',
+];
+
 function currentSettings(t: Record<string, unknown>): Record<string, unknown> {
   return {
     name: t.name,

@@ -22,6 +22,7 @@ beforeAll(async () => {
     verifyToken: createTokenVerifier({ jwks: auth.jwks }),
     credentialsPublicKey: generateSealingKeyPair().publicKey,
     connectionTestWaitMs: 1_000,
+    assistantWaitMs: 300,
   });
   A = await seedTenant(owner, 'asst-api-a', { embeddingAxis: 211 });
   B = await seedTenant(owner, 'asst-api-b', { embeddingAxis: 212 });
@@ -152,5 +153,49 @@ describe('Noctiv Assistant: proposals are applied only when the owner confirms (
     expect(other.status).toBe(200);
     expect(JSON.stringify(other.json)).not.toContain(id);
     expect(JSON.stringify(other.json)).not.toContain('Here is the change.');
+  });
+
+  it('a slow answer: the message returns "pending" and the app fetches the answer when ready', async () => {
+    const send = await call('POST', `/v1/tenants/${A.tenantId}/assistant/messages`, A.userId, {
+      text: 'How did last week go?',
+      locale: 'en',
+    });
+    expect(send.status).toBe(202);
+    expect(send.json).toMatchObject({ pending: true, messages: [{ role: 'owner' }] });
+    const turn = `/v1/tenants/${A.tenantId}/assistant/turns/${send.json.jobId}`;
+    expect((await call('GET', turn, A.userId)).status).toBe(202);
+    // Another business cannot look at it.
+    expect((await call('GET', turn, B.userId)).status).toBe(403);
+    expect(
+      (await call('GET', `/v1/tenants/${B.tenantId}/assistant/turns/${send.json.jobId}`, B.userId))
+        .status,
+    ).toBe(404);
+
+    // What the worker does when it has answered (apps/worker/src/jobs/assistant-turn.ts).
+    const [m] = await owner<{ id: string }[]>`
+      insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+      values (${A.tenantId}, ${send.json.conversation.id}, 'assistant', 'Last week: 12 e-mails answered.')
+      returning id`;
+    await owner`update public.jobs set status = 'done', result = ${owner.json({ ok: true, messageId: m!.id })}
+                where id = ${send.json.jobId}`;
+    const done = await call('GET', turn, A.userId);
+    expect(done.status).toBe(200);
+    expect(done.json.messages).toMatchObject([
+      { id: m!.id, text: 'Last week: 12 e-mails answered.' },
+    ]);
+
+    const again = await call('POST', `/v1/tenants/${A.tenantId}/assistant/messages`, A.userId, {
+      text: 'And this week?',
+      conversationId: send.json.conversation.id,
+    });
+    await owner`update public.jobs set status = 'done', result = ${owner.json({ ok: false, error: 'free_tier_refused' })}
+                where id = ${again.json.jobId}`;
+    const refused = await call(
+      'GET',
+      `/v1/tenants/${A.tenantId}/assistant/turns/${again.json.jobId}`,
+      A.userId,
+    );
+    expect(refused.status).toBe(422);
+    expect(refused.json.code).toBe('free_tier_refused');
   });
 });

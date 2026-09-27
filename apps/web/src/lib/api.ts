@@ -4,9 +4,12 @@ import { getAccessToken } from './auth';
 
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** A machine-readable reason, when the API gives one. */
+  readonly code: string | undefined;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -33,7 +36,7 @@ export async function api<T = unknown>(
       (data as { error?: string; message?: string } | undefined)?.error ??
       (data as { message?: string } | undefined)?.message ??
       `Request failed (${res.status})`;
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, (data as { code?: string } | undefined)?.code);
   }
   return data as T;
 }

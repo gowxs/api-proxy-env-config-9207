@@ -917,6 +917,10 @@ QA.md lists the findings; these are the decisions and how they were built.
 
 ## 27. Noctiv Assistant (beta) (founder request 2026-09-29)
 
+- **Onboarding path:**
+  - Creating the business on the assistant path starts the onboarding conversation, so a reload or another device comes back to the assistant.
+  - The browser also remembers the choice.
+  - The mailbox is connected from the setup chat ("Connect mailbox", the same form as the manual step), because Settings opens only after setup.
 - **Where:**
   - A floating button on every app page opens it: full screen on a phone, a 400×640 panel on a desktop.
   - It is also the first screen of onboarding: "Set up with the assistant" or "Set up manually". The assistant path first creates the business (name, time zone, invite code), then opens the setup chat with a "Finish setup" button.
@@ -928,8 +932,13 @@ QA.md lists the findings; these are the decisions and how they were built.
 - **How a turn works:**
   - The API stores the owner's message and queues `assistant.turn` (at most 200 owner messages per business per day).
   - The worker runs a JSON step loop of at most 5 model calls. Each step either calls one read-only tool or answers.
-  - The API waits up to 60 s for the result, the same way compose-assist does.
+  - The send request waits up to 20 s for the answer. A slower turn returns 202 "pending" with the job id; the app then polls `GET …/assistant/turns/:jobId` every 1.5 s for up to 3 minutes. That keeps every request well under proxy timeouts: the free Gemini tier took 50–110 s for a turn with a lookup.
   - An owner message whose turn failed is not answered later.
+  - Each turn, the model sees:
+    - The current settings (time zone, currency, VAT, prices incl./excl. VAT, mode, follow-ups, modules), so it does not propose what is already set.
+    - Its earlier cards and what the owner did with them: `[CARD (proposed|applied|dismissed|failed): …]`.
+  - If a proposal fails the checks, no card appears, and the answer gets a short note saying so, in the owner's language.
+  - A failed model call is logged (error only, no text). The error the app shows is in the owner's language.
 - **Read-only tools** (apps/worker/src/assistant/tools.ts):
   - `account_overview`, `value_report` (week, last week, month, last month; same numbers as §26), `open_quotes`, `escalations` (incl. "why was this e-mail escalated" via the conversation on screen), `knowledge_status`, `price_list`, `mailbox_check` (runs the real connection test), `locale_defaults` (time zone → currency and VAT).
   - All tools run inside `withTenant`, so there is no cross-tenant access.

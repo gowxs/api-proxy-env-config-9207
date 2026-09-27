@@ -100,6 +100,7 @@ const runner = new JobRunner({
     }),
     [QUEUES.assistantTurn]: assistantTurnHandler({
       sql: db.sql,
+      logger,
       llm: providers.llm,
       checkMailbox: async (tenantId, connectionId) => {
         const r = (await mailboxHealth({

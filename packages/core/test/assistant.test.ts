@@ -58,6 +58,30 @@ describe('assistant proposals (PLAN.md §27)', () => {
     expect(p.requiresConfirmation).toBe(true);
   });
 
+  it('values that are already set are shown as such, so the card matches the answer', () => {
+    const p = normalizeProposal(
+      proposal({
+        settings: [
+          { key: 'timezone', value: 'Europe/Riga' },
+          { key: 'followupAfterDays', value: '2' },
+        ],
+      }),
+      ctx('Follow up after 2 days, we are in Riga'),
+    )!;
+    expect(p.payload.changes).toEqual({ followupAfterDays: 2 });
+    expect(p.payload.lines).toEqual([
+      ['Follow up after (business days)', '3 → 2'],
+      ['Time zone', 'Europe/Riga (already set)'],
+    ]);
+    // Nothing to change at all: no card.
+    expect(
+      normalizeProposal(
+        proposal({ settings: [{ key: 'timezone', value: 'Europe/Riga' }] }),
+        ctx('We are in Riga'),
+      ),
+    ).toBeNull();
+  });
+
   it('numbers must come from the owner or a tool; moving back to mode 1 needs no dialog', () => {
     // 19 % said by nobody: dropped; with a tool result that says 19 %: kept.
     expect(

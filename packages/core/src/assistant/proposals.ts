@@ -309,11 +309,17 @@ export function normalizeProposal(
   if (p.type === 'settings') {
     const changes: Record<string, unknown> = {};
     const lines: [string, string][] = [];
+    // Values the model proposed that are already set: shown, so the card matches its text.
+    const unchanged: [string, string][] = [];
     for (const { key, value } of p.settings) {
       const parsed = parseSetting(key, value, ctx);
       if (parsed === undefined || key in changes) continue;
       const cur = ctx.current[key];
-      if (cur !== undefined && String(cur) === String(parsed)) continue;
+      if (cur !== undefined && String(cur) === String(parsed)) {
+        if (!unchanged.some(([l]) => l === ASSISTANT_SETTINGS[key]!.label))
+          unchanged.push([ASSISTANT_SETTINGS[key]!.label, `${show(key, cur)} (already set)`]);
+        continue;
+      }
       changes[key] = parsed;
       const def = ASSISTANT_SETTINGS[key]!;
       lines.push([
@@ -329,7 +335,12 @@ export function normalizeProposal(
     const requiresConfirmation = keys.some(
       (k) => ASSISTANT_SETTINGS[k]!.sending && !(k === 'mode' && modeDown),
     );
-    return { type: 'settings', title, payload: { changes, lines }, requiresConfirmation };
+    return {
+      type: 'settings',
+      title,
+      payload: { changes, lines: [...lines, ...unchanged] },
+      requiresConfirmation,
+    };
   }
   if (p.type === 'knowledge_note') {
     const noteTitle = p.note_title.trim().slice(0, 200);

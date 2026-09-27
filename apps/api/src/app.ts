@@ -43,6 +43,8 @@ export interface AppDeps {
   /** Worker's public sealing key: the API can encrypt mailbox passwords but never decrypt them. */
   credentialsPublicKey: string;
   connectionTestWaitMs: number;
+  /** How long a Noctiv Assistant message waits for the answer before the app polls (default 20 s). */
+  assistantWaitMs?: number;
   requireMember: (tenantId: string, userId: string) => Promise<void>;
   /** Shared with the worker: verifies Approve / Reject links. Without it those routes are off. */
   actionSecret?: string;

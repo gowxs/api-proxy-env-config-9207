@@ -1,4 +1,4 @@
-import { enqueue, getJob, withTenant } from '@noctiv/db';
+import { enqueue, withTenant } from '@noctiv/db';
 import type { FastifyInstance } from 'fastify';
 import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
@@ -26,13 +26,16 @@ const messageBody = z
 const ERRORS: Record<string, string> = {
   budget_halted: 'The daily AI budget is used up. The assistant is back tomorrow.',
   free_tier_refused:
-    'The assistant needs the paid AI provider while real mailboxes are connected. Everything else works as usual.',
+    'The assistant is not available on the current AI plan yet. Everything else works as usual; set up manually for now.',
   model_error: 'The assistant could not answer right now. Try again in a moment.',
   invalid_output: 'The assistant could not answer that. Try asking another way.',
 };
 
 /** Owner messages per business and day: the assistant is a helper, not a chat service. */
 const DAILY_MESSAGES = 200;
+
+/** How long the send request waits for the answer before the app polls for it. */
+const WAIT_MS = 20_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -147,36 +150,70 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
       });
       return { conv, owner: { ...m!, proposals: [] }, jobId: jobId! };
     });
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      const job = await withTenant(deps.sql, tenantId, (tx) => getJob(tx, started.jobId));
-      if (job?.status === 'done') {
-        const r = job.result as { ok: boolean; error?: string; messageId?: string };
-        if (!r.ok)
-          return reply.code(422).send({
-            error: ERRORS[r.error ?? ''] ?? ERRORS.model_error,
-            ownerMessage: started.owner,
+    // A quick answer comes back on this request; a slow one (several model calls) is
+    // fetched with GET .../assistant/turns/:jobId, so no proxy timeout cuts it off.
+    const deadline = Date.now() + (deps.assistantWaitMs ?? WAIT_MS);
+    for (;;) {
+      const r = await turnResult(tenantId, userId, started.jobId);
+      if (r.kind !== 'pending' || Date.now() >= deadline) {
+        if (r.kind === 'pending')
+          return reply.code(202).send({
+            pending: true,
+            jobId: started.jobId,
+            conversation: started.conv,
+            messages: [started.owner],
           });
-        return withTenant(deps.sql, tenantId, async (tx) => {
-          const rows = await tx<Row[]>`
-            select id, role, text, suggestions, created_at from public.assistant_messages
-            where id = ${r.messageId!}`;
-          const [conv] = await tx`
-            select id, locale, purpose from public.assistant_conversations where id = ${started.conv.id}`;
-          return {
-            conversation: conv,
-            messages: [started.owner, ...(await withProposals(tx, rows))],
-          };
-        });
+        if (r.kind === 'error')
+          return reply.code(422).send({ ...r.body, ownerMessage: started.owner });
+        return { ...r.body, messages: [started.owner, ...r.body.messages] };
       }
-      if (job?.status === 'dead' || job?.status === 'failed')
-        return reply.code(422).send({ error: ERRORS.model_error });
       await sleep(400);
     }
-    return reply
-      .code(504)
-      .send({ error: 'The assistant is taking too long. Try again in a moment.' });
   });
+
+  /** A turn that took longer than the send request waited. */
+  app.get('/v1/tenants/:tenantId/assistant/turns/:jobId', async (req, reply) => {
+    const { tenantId, jobId } = z.object({ tenantId: z.uuid(), jobId: z.uuid() }).parse(req.params);
+    await deps.requireMember(tenantId, req.user!.userId);
+    const r = await turnResult(tenantId, req.user!.userId, jobId);
+    if (r.kind === 'pending') return reply.code(202).send({ pending: true, jobId });
+    if (r.kind === 'error') return reply.code(422).send(r.body);
+    return r.body;
+  });
+
+  type Turn =
+    | { kind: 'pending' }
+    | { kind: 'error'; body: { error: string; code: string } }
+    | { kind: 'done'; body: { conversation: unknown; messages: unknown[] } };
+  const turnResult = (tenantId: string, userId: string, jobId: string): Promise<Turn> =>
+    withTenant(deps.sql, tenantId, async (tx) => {
+      const [job] = await tx<
+        { queue: string; status: string; result: unknown; payload: { conversationId?: string } }[]
+      >`select queue, status, result, payload from public.jobs where id = ${jobId}`;
+      const conversationId = job?.payload?.conversationId;
+      const [conv] =
+        job?.queue === ASSISTANT_QUEUE && conversationId
+          ? await tx<{ id: string; locale: string; purpose: string }[]>`
+              select id, locale, purpose from public.assistant_conversations
+              where id = ${conversationId} and user_id = ${userId}`
+          : [];
+      if (!job || !conv) throw new HttpError(404, 'Not found.');
+      if (job.status === 'dead' || job.status === 'failed')
+        return { kind: 'error', body: { error: ERRORS.model_error!, code: 'model_error' } };
+      if (job.status !== 'done') return { kind: 'pending' };
+      const r = job.result as { ok: boolean; error?: string; messageId?: string };
+      if (!r.ok) {
+        const code = r.error && ERRORS[r.error] ? r.error : 'model_error';
+        return { kind: 'error', body: { error: ERRORS[code]!, code } };
+      }
+      const rows = await tx<Row[]>`
+        select id, role, text, suggestions, created_at from public.assistant_messages
+        where id = ${r.messageId!}`;
+      return {
+        kind: 'done',
+        body: { conversation: conv, messages: await withProposals(tx, rows) },
+      };
+    });
 
   const decided = async (tenantId: string, id: string) =>
     withTenant(deps.sql, tenantId, async (tx) => {

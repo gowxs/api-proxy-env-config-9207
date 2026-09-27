@@ -97,6 +97,10 @@ describe('Noctiv Assistant turn (PLAN.md §27)', () => {
     expect(m.text).toBe('You have 1 open quote: Q-2026-0001 for €480.00, sent.');
     expect(m.tools_used).toEqual(['open_quotes']);
     // The tool saw only this business; the customer's name is fenced as data.
+    // The settings as they are, so it does not propose what is already set.
+    expect(text(llm.calls[0]!)).toMatch(
+      /Current settings: timezone=Europe\/Riga;.*quotesCurrency=EUR/,
+    );
     const second = text(llm.calls[1]!);
     expect(second).toContain('Q-2026-0001');
     expect(second).not.toContain('Other business customer');
@@ -222,5 +226,45 @@ describe('Noctiv Assistant turn (PLAN.md §27)', () => {
     expect((await turn(A, 'hi', free)).r).toEqual({ ok: false, error: 'free_tier_refused' });
     expect(free.calls).toHaveLength(0);
     await owner`update public.email_connections set is_test_mailbox = true where tenant_id = ${A.tenantId}`;
+  });
+
+  it('sees its earlier cards and what the owner did; says so when a proposal became no card', async () => {
+    const [c] = await owner<{ id: string }[]>`
+      insert into public.assistant_conversations (tenant_id, user_id) values (${A.tenantId}, ${A.userId})
+      returning id`;
+    await owner`insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+                values (${A.tenantId}, ${c!.id}, 'owner', 'We are in Berlin')`;
+    const [m] = await owner<{ id: string }[]>`
+      insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+      values (${A.tenantId}, ${c!.id}, 'assistant', 'Here is the time zone.') returning id`;
+    await owner`insert into public.assistant_proposals (tenant_id, conversation_id, message_id, type, title, payload, status)
+                values (${A.tenantId}, ${c!.id}, ${m!.id}, 'settings', 'Time zone',
+                        ${owner.json({ changes: { timezone: 'Europe/Berlin' }, lines: [['Time zone', 'Europe/Riga → Europe/Berlin']] })},
+                        'applied')`;
+    await owner`insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+                values (${A.tenantId}, ${c!.id}, 'owner', 'Keep follow-ups at 3 days')`;
+    const llm = new FakeProvider({
+      responder: () =>
+        step({ reply: 'Done, see below.', proposals: [settings([['followupAfterDays', '3']])] }),
+    });
+    await assistantTurnHandler({ sql: worker, llm, checkMailbox: async () => ({ ok: true }) })({
+      id: randomUUID(),
+      tenantId: A.tenantId,
+      queue: QUEUES.assistantTurn,
+      payload: { conversationId: c!.id },
+      attempts: 1,
+      maxAttempts: 1,
+    });
+    expect(text(llm.calls[0]!)).toContain(
+      '[CARD (applied): Time zone — Time zone: Europe/Riga → Europe/Berlin]',
+    );
+    const a = await owner<{ text: string }[]>`
+      select text from public.assistant_messages
+      where conversation_id = ${c!.id} and role = 'assistant' order by created_at desc limit 1`;
+    expect(a[0]!.text).toContain('Some of this is not shown as a card');
+    const cards = await owner`select 1 from public.assistant_proposals p
+      join public.assistant_messages m on m.id = p.message_id
+      where m.conversation_id = ${c!.id} and m.text like 'Done, see below.%'`;
+    expect(cards).toHaveLength(0);
   });
 });
