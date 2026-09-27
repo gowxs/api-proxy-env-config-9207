@@ -12,6 +12,7 @@ import { mailProcessHandler } from './jobs/mail-process.ts';
 import { mailSendHandler } from './jobs/mail-send.ts';
 import { quotesImportHandler } from './jobs/quotes-import.ts';
 import { composeAssistHandler } from './jobs/compose-assist.ts';
+import { assistantTurnHandler } from './jobs/assistant-turn.ts';
 import { documentsAutomationHandler } from './jobs/documents-automation.ts';
 import { documentsPrefillHandler } from './jobs/documents-prefill.ts';
 import { MailboxManager } from './mailbox/manager.ts';
@@ -23,6 +24,7 @@ import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { scanQuotaWaits } from './ops/quota.ts';
 import { scanWeeklyReports } from './ops/weekly-report.ts';
 import { maybeSendDigest } from './ops/digest.ts';
+import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
@@ -53,6 +55,12 @@ const quotes = config.ACTION_LINK_SECRET
   ? { secret: config.ACTION_LINK_SECRET, publicApiUrl: config.PUBLIC_API_URL }
   : undefined;
 
+// The health check, also run on request by the assistant's mailbox_check tool.
+const mailboxHealth = healthCheckHandler({
+  sql: db.sql,
+  keys,
+  allowInsecure: config.MAIL_ALLOW_INSECURE,
+});
 const runner = new JobRunner({
   sql: db.sql,
   // A crashed worker's jobs are re-claimed after this. Long enough for a website
@@ -90,12 +98,23 @@ const runner = new JobRunner({
       llm: providers.llm,
       embeddings: providers.embeddings,
     }),
-    [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
-    [QUEUES.healthCheck]: healthCheckHandler({
+    [QUEUES.assistantTurn]: assistantTurnHandler({
       sql: db.sql,
-      keys,
-      allowInsecure: config.MAIL_ALLOW_INSECURE,
+      llm: providers.llm,
+      checkMailbox: async (tenantId, connectionId) => {
+        const r = (await mailboxHealth({
+          id: randomUUID(),
+          tenantId,
+          queue: QUEUES.healthCheck,
+          payload: { connectionId },
+          attempts: 1,
+          maxAttempts: 1,
+        })) as { ok?: boolean; code?: string | null };
+        return { ok: Boolean(r?.ok), code: r?.code ?? null };
+      },
     }),
+    [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
+    [QUEUES.healthCheck]: mailboxHealth,
     [QUEUES.followup]: followupHandler({
       sql: db.sql,
       llm: providers.llm,

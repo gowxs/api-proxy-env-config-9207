@@ -914,3 +914,46 @@ QA.md lists the findings; these are the decisions and how they were built.
   - Only active, set-up, entitled businesses get it.
 - **Unsubscribe:** a signed link (HMAC of the tenant id; no expiry) and one-click `List-Unsubscribe` (RFC 8058). Both switch `weekly_report_enabled` off. Settings → Account switches it on again.
 - **Pricing page:** "At 10 e-mails a day, Noctiv saves about 13 hours a month". Assumption: 4 minutes per e-mail on 20 working days (10 × 20 × 4 min ≈ 13 h); follow-ups not counted.
+
+## 27. Noctiv Assistant (beta) (founder request 2026-09-29)
+
+- **Where:**
+  - A floating button on every app page opens it: full screen on a phone, a 400×640 panel on a desktop.
+  - It is also the first screen of onboarding: "Set up with the assistant" or "Set up manually". The assistant path first creates the business (name, time zone, invite code), then opens the setup chat with a "Finish setup" button.
+- **Language:** the six supported languages (en, de, lv, nl, fr, es).
+  - The first guess comes from the browser.
+  - The model then answers in the language of the owner's message, and the conversation's locale follows.
+  - English is the fallback.
+  - The UI chrome and the field labels on cards stay English (D3).
+- **How a turn works:**
+  - The API stores the owner's message and queues `assistant.turn` (at most 200 owner messages per business per day).
+  - The worker runs a JSON step loop of at most 5 model calls. Each step either calls one read-only tool or answers.
+  - The API waits up to 60 s for the result, the same way compose-assist does.
+  - An owner message whose turn failed is not answered later.
+- **Read-only tools** (apps/worker/src/assistant/tools.ts):
+  - `account_overview`, `value_report` (week, last week, month, last month; same numbers as §26), `open_quotes`, `escalations` (incl. "why was this e-mail escalated" via the conversation on screen), `knowledge_status`, `price_list`, `mailbox_check` (runs the real connection test), `locale_defaults` (time zone → currency and VAT).
+  - All tools run inside `withTenant`, so there is no cross-tenant access.
+  - Results are fact lines rendered by code.
+  - Customer names, subjects and summaries are fenced as `<<<CUSTOMER_TEXT_nonce>>>` data with `defuseUntrusted` (prompt-injection rules).
+- **Numbers only from queries:**
+  - Every number in an answer must appear in a tool result, the owner's own words or the help text.
+  - Otherwise there is one retry. After that the answer is replaced by the tool facts as they are, with a note that it could not check every number.
+- **Changes are proposals, never writes:**
+  - The model can propose three kinds of change: settings (an allow-list of keys), a knowledge-base note, or price-list items.
+  - Core validates each proposal (`normalizeProposal`):
+    - Values are parsed per setting.
+    - No-op changes are dropped.
+    - Numbers in a note and prices must come from the owner.
+  - The app shows each proposal as a card with an "old → new" line and a Confirm button.
+  - On Confirm, the API applies the change through the same routes as the Settings, Knowledge and Price list pages, with the owner's token. Validation, side effects and the audit entry are therefore identical to the pages.
+  - Reply mode, auto-send limits, follow-ups, rate limits, quotes, documents and automation are sending settings. They need the existing confirmation dialog: the API returns 409 without `confirmSending`. Raising the mode uses the same auto-send dialog as Settings.
+- **Cannot:** send e-mails, approve drafts, create documents, or change billing. There are no tools for these, and the help text and prompt say so.
+- **Audit log:** `assistant.proposed`, `assistant.applied`, `assistant.apply_failed`, `assistant.dismissed`, `assistant.mailbox_check`.
+- **Costs and data rules:**
+  - Every model call counts toward the tenant's daily AI budget (`recordUsage`). The assistant refuses when the budget is halted.
+  - The free AI tier may only process test mailboxes or fixtures. With the free provider, the assistant refuses whenever the business has a real mailbox connected, and also when it has no mailbox, because that counts as customer data under `originForTenantKnowledge`. In production, the assistant therefore needs the paid provider.
+- **Gemini structured output:** `maxItems` in the response schema is rejected (HTTP 400). Array limits are enforced in code (`limitStep`).
+- **Tables:**
+  - `assistant_conversations`, `assistant_messages`, `assistant_proposals` (migration 20260929000100).
+  - Forced RLS on all three. The API may only update the proposal status and the conversation locale.
+  - Customer e-mail text is not stored, only the assistant's answers.

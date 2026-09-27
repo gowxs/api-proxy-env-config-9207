@@ -1,0 +1,492 @@
+'use client';
+
+/**
+ * Noctiv Assistant (beta), PLAN.md §27: the chat panel (floating button on
+ * every page, first screen of onboarding). The assistant only reads and
+ * proposes; a proposal changes something only when the owner presses
+ * Confirm, and anything that affects sending goes through the same
+ * confirmation dialog as Settings.
+ */
+
+import { usePathname } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AutoSendDialog } from '@/components/auto-send-dialog';
+import { Button, cx, ErrorText } from '@/components/ui';
+import { api } from '@/lib/api';
+import {
+  browserLocale,
+  INTL_LOCALE,
+  WORDS,
+  type AssistantLocale,
+  type AssistantMessage,
+  type AssistantProposal,
+  type AssistantThread,
+} from '@/lib/assistant';
+import { modeRank, type Mode } from '@/lib/modes';
+
+const money = (cents: number, currency: string, locale: AssistantLocale) =>
+  new Intl.NumberFormat(INTL_LOCALE[locale], { style: 'currency', currency }).format(cents / 100);
+
+function SendingDialog({
+  locale,
+  lines,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  locale: AssistantLocale;
+  lines: [string, string][];
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const w = WORDS[locale];
+  const [ok, setOk] = useState(false);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sending-dialog-title"
+    >
+      <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5">
+        <h2 id="sending-dialog-title" className="text-lg font-semibold">
+          {w.sendingTitle}
+        </h2>
+        <p className="text-sm text-neutral-700">{w.sendingBody}</p>
+        <dl className="space-y-1 rounded-lg bg-neutral-50 p-3 text-sm">
+          {lines.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3">
+              <dt className="text-neutral-500">{k}</dt>
+              <dd className="text-right font-medium">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5"
+            checked={ok}
+            onChange={(e) => setOk(e.target.checked)}
+          />
+          <span>{w.sendingCheck}</span>
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onCancel}>
+            {w.cancel}
+          </Button>
+          <Button disabled={!ok || busy} onClick={onConfirm}>
+            {w.confirm}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProposalCard({
+  p,
+  tenantId,
+  locale,
+  currentMode,
+  onChanged,
+}: {
+  p: AssistantProposal;
+  tenantId: string;
+  locale: AssistantLocale;
+  currentMode: Mode | null;
+  onChanged: (next: AssistantProposal) => void;
+}) {
+  const w = WORDS[locale];
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<'mode' | 'sending' | null>(null);
+  const targetMode = p.payload.changes?.mode as Mode | undefined;
+
+  const decide = async (action: 'apply' | 'dismiss', confirmSending = false) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ proposal: AssistantProposal }>(
+        `/v1/tenants/${tenantId}/assistant/proposals/${p.id}/${action}`,
+        { method: 'POST', body: action === 'apply' && confirmSending ? { confirmSending } : {} },
+      );
+      onChanged(r.proposal);
+      setDialog(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const confirm = () => {
+    if (!p.requires_confirmation) return void decide('apply');
+    // Moving to a more automatic mode: the same dialog as Settings → Reply mode.
+    if (targetMode && (!currentMode || modeRank(targetMode) > modeRank(currentMode)))
+      return setDialog('mode');
+    setDialog('sending');
+  };
+
+  const label =
+    p.type === 'knowledge_note' ? w.noteCard : p.type === 'price_items' ? w.priceCard : null;
+  return (
+    <div className="mt-2 rounded-xl border border-indigo-200 bg-white p-3 text-sm shadow-sm">
+      <p className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">
+        {label ?? w.proposedChange}
+      </p>
+      <p className="mt-1 font-medium">{p.title}</p>
+      {p.payload.lines && (
+        <dl className="mt-2 space-y-1">
+          {p.payload.lines.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-3">
+              <dt className="text-neutral-500">{k}</dt>
+              <dd className="text-right font-medium">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {p.type === 'knowledge_note' && (
+        <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-neutral-50 p-2 whitespace-pre-wrap">
+          <p className="font-medium">{p.payload.title}</p>
+          <p className="mt-1 text-neutral-700">{p.payload.text}</p>
+        </div>
+      )}
+      {p.type === 'price_items' && (
+        <ul className="mt-2 divide-y divide-neutral-100">
+          {p.payload.items?.map((i) => (
+            <li key={i.name} className="flex justify-between gap-3 py-1">
+              <span>{i.name}</span>
+              <span className="tabular-nums">
+                {money(i.unitPriceCents, i.currency, locale)} / {i.unit}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {p.status === 'proposed' ? (
+        <div className="mt-3 flex gap-2">
+          <Button className="min-h-10 flex-1" disabled={busy} onClick={confirm}>
+            {w.confirm}
+          </Button>
+          <Button
+            variant="secondary"
+            className="min-h-10"
+            disabled={busy}
+            onClick={() => void decide('dismiss')}
+          >
+            {w.dismiss}
+          </Button>
+        </div>
+      ) : (
+        <p
+          className={cx(
+            'mt-2 text-xs font-medium',
+            p.status === 'applied' && 'text-green-800',
+            p.status === 'dismissed' && 'text-neutral-500',
+            p.status === 'failed' && 'text-red-700',
+          )}
+        >
+          {p.status === 'applied'
+            ? `✓ ${w.applied}`
+            : p.status === 'dismissed'
+              ? w.dismissed
+              : w.failed}
+          {p.status === 'failed' && p.error ? `: ${p.error}` : ''}
+        </p>
+      )}
+      <ErrorText>{error}</ErrorText>
+      {dialog === 'mode' && targetMode && (
+        <AutoSendDialog
+          target={targetMode}
+          busy={busy}
+          onCancel={() => setDialog(null)}
+          onConfirm={() => void decide('apply', true)}
+        />
+      )}
+      {dialog === 'sending' && (
+        <SendingDialog
+          locale={locale}
+          lines={p.payload.lines ?? []}
+          busy={busy}
+          onCancel={() => setDialog(null)}
+          onConfirm={() => void decide('apply', true)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The chat itself: in the floating panel or as the onboarding screen. */
+export function AssistantChat({
+  tenantId,
+  purpose,
+  currentMode = null,
+  onApplied,
+}: {
+  tenantId: string;
+  purpose: 'app' | 'onboarding';
+  currentMode?: Mode | null;
+  onApplied?: () => void;
+}) {
+  const pathname = usePathname();
+  const [thread, setThread] = useState<AssistantThread | null>(null);
+  const [locale, setLocale] = useState<AssistantLocale>('en');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    const t = await api<AssistantThread>(`/v1/tenants/${tenantId}/assistant?purpose=${purpose}`);
+    setThread(t);
+    setLocale(t.conversation?.locale ?? browserLocale());
+  }, [tenantId, purpose]);
+  useEffect(() => {
+    void load().catch((e: Error) => setError(e.message));
+  }, [load]);
+  // Newest message in view (after the list has rendered).
+  useEffect(() => {
+    const el = list.current;
+    if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+  }, [thread, busy]);
+
+  const w = WORDS[locale];
+  const send = async (message: string) => {
+    const body = message.trim();
+    if (!body || busy) return;
+    setBusy(true);
+    setError(null);
+    setText('');
+    const optimistic: AssistantMessage = {
+      id: `local-${Date.now()}`,
+      role: 'owner',
+      text: body,
+      suggestions: [],
+      created_at: new Date().toISOString(),
+      proposals: [],
+    };
+    setThread((t) => ({
+      conversation: t?.conversation ?? null,
+      messages: [...(t?.messages ?? []), optimistic],
+    }));
+    try {
+      const r = await api<{
+        conversation: AssistantThread['conversation'];
+        messages: AssistantMessage[];
+      }>(`/v1/tenants/${tenantId}/assistant/messages`, {
+        method: 'POST',
+        body: {
+          text: body,
+          locale,
+          purpose,
+          conversationId: thread?.conversation?.id ?? null,
+          contextPath: pathname,
+        },
+      });
+      setThread((t) => ({
+        conversation: r.conversation,
+        messages: [...(t?.messages ?? []).filter((m) => m.id !== optimistic.id), ...r.messages],
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const update = (next: AssistantProposal) => {
+    setThread((t) =>
+      t
+        ? {
+            ...t,
+            messages: t.messages.map((m) => ({
+              ...m,
+              proposals: m.proposals.map((p) => (p.id === next.id ? next : p)),
+            })),
+          }
+        : t,
+    );
+    if (next.status === 'applied') onApplied?.();
+  };
+
+  const messages = thread?.messages ?? [];
+  const last = messages[messages.length - 1];
+  const chips =
+    messages.length === 0
+      ? purpose === 'onboarding'
+        ? w.onboardingSuggestions
+        : w.suggestions
+      : last?.role === 'assistant'
+        ? last.suggestions
+        : [];
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div
+        ref={list}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        aria-live="polite"
+      >
+        <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-neutral-100 px-3 py-2 text-sm">
+          {purpose === 'onboarding' ? w.onboardingIntro : w.intro}
+        </div>
+        {messages.map((m) =>
+          m.role === 'owner' ? (
+            <div
+              key={m.id}
+              className="ml-auto max-w-[88%] rounded-2xl rounded-tr-sm bg-indigo-700 px-3 py-2 text-sm whitespace-pre-wrap text-white"
+            >
+              {m.text}
+            </div>
+          ) : (
+            <div key={m.id} className="max-w-[92%]">
+              <div className="rounded-2xl rounded-tl-sm bg-neutral-100 px-3 py-2 text-sm whitespace-pre-wrap">
+                {m.text}
+              </div>
+              {m.proposals.map((p) => (
+                <ProposalCard
+                  key={p.id}
+                  p={p}
+                  tenantId={tenantId}
+                  locale={locale}
+                  currentMode={currentMode}
+                  onChanged={update}
+                />
+              ))}
+            </div>
+          ),
+        )}
+        {busy && (
+          <div className="w-fit rounded-2xl rounded-tl-sm bg-neutral-100 px-3 py-2 text-sm text-neutral-500">
+            {w.thinking}
+          </div>
+        )}
+        <ErrorText>{error}</ErrorText>
+      </div>
+      {chips.length > 0 && !busy && (
+        <div className="flex gap-2 overflow-x-auto px-4 pb-2">
+          {chips.map((c) => (
+            <button
+              key={c}
+              className="shrink-0 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800"
+              onClick={() => void send(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+      <form
+        className="flex items-end gap-2 border-t border-neutral-200 bg-white p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send(text);
+        }}
+      >
+        <textarea
+          className="max-h-32 min-h-11 flex-1 resize-none rounded-lg border border-neutral-300 px-3 py-2.5 text-base outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+          rows={1}
+          maxLength={2000}
+          placeholder={w.placeholder}
+          aria-label={w.placeholder}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void send(text);
+            }
+          }}
+        />
+        <Button type="submit" disabled={busy || !text.trim()} className="min-h-11">
+          {w.send}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+/** The floating button (every signed-in page) and the panel it opens. */
+export function AssistantLauncher({
+  tenantId,
+  currentMode,
+  onApplied,
+}: {
+  tenantId: string;
+  currentMode: Mode | null;
+  onApplied?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState(0);
+  const [locale, setLocale] = useState<AssistantLocale>('en');
+  useEffect(() => setLocale(browserLocale()), []);
+  const w = WORDS[locale];
+  return (
+    <>
+      {!open && (
+        <button
+          className="fixed right-4 bottom-24 z-30 flex h-14 items-center gap-2 rounded-full bg-indigo-700 px-5 font-medium text-white shadow-lg lg:bottom-6"
+          onClick={() => setOpen(true)}
+          aria-label={w.title}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path
+              d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="hidden sm:inline">{w.title}</span>
+        </button>
+      )}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 flex flex-col bg-white lg:inset-auto lg:right-6 lg:bottom-6 lg:h-[640px] lg:w-[400px] lg:rounded-2xl lg:border lg:border-neutral-200 lg:shadow-2xl"
+          role="dialog"
+          aria-label={w.title}
+        >
+          <div className="flex items-center gap-2 border-b border-neutral-200 px-4 py-3">
+            <p className="font-semibold">{w.title}</p>
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+              {w.beta}
+            </span>
+            <button
+              className="ml-auto text-sm text-indigo-700"
+              onClick={() =>
+                void api(`/v1/tenants/${tenantId}/assistant/new`, {
+                  method: 'POST',
+                  body: { purpose: 'app' },
+                }).then(() => setKey((k) => k + 1))
+              }
+            >
+              {w.newChat}
+            </button>
+            <button
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-xl text-neutral-500"
+              onClick={() => setOpen(false)}
+              aria-label={w.close}
+            >
+              ×
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <AssistantChat
+              key={key}
+              tenantId={tenantId}
+              purpose="app"
+              currentMode={currentMode}
+              {...(onApplied ? { onApplied } : {})}
+            />
+          </div>
+          <p className="border-t border-neutral-100 px-4 py-2 text-center text-[11px] text-neutral-400">
+            {w.cannot}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}

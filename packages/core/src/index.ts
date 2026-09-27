@@ -36,3 +36,7 @@ export * from './notify/channel.ts';
 export * from './ops/data-region.ts';
 export * from './email-design/render.ts';
 export * from './value/report.ts';
+export * from './assistant/locale-defaults.ts';
+export * from './assistant/help.ts';
+export * from './assistant/proposals.ts';
+export * from './assistant/prompt.ts';

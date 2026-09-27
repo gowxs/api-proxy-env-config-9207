@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { AssistantLauncher } from '@/components/assistant';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { signOut } from '@/lib/auth';
@@ -398,6 +399,18 @@ function DelayedBanner() {
   );
 }
 
+/** Noctiv Assistant (beta) on every signed-in page (PLAN.md §27). */
+function ShellAssistant({ tenantId }: { tenantId: string }) {
+  const { nav, reload } = useNav();
+  return (
+    <AssistantLauncher
+      tenantId={tenantId}
+      currentMode={nav?.mode ?? null}
+      onApplied={() => void reload()}
+    />
+  );
+}
+
 function Chrome({ title, children }: { title: string; children: ReactNode }) {
   const { tenant } = useSession();
   return (
@@ -422,6 +435,7 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
             </main>
           </div>
           <BottomBar />
+          {tenant && <ShellAssistant tenantId={tenant.id} />}
         </div>
       </NavProvider>
     </BillingProvider>

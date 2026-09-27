@@ -15,6 +15,7 @@ import { meRoutes } from './routes/me.ts';
 import { quoteLinkRoutes } from './routes/quote-link.ts';
 import { quoteRoutes } from './routes/quotes.ts';
 import { composeRoutes } from './routes/compose.ts';
+import { assistantRoutes } from './routes/assistant.ts';
 import { documentRoutes } from './routes/documents.ts';
 import { HttpError, webRoutes } from './routes/web.ts';
 import { healthRoutes, readWorkerHealth, type WorkerHealth } from './routes/health.ts';
@@ -144,6 +145,7 @@ export function buildApp(
   quoteRoutes(app, { ...full, publicApiUrl: publicApiUrl(deps) });
   documentRoutes(app, full);
   composeRoutes(app, full);
+  assistantRoutes(app, full);
   billingRoutes(app, {
     sql: deps.sql,
     billing: deps.billing ?? { env: 'sandbox' },

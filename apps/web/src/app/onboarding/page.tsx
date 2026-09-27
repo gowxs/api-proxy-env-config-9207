@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { AssistantChat } from '@/components/assistant';
 import { KnowledgeAdd, SourceList, type KbSource } from '@/components/knowledge';
 import { Logo } from '@/components/logo';
 import { MailboxForm } from '@/components/mailbox-form';
@@ -200,17 +201,120 @@ function SummaryStep({ tenantId, onFinish }: { tenantId: string; onFinish: () =>
   );
 }
 
+/** First screen of onboarding (PLAN.md §27): set up with the assistant, or step by step. */
+function ChoosePath({ onChoose }: { onChoose: (p: 'assistant' | 'manual') => void }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-neutral-600">
+        Noctiv needs your business details, your mailbox and a few facts about what you sell. How
+        would you like to set it up?
+      </p>
+      <button
+        className="block w-full rounded-xl border-2 border-indigo-600 bg-indigo-50 p-4 text-left"
+        onClick={() => onChoose('assistant')}
+      >
+        <span className="flex items-center gap-2 font-semibold text-indigo-900">
+          Set up with the assistant
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+            beta
+          </span>
+        </span>
+        <span className="mt-1 block text-sm text-neutral-700">
+          Chat in your language. It asks about your business, writes your knowledge-base note and
+          price list with you, and proposes settings for you to confirm.
+        </span>
+      </button>
+      <button
+        className="block w-full rounded-xl border border-neutral-300 bg-white p-4 text-left"
+        onClick={() => onChoose('manual')}
+      >
+        <span className="font-semibold">Set up manually</span>
+        <span className="mt-1 block text-sm text-neutral-700">
+          Four short steps: business, mailbox, knowledge, summary.
+        </span>
+      </button>
+    </div>
+  );
+}
+
+/** The assistant path: the business is created first (name, time zone, invite code), then the chat. */
+function AssistantSetup({ onManual }: { onManual: () => void }) {
+  const router = useRouter();
+  const { tenant, refresh } = useSession();
+  const { busy, error, run } = useAction();
+  if (!tenant)
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-neutral-600">
+          First your business name; the assistant takes it from there.
+        </p>
+        <BusinessStep onDone={refresh} />
+      </div>
+    );
+  return (
+    <div className="flex h-[calc(100dvh-9rem)] min-h-[28rem] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="min-h-0 flex-1">
+        <AssistantChat tenantId={tenant.id} purpose="onboarding" onApplied={() => void refresh()} />
+      </div>
+      <div className="flex items-center gap-3 border-t border-neutral-200 p-3">
+        <Button
+          className="flex-1"
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              await api(`/v1/tenants/${tenant.id}`, {
+                method: 'PATCH',
+                body: { onboardingCompleted: true },
+              });
+              await refresh();
+              router.replace('/');
+            })
+          }
+        >
+          Finish setup
+        </Button>
+        <button className="text-sm text-neutral-600" onClick={onManual}>
+          Set up manually
+        </button>
+      </div>
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
 function Wizard() {
   const router = useRouter();
   const { tenant, refresh } = useSession();
   const initial = !tenant ? 0 : tenant.mailboxes === 0 ? 1 : 2;
   const [step, setStep] = useState(initial);
+  const [path, setPath] = useState<'choose' | 'assistant' | 'manual'>(tenant ? 'manual' : 'choose');
   const [tested, setTested] = useState(false);
 
   useEffect(() => {
     if (tenant?.onboarding_completed_at) router.replace('/');
   }, [tenant, router]);
 
+  if (path !== 'manual')
+    return (
+      <main className="mx-auto max-w-lg px-4 py-6">
+        <p className="flex items-center gap-2 text-sm font-semibold text-neutral-500">
+          <Logo height={24} /> <span>setup</span>
+        </p>
+        <h1 className="my-4 text-xl font-semibold">
+          {path === 'choose' ? 'Welcome to Noctiv' : 'Set up with the assistant'}
+        </h1>
+        {path === 'choose' ? (
+          <ChoosePath onChoose={setPath} />
+        ) : (
+          <AssistantSetup
+            onManual={() => {
+              setStep(tenant ? (tenant.mailboxes === 0 ? 1 : 2) : 0);
+              setPath('manual');
+            }}
+          />
+        )}
+      </main>
+    );
   return (
     <main className="mx-auto max-w-lg px-4 py-6">
       <p className="flex items-center gap-2 text-sm font-semibold text-neutral-500">

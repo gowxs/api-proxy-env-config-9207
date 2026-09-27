@@ -166,6 +166,13 @@ export async function seedTenant(
              values (${tenantId}, 'email_owner', 'draft', ${`draft:${draftId}`})`;
     await tx`insert into public.audit_log (tenant_id, actor, action) values (${tenantId}, 'system', 'seed')`;
     await tx`insert into public.tenant_deletions (tenant_id) values (${tenantId})`;
+    const [conv] = await tx<{ id: string }[]>`
+      insert into public.assistant_conversations (tenant_id, user_id) values (${tenantId}, ${userId}) returning id`;
+    const [said] = await tx<{ id: string }[]>`
+      insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+      values (${tenantId}, ${conv!.id}, 'assistant', ${`Hello ${label}`}) returning id`;
+    await tx`insert into public.assistant_proposals (tenant_id, conversation_id, message_id, type, title, payload)
+             values (${tenantId}, ${conv!.id}, ${said!.id}, 'settings', 'Change', ${tx.json({ changes: {} })})`;
   });
 
   return {

@@ -12,4 +12,5 @@ export const QUEUES = {
   documentsPrefill: 'documents.prefill',
   documentsAutomation: 'documents.automation',
   composeAssist: 'compose.assist',
+  assistantTurn: 'assistant.turn',
 } as const;

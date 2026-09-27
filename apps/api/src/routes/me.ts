@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { localDefaults } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -15,21 +16,6 @@ const createBody = z
   .strict();
 
 /** Standard VAT rate and currency by time zone, for new businesses (QA 2026-09-26). */
-const LOCAL_DEFAULTS: Record<string, { currency: string; vatRate: number }> = {
-  'Europe/London': { currency: 'GBP', vatRate: 20 },
-  'Europe/Dublin': { currency: 'EUR', vatRate: 23 },
-  'Europe/Berlin': { currency: 'EUR', vatRate: 19 },
-  'Europe/Vienna': { currency: 'EUR', vatRate: 20 },
-  'Europe/Paris': { currency: 'EUR', vatRate: 20 },
-  'Europe/Amsterdam': { currency: 'EUR', vatRate: 21 },
-  'Europe/Brussels': { currency: 'EUR', vatRate: 21 },
-  'Europe/Madrid': { currency: 'EUR', vatRate: 21 },
-  'Europe/Rome': { currency: 'EUR', vatRate: 22 },
-  'Europe/Riga': { currency: 'EUR', vatRate: 21 },
-  'Europe/Vilnius': { currency: 'EUR', vatRate: 21 },
-  'Europe/Tallinn': { currency: 'EUR', vatRate: 24 },
-  'Europe/Helsinki': { currency: 'EUR', vatRate: 25.5 },
-};
 
 export interface MeDeps extends AppDeps {
   /** Phase 1 signup gate (PLAN.md Q12): creating an account needs one of these codes. Empty = open (dev). */
@@ -127,7 +113,7 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     await withTenant(deps.sql, id, async (tx) => {
       // Currency and standard VAT rate of the business's country, guessed from its
       // time zone (the owner can change both in Quotes → Setup).
-      const local = LOCAL_DEFAULTS[b.timezone];
+      const local = localDefaults(b.timezone);
       await tx`insert into public.tenants (id, name, website_url, timezone, quotes_currency, quotes_vat_rate)
                values (${id}, ${b.name}, ${b.websiteUrl ?? null}, ${b.timezone},
                        ${local?.currency ?? 'EUR'}, ${local?.vatRate ?? 21})`;
