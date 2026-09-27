@@ -14,3 +14,4 @@ export {
   type JobHandler,
   type JobState,
 } from './queue.ts';
+export { loadValueRows } from './value.ts';

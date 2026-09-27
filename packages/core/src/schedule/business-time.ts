@@ -112,3 +112,33 @@ export function isWithinBusinessWindow(at: Date, timeZone: string): boolean {
   const c = clampToWindow(p);
   return c === p;
 }
+
+/**
+ * When someone who answers only in business hours could start on an e-mail
+ * that arrived at `at`: `at` itself inside the window, else the next window
+ * start (value report, PLAN.md §26).
+ */
+export function nextBusinessWindowStart(at: Date, timeZone: string): Date {
+  const p = localParts(at, timeZone);
+  const c = clampToWindow(p);
+  return c === p ? at : zonedTimeToUtc(c, timeZone);
+}
+
+/** 00:00 local time on the first day of the month that contains `at`. */
+export function localMonthStart(at: Date, timeZone: string): Date {
+  const p = localParts(at, timeZone);
+  return zonedTimeToUtc({ ...p, day: 1, hour: 0, minute: 0, second: 0 }, timeZone);
+}
+
+/** 00:00 local time on the Monday of the week that contains `at`. */
+export function localWeekStart(at: Date, timeZone: string): Date {
+  const p = localParts(at, timeZone);
+  const back = (weekday(p.year, p.month, p.day) + 6) % 7;
+  return zonedTimeToUtc({ ...addCalendarDays(p, -back), hour: 0, minute: 0, second: 0 }, timeZone);
+}
+
+/** Local calendar date "YYYY-MM-DD" of an instant. */
+export function localDate(at: Date, timeZone: string): string {
+  const p = localParts(at, timeZone);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}

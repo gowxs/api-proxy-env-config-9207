@@ -69,6 +69,13 @@ export class EmailChannel implements NotificationChannel {
         // RFC 3834: machine-generated; our own loop filter and other assistants skip it.
         'Auto-Submitted': 'auto-generated',
         'X-Auto-Response-Suppress': 'All',
+        // One-click unsubscribe (RFC 8058) for optional e-mails such as the weekly summary.
+        ...(n.links.unsubscribe
+          ? {
+              'List-Unsubscribe': `<${n.links.unsubscribe}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            }
+          : {}),
       },
       disableFileAccess: true,
       disableUrlAccess: true,

@@ -21,6 +21,7 @@ import { sendWaitlistConfirmations } from './ops/waitlist.ts';
 import { queuePaymentReminders } from './ops/payment-reminders.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { scanQuotaWaits } from './ops/quota.ts';
+import { scanWeeklyReports } from './ops/weekly-report.ts';
 import { maybeSendDigest } from './ops/digest.ts';
 import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
@@ -282,6 +283,14 @@ if (config.SYSTEM_SMTP_HOST) {
     'SYSTEM_SMTP_HOST not set: owner and admin notifications stay queued until the system mailer is configured',
   );
 }
+// The Monday summary for owners, from 08:00 local time (PLAN.md §26).
+const weeklyTimer = setInterval(
+  () =>
+    void scanWeeklyReports(db.sql).catch((e: unknown) =>
+      logger.error({ err: String(e) }, 'weekly report scan failed'),
+    ),
+  10 * 60_000,
+);
 // D5: e-mails waiting on the AI quota — admin alert after 30 min, owner after 4 h.
 const quotaTimer = setInterval(
   () =>
@@ -309,6 +318,7 @@ const shutdown = async (signal: string) => {
   clearInterval(healthTimer);
   if (digestTimer) clearInterval(digestTimer);
   clearInterval(quotaTimer);
+  clearInterval(weeklyTimer);
   if (notifyTimer) clearInterval(notifyTimer);
   await manager.stopAll();
   await runner.stop();

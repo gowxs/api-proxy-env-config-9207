@@ -23,6 +23,8 @@ export type NotificationKind =
   /** Customer e-mails waiting on the AI provider's daily quota (D5): admin after 30 min, owner after 4 h. */
   | 'quota_wait'
   | 'replies_delayed'
+  /** The Monday summary of the past week (PLAN.md §26). */
+  | 'weekly_report'
   /** One-off check that the system mailer reaches the owner (queued by an operator). */
   | 'test';
 
@@ -32,6 +34,8 @@ export interface NotificationLinks {
   reject?: string;
   /** Where the owner can see, edit or fix the item. */
   dashboard: string;
+  /** Opt-out link for optional e-mails (the Monday summary); also sent as List-Unsubscribe. */
+  unsubscribe?: string;
 }
 
 export interface Notification {

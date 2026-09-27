@@ -620,3 +620,21 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
+
+/* ---------- Pricing: time saved (ROI) ---------- */
+.roi {
+  max-width: 44rem;
+  padding: var(--s-5) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.roi .roi-figure {
+  margin-top: var(--s-3);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.roi .muted {
+  margin-top: var(--s-3);
+  max-width: 62ch;
+}

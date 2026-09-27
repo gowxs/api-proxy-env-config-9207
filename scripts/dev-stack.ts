@@ -130,9 +130,16 @@ async function main() {
     for (const role of ['noctiv_api', 'noctiv_worker']) {
       await sql.unsafe(`alter role ${role} with login password '${RUNTIME_PASSWORD}'`);
     }
-    await seedDemo(sql, { publicKey: keys.publicKey, withBusiness: !args.has('--empty') });
   } finally {
     await sql.end();
+  }
+  // A new connection: on a fresh database the first one read the column types
+  // before the migrations created citext (e-mail address arrays).
+  const seedSql = postgres(OWNER_URL, { max: 1, onnotice: () => {} });
+  try {
+    await seedDemo(seedSql, { publicKey: keys.publicKey, withBusiness: !args.has('--empty') });
+  } finally {
+    await seedSql.end();
   }
 
   const dotenv = readDotEnv();

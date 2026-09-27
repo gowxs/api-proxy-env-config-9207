@@ -1,13 +1,16 @@
 import {
   budgetStateFor,
+  computeValue,
   EMAIL_TEMPLATES,
+  fastestLine,
+  localMonthStart,
   logoAllowed,
   renderReplyEmail,
   TENANT_MODES,
   type TenantMode,
   WAITLIST_INTEGRATIONS,
 } from '@noctiv/core';
-import { enqueue, withTenant } from '@noctiv/db';
+import { enqueue, loadValueRows, withTenant } from '@noctiv/db';
 import { documentJson, listDocuments, prefixLocks, vatNoValid } from '@noctiv/documents';
 import { loadAllowlist } from '@noctiv/kb';
 import {
@@ -131,6 +134,10 @@ const settingsBody = z
     ...documentSettingsShape,
     /** Settings → Integrations: "notify me when it's ready" (PLAN.md §23). */
     integrationsNotify: z.array(z.enum(WAITLIST_INTEGRATIONS)).max(5),
+    /** Value report (PLAN.md §26): the owner's minutes per reply / follow-up, the Monday e-mail. */
+    valueMinutesPerReply: z.number().int().min(1).max(60),
+    valueMinutesPerFollowup: z.number().int().min(0).max(60),
+    weeklyReportEnabled: z.boolean(),
   })
   .partial()
   .strict();
@@ -201,7 +208,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                seller_bank_name, seller_iban, seller_bic, seller_sort_code, seller_account_number,
                seller_country, invoice_due_days,
                doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify,
-               auto_invoice_on_accept, auto_delivery_note_after_payment
+               auto_invoice_on_accept, auto_delivery_note_after_payment,
+               value_minutes_per_reply, value_minutes_per_followup, weekly_report_enabled
         from public.tenants`;
       return { ...t, doc_prefix_locks: await prefixLocks(tx) };
     }),
@@ -233,6 +241,11 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
+      if (b.valueMinutesPerReply !== undefined)
+        cols.value_minutes_per_reply = b.valueMinutesPerReply;
+      if (b.valueMinutesPerFollowup !== undefined)
+        cols.value_minutes_per_followup = b.valueMinutesPerFollowup;
+      if (b.weeklyReportEnabled !== undefined) cols.weekly_report_enabled = b.weeklyReportEnabled;
       if (b.integrationsNotify !== undefined)
         cols.integrations_notify = WAITLIST_INTEGRATIONS.filter((i) =>
           b.integrationsNotify!.includes(i),
@@ -358,9 +371,21 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           mode: string;
           budget_state: string;
           daily_token_budget: number;
+          value_minutes_per_reply: number;
+          value_minutes_per_followup: number;
         }[]
-      >`select timezone, mode, budget_state, daily_token_budget from public.tenants`;
+      >`select timezone, mode, budget_state, daily_token_budget, value_minutes_per_reply,
+               value_minutes_per_followup from public.tenants`;
       const tz = t!.timezone;
+      // "This month" (PLAN.md §26): from the 1st, 00:00 local time, until now.
+      const now = new Date();
+      const value = computeValue(await loadValueRows(tx, localMonthStart(now, tz), now), {
+        timeZone: tz,
+        assumptions: {
+          minutesPerReply: t!.value_minutes_per_reply,
+          minutesPerFollowup: t!.value_minutes_per_followup,
+        },
+      });
       const connections = await tx<
         {
           id: string;
@@ -450,6 +475,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           estCostEur: Number(usage?.cost ?? 0) / 1_000_000,
         },
         knowledge: Object.fromEntries(kb.map((k) => [k.status, k.n])),
+        value: {
+          ...value,
+          fastestLine: value.fastest ? fastestLine(value.fastest, tz) : null,
+        },
         quotes,
         documents: {
           enabled: docs!.enabled,

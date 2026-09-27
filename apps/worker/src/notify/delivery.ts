@@ -1,5 +1,6 @@
 import {
   signActionToken,
+  weeklyReportToken,
   type Logger,
   type Notification,
   type NotificationChannel,
@@ -163,6 +164,15 @@ function links(
       };
     case 'payment_proposed':
       return { dashboard: `${app}/payments` };
+    case 'weekly_report':
+      return {
+        dashboard: `${app}/`,
+        ...(cfg.actionSecret
+          ? {
+              unsubscribe: `${api}/reports/weekly/unsubscribe/${tenantId}/${weeklyReportToken(tenantId, cfg.actionSecret)}`,
+            }
+          : {}),
+      };
     case 'document_needs_you':
       return {
         dashboard:

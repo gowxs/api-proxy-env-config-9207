@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createLogger, generateSealingKeyPair } from '@noctiv/core';
+import { createLogger, generateSealingKeyPair, weeklyReportToken } from '@noctiv/core';
 import { seedTenant, type SeededTenant } from '@noctiv/db/testing';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
@@ -196,6 +196,73 @@ describe('dashboard and conversations', () => {
     expect(d.open).toMatchObject({ awaiting_approval: 1, open_escalations: 1 });
     expect(d.budget).toMatchObject({ state: 'ok', dailyTokens: 200000 });
     expect(JSON.stringify(d)).not.toMatch(/ciphertext/);
+  });
+
+  it('dashboard: "This month" value numbers with the owner’s editable assumptions', async () => {
+    const v = (await call('GET', t(A, '/dashboard'), A.userId)).json.value;
+    expect(v).toMatchObject({ assumptions: { minutesPerReply: 4, minutesPerFollowup: 3 } });
+    expect(typeof v.answered).toBe('number');
+    expect(v.minutesSaved).toBe(v.answered * 4 + v.followupsSent * 3);
+    expect((await call('PATCH', t(A), A.userId, { valueMinutesPerReply: 0 })).status).toBe(400);
+    expect(
+      (
+        await call('PATCH', t(A), A.userId, {
+          valueMinutesPerReply: 6,
+          valueMinutesPerFollowup: 2,
+          weeklyReportEnabled: false,
+        })
+      ).status,
+    ).toBe(200);
+    const again = (await call('GET', t(A, '/dashboard'), A.userId)).json.value;
+    expect(again.assumptions).toEqual({ minutesPerReply: 6, minutesPerFollowup: 2 });
+    expect((await call('GET', t(A), A.userId)).json).toMatchObject({
+      value_minutes_per_reply: 6,
+      weekly_report_enabled: false,
+    });
+    await call('PATCH', t(A), A.userId, {
+      valueMinutesPerReply: 4,
+      valueMinutesPerFollowup: 3,
+      weeklyReportEnabled: true,
+    });
+  });
+
+  it('weekly summary: the e-mail’s unsubscribe link (GET shows a button, POST switches it off)', async () => {
+    const secret = 'w'.repeat(40);
+    const withLinks = buildApp({
+      logger: createLogger({ service: 'api-test', level: 'silent' }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: generateSealingKeyPair().publicKey,
+      connectionTestWaitMs: 1_000,
+      actionSecret: secret,
+    });
+    const url = `/reports/weekly/unsubscribe/${B.tenantId}/${weeklyReportToken(B.tenantId, secret)}`;
+    const bad = await withLinks.inject({
+      method: 'GET',
+      url: `/reports/weekly/unsubscribe/${B.tenantId}/${'x'.repeat(32)}`,
+    });
+    expect(bad.statusCode).toBe(404);
+    const page = await withLinks.inject({ method: 'GET', url });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('Unsubscribe');
+    const enabled = async () =>
+      (
+        await owner<{ on: boolean }[]>`
+          select weekly_report_enabled as on from public.tenants where id = ${B.tenantId}`
+      )[0]!.on;
+    expect(await enabled()).toBe(true);
+    // One-click (RFC 8058) posts List-Unsubscribe=One-Click.
+    const post = await withLinks.inject({
+      method: 'POST',
+      url,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'List-Unsubscribe=One-Click',
+    });
+    expect(post.statusCode).toBe(200);
+    expect(post.body).toContain('The weekly summary is off');
+    expect(await enabled()).toBe(false);
+    await owner`update public.tenants set weekly_report_enabled = true where id = ${B.tenantId}`;
   });
 
   it('navigation: business, mode, modules and badge counts', async () => {

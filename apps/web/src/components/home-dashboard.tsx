@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/icons';
 import { Badge, Card, cx, ErrorText, Loading, timeAgo, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useTenantId } from '@/lib/session';
+import { ValueCard, type ValueData } from '@/components/value-card';
 import type { Mode } from '@/lib/modes';
 
 interface Dashboard {
@@ -36,6 +37,7 @@ interface Dashboard {
     estCostEur: number;
   };
   knowledge: Record<string, number>;
+  value?: ValueData;
   quotes?: { enabled: boolean; open: number; accepted: number };
   documents?: {
     paymentsToReview?: number;
@@ -258,7 +260,7 @@ function MailboxHealth({ data }: { data: Dashboard }) {
 
 function HomeView() {
   const tenantId = useTenantId();
-  const { data, error } = useLoad(
+  const { data, error, reload } = useLoad(
     () => api<Dashboard>(`/v1/tenants/${tenantId}/dashboard`),
     [tenantId],
   );
@@ -268,6 +270,7 @@ function HomeView() {
     <div className="grid gap-4 lg:grid-cols-5">
       <div className="space-y-4 lg:col-span-3">
         <NeedsYou data={data} />
+        {data.value && <ValueCard tenantId={tenantId} value={data.value} reload={reload} />}
         <Today data={data} />
       </div>
       <div className="space-y-4 lg:col-span-2">

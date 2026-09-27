@@ -28,6 +28,7 @@ interface Tenant {
   timezone: string;
   mode: Mode;
   notify_full_text: boolean;
+  weekly_report_enabled?: boolean;
   max_replies_per_hour: number;
   max_ai_replies_per_sender_24h: number;
   followup_after_days: number;
@@ -191,6 +192,7 @@ function SettingsForm({
           websiteUrl: form.website_url || null,
           timezone: form.timezone,
           notifyFullText: form.notify_full_text,
+          weeklyReportEnabled: form.weekly_report_enabled ?? true,
           followupAfterDays: form.followup_after_days,
           followupMax: form.followup_max,
           maxRepliesPerHour: form.max_replies_per_hour,
@@ -424,6 +426,21 @@ function SettingsForm({
                   <span className="block text-xs text-neutral-500">
                     Off by default: emails then show only the sender&apos;s domain, the subject and
                     a short summary.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-5 w-5"
+                  checked={form.weekly_report_enabled ?? true}
+                  onChange={(e) => set('weekly_report_enabled', e.target.checked)}
+                />
+                <span>
+                  Weekly summary e-mail
+                  <span className="block text-xs text-neutral-500">
+                    Mondays at 08:00 your time: e-mails answered, reply times, follow-ups, quotes,
+                    invoices paid and time saved. Not sent for a week with no activity.
                   </span>
                 </span>
               </label>

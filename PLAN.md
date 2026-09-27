@@ -895,3 +895,22 @@ QA.md lists the findings; these are the decisions and how they were built.
   - the ten busiest accounts.
 - **Backups:** a nightly encrypted `pg_dump` to Cloudflare R2 (EU), kept 30 days. It runs as the Northflank cron job `db-backup` (`docker/backup/`, `scripts/northflank-backup-job.ts`). Restore uses `scripts/restore-backup.sh`. The runbook is `docs/backup-restore.md`.
 
+
+## 26. Value reporting (founder request 2026-09-28)
+
+- **What counts** (`loadValueRows` in packages/db, `computeValue` in packages/core):
+  - **E-mails answered:** customer e-mails whose first reply went out in the period. A reply, a quote and a document cover count; the mode-3 acknowledgement does not.
+  - **Average reply time:** from the customer's e-mail to that first reply.
+  - **"Answered only in business hours" comparison:** Mon–Fri 09:00–17:00 local time. A reply can't start before the window opens, and is never faster than the actual reply.
+  - **Follow-ups sent.**
+  - **Replies won back:** conversations where the customer wrote and the last e-mail before theirs was a follow-up.
+  - **Quotes sent and accepted, invoices paid:** counts and totals per currency.
+  - **Hours saved:** answered × the owner's minutes per reply (default 4) + follow-ups × minutes per follow-up (default 3). It is editable on the dashboard (`tenants.value_minutes_per_reply`, `value_minutes_per_followup`).
+- **Dashboard "This month":** from the 1st at 00:00 local time until now, plus the fastest reply.
+- **Monday e-mail:**
+  - Queued from Monday 08:00 local time (worker scan every 10 minutes; a missed Monday is sent later that week), once per week (`tenants.weekly_report_last_week`).
+  - It covers the past Monday–Sunday, with one highlight (the fastest reply) and the month so far (the month the week ended in).
+  - Plain sections of at most three lines, no charts. Nothing is sent for a week without activity.
+  - Only active, set-up, entitled businesses get it.
+- **Unsubscribe:** a signed link (HMAC of the tenant id; no expiry) and one-click `List-Unsubscribe` (RFC 8058). Both switch `weekly_report_enabled` off. Settings → Account switches it on again.
+- **Pricing page:** "At 10 e-mails a day, Noctiv saves about 13 hours a month". Assumption: 4 minutes per e-mail on 20 working days (10 × 20 × 4 min ≈ 13 h); follow-ups not counted.

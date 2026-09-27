@@ -1,4 +1,4 @@
-import type { Notification } from '@noctiv/core';
+import { formatDuration, formatSaved, type MoneyTotal, type Notification } from '@noctiv/core';
 import { headerText, MAIL_ERROR_MESSAGES, type MailErrorCode } from '@noctiv/mail';
 import { formatMoney } from '@noctiv/quotes';
 
@@ -76,23 +76,35 @@ const list = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 's
 
 interface Block {
   heading: string;
+  /** One line right under the heading (the weekly highlight). */
+  lead?: string;
   lines: [label: string, value: string][];
   note?: string;
   quote?: { label: string; text: string };
   buttons?: [label: string, url: string][];
+  /** Titled groups of short lines (the weekly summary). */
+  sections?: { title: string; lines: string[] }[];
   footer: string;
+  /** Opt-out link shown under the footer. */
+  unsubscribe?: string;
 }
 
 function render(subject: string, b: Block): RenderedEmail {
   const text = [
     b.heading,
-    '',
-    ...b.lines.map(([k, v]) => `${k}: ${v}`),
+    ...(b.lead ? ['', b.lead] : []),
+    ...(b.lines.length ? ['', ...b.lines.map(([k, v]) => `${k}: ${v}`)] : []),
+    ...(b.sections ?? []).flatMap((s) => [
+      '',
+      s.title.toUpperCase(),
+      ...s.lines.map((l) => `  ${l}`),
+    ]),
     ...(b.note ? ['', b.note] : []),
     ...(b.quote ? ['', `${b.quote.label}:`, b.quote.text] : []),
     ...(b.buttons?.length ? ['', ...b.buttons.map(([k, u]) => `${k}: ${u}`)] : []),
     '',
     b.footer,
+    ...(b.unsubscribe ? [`Unsubscribe from this e-mail: ${b.unsubscribe}`] : []),
   ].join('\n');
   const rows = b.lines
     .map(
@@ -112,11 +124,19 @@ function render(subject: string, b: Block): RenderedEmail {
 <tr><td style="background:#0B1026"><img src="${EMAIL_HEADER_URL}" width="600" height="80" alt="Noctiv" style="display:block;width:100%;max-width:600px;height:auto;border:0;color:#EEF1FA;font:800 22px system-ui,sans-serif"></td></tr>
 <tr><td style="padding:20px 24px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#131A2E">
 <p style="font-size:17px;font-weight:600;margin-top:0">${escapeHtml(b.heading)}</p>
+${b.lead ? `<p>${escapeHtml(b.lead)}</p>` : ''}
 <table style="border-collapse:collapse">${rows}</table>
+${(b.sections ?? [])
+  .map(
+    (s) =>
+      `<p style="margin:18px 0 4px;font-weight:600">${escapeHtml(s.title)}</p>` +
+      s.lines.map((l) => `<p style="margin:0 0 2px">${escapeHtml(l)}</p>`).join(''),
+  )
+  .join('')}
 ${b.note ? `<p>${escapeHtml(b.note)}</p>` : ''}
 ${b.quote ? `<p style="color:#555;margin-bottom:4px">${escapeHtml(b.quote.label)}:</p><pre style="white-space:pre-wrap;font-family:inherit;border-left:3px solid #ccc;padding-left:10px;margin-top:0">${escapeHtml(b.quote.text)}</pre>` : ''}
 ${buttons ? `<p>${buttons}</p>` : ''}
-<p style="color:#646C8A;font-size:13px;margin-bottom:0">${escapeHtml(b.footer)}</p>
+<p style="color:#646C8A;font-size:13px;margin-bottom:0">${escapeHtml(b.footer)}${b.unsubscribe ? ` <a href="${escapeHtml(b.unsubscribe)}" style="color:#646C8A">Unsubscribe from this e-mail</a>.` : ''}</p>
 </td></tr></table>
 </td></tr></table>
 </body></html>`;
@@ -417,6 +437,8 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         footer: FOOTER,
       });
     }
+    case 'weekly_report':
+      return renderWeeklyReport(n);
     case 'test':
       return render('Noctiv test notification', {
         heading: 'Your Noctiv email notifications work.',
@@ -442,4 +464,90 @@ function sendFailureText(code: string): string {
   if (code === 'DRAFT_EMPTY') return 'The reply was empty.';
   const known = MAIL_ERROR_MESSAGES[code as MailErrorCode];
   return known ?? 'The mail server refused the message.';
+}
+
+/** The numbers of one period in the weekly summary payload (worker ops/weekly-report.ts). */
+interface WeekNumbers {
+  answered: number;
+  avgReplySeconds: number | null;
+  avgBusinessHoursSeconds: number | null;
+  outsideHoursShare: number | null;
+  followupsSent: number;
+  wonBack: number;
+  quotesSent: MoneyTotal[];
+  quotesAccepted: MoneyTotal[];
+  invoicesPaid: MoneyTotal[];
+  minutesSaved: number;
+  assumptions: { minutesPerReply: number; minutesPerFollowup: number };
+}
+
+const money = (m: MoneyTotal[]) => m.map((x) => formatMoney(x.totalCents, x.currency)).join(' + ');
+const total = (m: MoneyTotal[]) => m.reduce((n, x) => n + x.count, 0);
+const withMoney = (label: string, m: MoneyTotal[]) =>
+  total(m) ? [`${label}: ${total(m)} (${money(m)})`] : [];
+
+/** Plain design, no charts: a few short sections, at most three lines each (PLAN.md §26). */
+function renderWeeklyReport(n: Notification): RenderedEmail {
+  const p = n.payload as unknown as {
+    weekLabel: string;
+    monthLabel: string;
+    week: WeekNumbers;
+    month: WeekNumbers;
+    highlight: string | null;
+  };
+  const w = p.week;
+  const m = p.month;
+  const sections: { title: string; lines: string[] }[] = [];
+  const replies = [`E-mails answered: ${w.answered}`];
+  if (w.avgReplySeconds !== null)
+    replies.push(
+      `Average reply time: ${formatDuration(w.avgReplySeconds)}` +
+        (w.avgBusinessHoursSeconds !== null
+          ? ` (business hours only: ${formatDuration(w.avgBusinessHoursSeconds)})`
+          : ''),
+    );
+  if (w.outsideHoursShare)
+    replies.push(`Arrived outside business hours: ${Math.round(w.outsideHoursShare * 100)}%`);
+  sections.push({ title: 'Replies', lines: replies });
+  if (w.followupsSent || w.wonBack)
+    sections.push({
+      title: 'Follow-ups',
+      lines: [
+        `Follow-ups sent: ${w.followupsSent}`,
+        `Replies won back: ${w.wonBack} (customers who answered after a follow-up)`,
+      ],
+    });
+  const sales = [
+    ...withMoney('Quotes sent', w.quotesSent),
+    ...withMoney('Quotes accepted', w.quotesAccepted),
+    ...withMoney('Invoices paid', w.invoicesPaid),
+  ];
+  if (sales.length) sections.push({ title: 'Quotes and invoices', lines: sales });
+  sections.push({
+    title: 'Time saved',
+    lines: [
+      `About ${formatSaved(w.minutesSaved)}: ${w.answered} replies × ${w.assumptions.minutesPerReply} min + ${w.followupsSent} follow-ups × ${w.assumptions.minutesPerFollowup} min (your estimate; change it on the dashboard)`,
+    ],
+  });
+  const monthSales = [
+    ...withMoney('Quotes accepted', m.quotesAccepted),
+    ...withMoney('invoices paid', m.invoicesPaid),
+  ];
+  sections.push({
+    title: `${p.monthLabel} so far`,
+    lines: [
+      `E-mails answered: ${m.answered} · follow-ups: ${m.followupsSent} · won back: ${m.wonBack}`,
+      ...(monthSales.length ? [monthSales.join(' · ')] : []),
+      `Time saved: about ${formatSaved(m.minutesSaved)}`,
+    ],
+  });
+  return render(`Your Noctiv week: ${w.answered} e-mails answered`, {
+    heading: `Your week with Noctiv, ${p.weekLabel}`,
+    lines: [],
+    sections,
+    ...(p.highlight ? { lead: `${p.highlight}.` } : {}),
+    buttons: [['Open dashboard', n.links.dashboard]],
+    footer: `Sent every Monday at 08:00 your time to the owner of ${n.tenantName}.`,
+    ...(n.links.unsubscribe ? { unsubscribe: n.links.unsubscribe } : {}),
+  });
 }

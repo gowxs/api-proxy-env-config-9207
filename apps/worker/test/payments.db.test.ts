@@ -289,8 +289,10 @@ describe('incoming payments', () => {
 });
 
 describe('overdue reminder', () => {
+  // Days overdue count in the business's local date (the tenants are in Europe/Riga), not UTC.
   const overdue = (id: string, days: number) =>
-    owner`update public.documents set due_date = current_date - ${days}::int where id = ${id}`;
+    owner`update public.documents
+          set due_date = (now() at time zone 'Europe/Riga')::date - ${days}::int where id = ${id}`;
   const reminderOf = async (id: string) =>
     (
       await owner<

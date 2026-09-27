@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
 import { registerRateLimits } from './rate-limit.ts';
 import { waitlistRoutes } from './routes/waitlist.ts';
+import { weeklyReportRoutes } from './routes/weekly-report.ts';
 import type { PaddleClient } from './billing/paddle.ts';
 import { actionRoutes } from './routes/actions.ts';
 import { billingRoutes, type BillingConfig } from './routes/billing.ts';
@@ -166,6 +167,11 @@ export function buildApp(
       sql: deps.sql,
       secret: deps.actionSecret,
       publicApiUrl: publicApiUrl(deps),
+    });
+    weeklyReportRoutes(app, {
+      sql: deps.sql,
+      secret: deps.actionSecret,
+      appUrl: deps.appUrl ?? 'https://app.noctiv.io',
     });
   }
   return app;
