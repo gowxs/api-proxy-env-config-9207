@@ -6,11 +6,12 @@ import { PUBLIC_ROBOTS, PublicFront } from '@/components/public-front';
 export const metadata: Metadata = { robots: PUBLIC_ROBOTS, alternates: { canonical: '/' } };
 
 /**
- * Full page load, before first paint: a visitor with a stored session goes to
- * /home (the public page stays hidden meanwhile). Keep the test in step with
- * hasStoredSession (home-gate.tsx).
+ * Full page load, before first paint: a visitor with a stored session, or one
+ * coming back from a sign-in link (tokens in the URL, which /home reads), goes
+ * to /home; the public page stays hidden meanwhile. Keep the tests in step
+ * with hasStoredSession and isSignInReturn (home-gate.tsx).
  */
-const SESSION_CHECK = `try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i)||'';if(k==='noctiv.devToken'||/^sb-.+-auth-token$/.test(k)){document.documentElement.setAttribute('data-session','');location.replace('/home');break}}}catch(e){}`;
+const SESSION_CHECK = `try{var h=document.documentElement,u=location.search+location.hash,go=/[#&?](access_token|refresh_token|code|error_description|token_hash)=/.test(u);for(var i=0;!go&&i<localStorage.length;i++){var k=localStorage.key(i)||'';if(k==='noctiv.devToken'||/^sb-.+-auth-token$/.test(k))go=true}if(go){h.setAttribute('data-session','');location.replace('/home'+u)}}catch(e){}`;
 
 /**
  * app.noctiv.io/: the public page only (server-rendered, works without

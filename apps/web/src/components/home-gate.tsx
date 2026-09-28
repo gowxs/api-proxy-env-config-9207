@@ -16,6 +16,13 @@ export function hasStoredSession(): boolean {
   return false;
 }
 
+/** Back from a sign-in link: the tokens are in the URL, and /home's session setup reads them. */
+export function isSignInReturn(): boolean {
+  return /[#&?](access_token|refresh_token|code|error_description|token_hash)=/.test(
+    location.search + location.hash,
+  );
+}
+
 /**
  * "/" is the public page only. A signed-in owner who reaches it by an in-app
  * navigation (the inline script runs only on a full page load) goes to /home.
@@ -23,7 +30,8 @@ export function hasStoredSession(): boolean {
 export function SignedInToHome() {
   const router = useRouter();
   useEffect(() => {
-    if (hasStoredSession()) router.replace('/home');
+    if (isSignInReturn()) window.location.replace(`/home${location.search}${location.hash}`);
+    else if (hasStoredSession()) router.replace('/home');
     else document.documentElement.removeAttribute('data-session');
   }, [router]);
   return null;
