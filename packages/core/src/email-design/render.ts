@@ -24,7 +24,15 @@ export interface EmailBrand {
   address: string | null;
   /** Up to three profile URLs. */
   socialLinks: string[];
+  /**
+   * The business uploaded its logo (Settings → E-mail design): it is sent
+   * inside the e-mail (Content-ID) and used instead of logoUrl.
+   */
+  logoInline?: boolean;
 }
+
+/** Content-ID of the uploaded logo inside an e-mail (multipart/related). */
+export const LOGO_CID = 'brand-logo@noctiv';
 
 export const EMPTY_BRAND: EmailBrand = {
   companyName: null,
@@ -52,6 +60,8 @@ export interface RenderedReply {
   /** null: send text/plain only (template "plain", or the HTML would be too large). */
   html: string | null;
   logo: 'shown' | 'none' | 'blocked';
+  /** The HTML shows the uploaded logo: attach it with Content-ID LOGO_CID. */
+  inlineLogo: boolean;
   /** Why there is no HTML although the template has one. */
   fallback?: 'too_large';
 }
@@ -92,6 +102,15 @@ const isHex = (c: string | null): c is string => !!c && /^#[0-9A-Fa-f]{6}$/.test
 /** Brand colour usable for links on white (falls back when too light). */
 function linkColor(brand: string): string {
   return contrast(brand, WHITE) >= 3 ? brand : DEFAULT_COLOR;
+}
+
+/**
+ * The brand colour for text on white (the company name when there is no
+ * logo, links): the colour itself when it reads well (3:1, large bold text),
+ * otherwise a dark default. Used by the e-mails, PDFs and customer pages.
+ */
+export function brandTextColor(color: string | null | undefined): string {
+  return color && /^#[0-9A-Fa-f]{6}$/.test(color) ? linkColor(color.toUpperCase()) : DEFAULT_COLOR;
 }
 /** Readable text on the brand colour: white or ink, whichever contrasts more. */
 function onColor(brand: string): string {
@@ -198,6 +217,7 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
       text: `${i.body.trimEnd()}${signature ? `\n\n${signature}` : ''}\n`,
       html: null,
       logo: 'none',
+      inlineLogo: false,
     };
   }
 
@@ -206,9 +226,12 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
   const link = linkColor(brand);
   const text = fullText(i.body, signature, b);
   const wantsLogo = i.template !== 'clean';
-  const logoOk = wantsLogo && logoAllowed(b.logoUrl, i.allowlist);
+  // An uploaded logo travels inside the e-mail; a logo address must be allowlisted.
+  const inline = wantsLogo && b.logoInline === true;
+  const logoOk = inline || (wantsLogo && logoAllowed(b.logoUrl, i.allowlist));
+  const logoSrc = inline ? `cid:${LOGO_CID}` : b.logoUrl;
   const logoState: RenderedReply['logo'] =
-    !wantsLogo || !b.logoUrl ? 'none' : logoOk ? 'shown' : 'blocked';
+    !wantsLogo || (!inline && !b.logoUrl) ? 'none' : logoOk ? 'shown' : 'blocked';
   const company = b.companyName?.trim() || '';
 
   const p = `margin:0 0 14px;font-family:${FONT};font-size:15px;line-height:1.55;color:${INK}`;
@@ -221,9 +244,10 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
 
   const logo = (align: 'left' | 'center' = 'left') =>
     logoOk
-      ? `<img src="${esc(b.logoUrl!)}" alt="${esc(company || 'Logo')}" style="display:block;max-width:160px;max-height:64px;height:auto;width:auto;border:0;outline:none;text-decoration:none${align === 'center' ? ';margin:0 auto' : ''}">`
+      ? `<img src="${esc(logoSrc!)}" alt="${esc(company || 'Logo')}" style="display:block;max-width:160px;max-height:64px;height:auto;width:auto;border:0;outline:none;text-decoration:none${align === 'center' ? ';margin:0 auto' : ''}">`
       : company
-        ? `<p style="margin:0;font-family:${FONT};font-size:18px;font-weight:700;color:${INK}">${esc(company)}</p>`
+        ? // No logo: the company name in the brand colour (darkened when too light to read).
+          `<p style="margin:0;font-family:${FONT};font-size:18px;font-weight:700;color:${link}">${esc(company)}</p>`
         : '';
 
   const contacts = contactLinks(b);
@@ -308,7 +332,7 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
   }
 
   if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
-    return { text, html: null, logo: 'none', fallback: 'too_large' };
+    return { text, html: null, logo: 'none', inlineLogo: false, fallback: 'too_large' };
   }
-  return { text, html, logo: logoState };
+  return { text, html, logo: logoState, inlineLogo: inline && logoOk };
 }

@@ -294,6 +294,8 @@ describe('e-mail design', () => {
                 where id = ${t.tenantId}`;
     await owner`insert into public.kb_allowlist (tenant_id, source_id, kind, value)
                 values (${t.tenantId}, ${t.sourceId}, 'domain', 'lumen.test')`;
+    // This business uses its logo address (no uploaded logo).
+    await owner`delete from public.tenant_logos where tenant_id = ${t.tenantId}`;
     const conn = await addGreenmailConnection(owner, gm, {
       tenantId: t.tenantId,
       address: shop.address,
@@ -311,6 +313,27 @@ describe('e-mail design', () => {
     expect(parsed.html).toContain('Yes, lavender candles are in stock.');
     expect(parsed.html).toContain('<img src="https://lumen.test/logo.png"');
     expect(parsed.html).toContain('background:#2A3566');
+  });
+
+  it('an uploaded logo goes inside the e-mail (Content-ID), not as a remote image', async () => {
+    const t = await seedTenant(owner, 'send-logo', { embeddingAxis: 76 });
+    await owner`update public.tenants set email_template = 'logo', brand_logo_url = 'https://lumen.test/logo.png'
+                where id = ${t.tenantId}`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const d = await makeDraft({ tenantId: t.tenantId, connectionId: conn });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    const [m] = await inboxWith(d.tag);
+    expect(m!.raw).toMatch(/Content-Type: multipart\/related/);
+    expect(m!.raw).toMatch(/Content-ID: <brand-logo@noctiv>/);
+    const parsed = await simpleParser(m!.raw);
+    expect(parsed.html).not.toContain('lumen.test/logo.png');
+    expect(parsed.attachments.find((a) => a.cid === 'brand-logo@noctiv')?.contentType).toBe(
+      'image/png',
+    );
   });
 
   it('the default (plain) design sends text only', async () => {

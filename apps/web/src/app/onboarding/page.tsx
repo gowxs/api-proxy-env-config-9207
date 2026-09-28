@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { AssistantChat } from '@/components/assistant';
+import { BrandBlock, useUploadedLogo } from '@/components/brand-block';
 import { browserLocale } from '@/lib/assistant';
 import { KnowledgeAdd, SourceList, type KbSource } from '@/components/knowledge';
 import { Logo } from '@/components/logo';
@@ -12,6 +13,7 @@ import {
   Card,
   cx,
   ErrorText,
+  Loading,
   Field,
   inputClass,
   Notice,
@@ -22,7 +24,7 @@ import {
 import { api } from '@/lib/api';
 import { SessionProvider, useSession } from '@/lib/session';
 
-const STEPS = ['Your business', 'Mailbox', 'Knowledge', 'Summary'];
+const STEPS = ['Your business', 'Your brand', 'Mailbox', 'Knowledge', 'Summary'];
 
 function timezones(): string[] {
   try {
@@ -203,6 +205,69 @@ function SummaryStep({ tenantId, onFinish }: { tenantId: string; onFinish: () =>
   );
 }
 
+/** "Your brand": logo and colour (the business name is already set); both can be skipped. */
+function BrandStep({ tenantId, onNext }: { tenantId: string; onNext: () => void }) {
+  const { data } = useLoad(
+    () =>
+      api<{
+        name: string;
+        brand_company_name: string | null;
+        brand_color: string | null;
+        brand_logo_url: string | null;
+      }>(`/v1/tenants/${tenantId}`),
+    [tenantId],
+  );
+  const [color, setColor] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logo, setLogo] = useUploadedLogo(tenantId);
+  const { busy, error, run } = useAction();
+  if (!data) return <Loading />;
+  const c = color ?? data.brand_color ?? '';
+  const u = logoUrl ?? data.brand_logo_url ?? '';
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-neutral-600">
+        Your logo and colour on quotes, invoices, delivery notes, the quote page your customers see
+        and (if you pick a design with a logo) your e-mails. You can change it any time in Settings
+        → E-mail design.
+      </p>
+      <BrandBlock
+        tenantId={tenantId}
+        name={data.brand_company_name?.trim() || data.name}
+        color={c}
+        logoUrl={u}
+        onColor={setColor}
+        onLogoUrl={setLogoUrl}
+        logo={logo}
+        setLogo={setLogo}
+      />
+      <ErrorText>{error}</ErrorText>
+      <Button
+        className="w-full"
+        disabled={busy}
+        onClick={() =>
+          void run(async () => {
+            if (color !== null || logoUrl !== null)
+              await api(`/v1/tenants/${tenantId}`, {
+                method: 'PATCH',
+                body: {
+                  ...(color !== null ? { brandColor: color } : {}),
+                  ...(logoUrl !== null ? { brandLogoUrl: logoUrl } : {}),
+                },
+              });
+            onNext();
+          })
+        }
+      >
+        Continue
+      </Button>
+      <Button variant="ghost" className="w-full" onClick={onNext}>
+        Skip for now
+      </Button>
+    </div>
+  );
+}
+
 /** First screen of onboarding (PLAN.md §27): set up with the assistant, or step by step. */
 function ChoosePath({ onChoose }: { onChoose: (p: 'assistant' | 'manual') => void }) {
   return (
@@ -246,6 +311,7 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
   const { busy, error, run } = useAction();
   // Settings is only reachable after setup, so the mailbox is connected here.
   const [connecting, setConnecting] = useState(false);
+  const [branding, setBranding] = useState(false);
   if (!tenant)
     return (
       <div className="space-y-4">
@@ -267,7 +333,11 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
   return (
     <div className="flex h-[calc(100dvh-9rem)] min-h-[28rem] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white">
       <div className="min-h-0 flex-1">
-        {connecting ? (
+        {branding ? (
+          <div className="h-full overflow-y-auto p-4">
+            <BrandStep tenantId={tenant.id} onNext={() => setBranding(false)} />
+          </div>
+        ) : connecting ? (
           <div className="h-full space-y-4 overflow-y-auto p-4">
             <p className="text-sm text-neutral-600">
               Connect the mailbox your customers write to. You need an App Password — ask the
@@ -292,8 +362,8 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
           />
         )}
       </div>
-      {!connecting && (
-        <div className="border-t border-neutral-200 px-3 py-2.5 text-sm">
+      {!connecting && !branding && (
+        <div className="flex gap-4 border-t border-neutral-200 px-3 py-2.5 text-sm">
           {tenant.mailboxes > 0 ? (
             <span className="text-neutral-600">✓ Mailbox connected</span>
           ) : (
@@ -301,12 +371,15 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
               Connect mailbox
             </button>
           )}
+          <button className="font-medium text-indigo-700" onClick={() => setBranding(true)}>
+            Logo &amp; colour
+          </button>
         </div>
       )}
       <div
         className={cx(
           'flex items-center gap-3 border-t border-neutral-200 p-3',
-          connecting && 'hidden',
+          (connecting || branding) && 'hidden',
         )}
       >
         <Button
@@ -354,7 +427,7 @@ function savePath(p: 'assistant' | 'manual') {
 function Wizard() {
   const router = useRouter();
   const { tenant, refresh } = useSession();
-  const initial = !tenant ? 0 : tenant.mailboxes === 0 ? 1 : 2;
+  const initial = !tenant ? 0 : tenant.mailboxes === 0 ? 2 : 3;
   const [step, setStep] = useState(initial);
   // A business created on the assistant path comes back to the assistant after a reload.
   const [path, setPathState] = useState<'choose' | 'assistant' | 'manual' | 'resolving'>(() =>
@@ -396,7 +469,7 @@ function Wizard() {
         ) : (
           <AssistantSetup
             onManual={() => {
-              setStep(tenant ? (tenant.mailboxes === 0 ? 1 : 2) : 0);
+              setStep(tenant ? 1 : 0);
               setPath('manual');
             }}
           />
@@ -408,7 +481,7 @@ function Wizard() {
       <p className="flex items-center gap-2 text-sm font-semibold text-neutral-500">
         <Logo height={24} /> <span>setup</span>
       </p>
-      <ol className="my-4 grid grid-cols-4 gap-2">
+      <ol className="my-4 grid grid-cols-5 gap-2">
         {STEPS.map((s, i) => (
           <li key={s} className="text-center">
             <div
@@ -432,7 +505,8 @@ function Wizard() {
           }}
         />
       )}
-      {step === 1 && tenant && (
+      {step === 1 && tenant && <BrandStep tenantId={tenant.id} onNext={() => setStep(2)} />}
+      {step === 2 && tenant && (
         <div className="space-y-4">
           <p className="text-sm text-neutral-600">
             Connect the mailbox your customers write to. You need an App Password — a separate
@@ -443,12 +517,12 @@ function Wizard() {
             onTested={setTested}
             onSaved={() => {
               void refresh();
-              setStep(2);
+              setStep(3);
             }}
           />
           {/* After a passing test the only next step is "Save mailbox". */}
           {!tested && (
-            <Button variant="ghost" className="w-full" onClick={() => setStep(2)}>
+            <Button variant="ghost" className="w-full" onClick={() => setStep(3)}>
               {tenant.mailboxes > 0
                 ? 'Continue with the connected mailbox'
                 : 'Skip for now — connect it later in Settings'}
@@ -456,17 +530,17 @@ function Wizard() {
           )}
         </div>
       )}
-      {step === 2 && tenant && (
+      {step === 3 && tenant && (
         <KnowledgeStep
           tenantId={tenant.id}
           website={tenant.website_url ?? null}
           onNext={() => {
             void refresh();
-            setStep(3);
+            setStep(4);
           }}
         />
       )}
-      {step === 3 && tenant && (
+      {step === 4 && tenant && (
         <SummaryStep
           tenantId={tenant.id}
           onFinish={async () => {

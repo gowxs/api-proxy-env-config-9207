@@ -2,7 +2,9 @@ import { verifyWeeklyReportToken } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Sql } from 'postgres';
+import { loadStoredLogo } from '@noctiv/quotes';
 import { page } from './actions.ts';
+import { brandHeader } from './quote-link.ts';
 
 /**
  * Unsubscribe from the Monday summary e-mail (PLAN.md §26). Opening the link
@@ -25,6 +27,14 @@ export function weeklyReportRoutes(
     void page(reply, 404, 'Link not valid', 'This link is not valid.');
     return false;
   };
+  /** The business's logo (uploaded) or its name in the brand colour. */
+  const brand = (tenantId: string) =>
+    withTenant(deps.sql, tenantId, async (tx) => {
+      const [t] = await tx<{ name: string; color: string | null }[]>`
+        select coalesce(brand_company_name, name) as name, brand_color as color
+        from public.tenants where id = ${tenantId}`;
+      return t ? brandHeader(t.name, t.color, await loadStoredLogo(tx)) : undefined;
+    });
   app.get<P>(path, async (req, reply) => {
     if (!valid(req.params, reply)) return reply;
     return page(
@@ -33,6 +43,8 @@ export function weeklyReportRoutes(
       'Stop the weekly summary?',
       'You will no longer get the Monday e-mail with your Noctiv numbers. Your other notifications stay on.',
       { label: 'Unsubscribe', danger: true },
+      undefined,
+      await brand(req.params.tenantId),
     );
   });
   app.post<P>(path, async (req, reply) => {
@@ -53,6 +65,7 @@ export function weeklyReportRoutes(
       'The weekly summary is off. You can switch it on again in Settings → Account.',
       undefined,
       settings,
+      await brand(tenantId),
     );
   });
 }

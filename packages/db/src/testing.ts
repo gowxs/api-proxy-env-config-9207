@@ -166,6 +166,10 @@ export async function seedTenant(
              values (${tenantId}, 'email_owner', 'draft', ${`draft:${draftId}`})`;
     await tx`insert into public.audit_log (tenant_id, actor, action) values (${tenantId}, 'system', 'seed')`;
     await tx`insert into public.tenant_deletions (tenant_id) values (${tenantId})`;
+    // A 1×1 PNG.
+    await tx`insert into public.tenant_logos (tenant_id, png, width, height, source_type, sha256)
+             values (${tenantId}, ${Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')},
+                     1, 1, 'png', ${'0'.repeat(64)})`;
     const [conv] = await tx<{ id: string }[]>`
       insert into public.assistant_conversations (tenant_id, user_id) values (${tenantId}, ${userId}) returning id`;
     const [said] = await tx<{ id: string }[]>`

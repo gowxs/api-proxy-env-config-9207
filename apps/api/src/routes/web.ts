@@ -6,6 +6,7 @@ import {
   localMonthStart,
   logoAllowed,
   renderReplyEmail,
+  LOGO_CID,
   TENANT_MODES,
   type TenantMode,
   WAITLIST_INTEGRATIONS,
@@ -25,7 +26,9 @@ import type { FastifyInstance } from 'fastify';
 import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
+import { LogoError, logoDataUrl, processLogo } from '../brand-logo.ts';
 import { HttpError } from './http-error.ts';
+import { loadStoredLogo } from '@noctiv/quotes';
 import { checkPrefixChanges, documentSettingsColumns, documentSettingsShape } from './documents.ts';
 import { quoteSettingsColumns, quoteSettingsShape, selectQuotes } from './quotes.ts';
 
@@ -295,6 +298,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         }[]
       >`select name, reply_signature, email_template, brand_company_name, brand_logo_url, brand_color,
                brand_website, brand_phone, brand_address, brand_social_links from public.tenants`;
+      const stored = await loadStoredLogo(tx);
       const pick = <K extends keyof Design>(k: K, saved: Design[K]) =>
         b[k] !== undefined ? b[k] : saved;
       const r = renderReplyEmail({
@@ -309,14 +313,84 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           phone: pick('brandPhone', t!.brand_phone) ?? null,
           address: pick('brandAddress', t!.brand_address) ?? null,
           socialLinks: pick('brandSocialLinks', t!.brand_social_links) ?? [],
+          logoInline: stored !== null,
         },
         allowlist: await loadAllowlist(tx),
       });
       return {
         ...r,
+        // In the preview the uploaded logo is shown from the page itself (sent: inside the e-mail).
+        html: r.html && stored ? r.html.replaceAll(`cid:${LOGO_CID}`, logoDataUrl(stored)) : r.html,
         ...(r.logo === 'blocked' ? { logoMessage: LOGO_NOT_ALLOWED } : {}),
         htmlBytes: r.html ? Buffer.byteLength(r.html) : 0,
       };
+    }),
+  );
+
+  // ------------------------------------------------------------ brand logo
+  /** The uploaded logo, for the brand block and its previews. */
+  app.get('/v1/tenants/:tenantId/brand/logo', (req) =>
+    tenantTx(req, async (tx) => {
+      const [l] = await tx<{ png: Buffer; width: number; height: number; source_type: string }[]>`
+        select png, width, height, source_type from public.tenant_logos`;
+      return {
+        logo: l
+          ? {
+              dataUrl: logoDataUrl(l.png),
+              width: l.width,
+              height: l.height,
+              sourceType: l.source_type,
+            }
+          : null,
+      };
+    }),
+  );
+
+  /** Upload (PNG, JPG or SVG, at most 500 KB, base64): stored as a PNG of at most 400 px. */
+  app.put('/v1/tenants/:tenantId/brand/logo', { bodyLimit: 1024 * 1024 }, async (req) => {
+    const { tenantId } = tenantParams.parse(req.params);
+    await deps.requireMember(tenantId, req.user!.userId);
+    const b = z
+      .object({ data: z.string().max(800_000) })
+      .strict()
+      .parse(req.body);
+    const bytes = Buffer.from(b.data.replace(/^data:[^,]*,/, ''), 'base64');
+    let logo;
+    try {
+      logo = await processLogo(bytes);
+    } catch (e) {
+      if (e instanceof LogoError) throw new HttpError(400, e.message);
+      throw e;
+    }
+    await withTenant(deps.sql, tenantId, async (tx) => {
+      await tx`insert into public.tenant_logos (tenant_id, png, width, height, source_type, sha256)
+                 values (${tenantId}, ${logo.png}, ${logo.width}, ${logo.height}, ${logo.sourceType}, ${logo.sha256})
+                 on conflict (tenant_id) do update
+                 set png = excluded.png, width = excluded.width, height = excluded.height,
+                     source_type = excluded.source_type, sha256 = excluded.sha256`;
+      await audit(tx, tenantId, req.user!.userId, 'brand.logo_uploaded', 'tenant', tenantId, {
+        sourceType: logo.sourceType,
+        width: logo.width,
+        height: logo.height,
+        bytes: logo.png.length,
+      });
+    });
+    return {
+      logo: {
+        dataUrl: logoDataUrl(logo.png),
+        width: logo.width,
+        height: logo.height,
+        sourceType: logo.sourceType,
+      },
+    };
+  });
+
+  app.delete('/v1/tenants/:tenantId/brand/logo', (req) =>
+    tenantTx(req, async (tx, tenantId) => {
+      const r = await tx`delete from public.tenant_logos returning tenant_id`;
+      if (r.length)
+        await audit(tx, tenantId, req.user!.userId, 'brand.logo_removed', 'tenant', tenantId);
+      return { logo: null };
     }),
   );
 

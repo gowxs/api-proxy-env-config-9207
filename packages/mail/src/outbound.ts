@@ -43,6 +43,8 @@ export interface OutboundInput {
   date?: Date;
   /** Files attached after the body (e.g. a quote PDF); bytes only, never paths or URLs. */
   attachments?: { filename: string; content: Buffer; contentType: string }[];
+  /** Images shown inside the HTML (cid:…), sent as multipart/related; bytes only. */
+  inline?: { cid: string; filename: string; content: Buffer; contentType: string }[];
 }
 
 /**
@@ -65,13 +67,24 @@ export async function buildOutboundMessage(i: OutboundInput): Promise<Buffer> {
     subject: headerText(i.subject),
     text: i.text,
     ...(i.html ? { html: i.html } : {}),
-    ...(i.attachments?.length
+    ...(i.attachments?.length || (i.html && i.inline?.length)
       ? {
-          attachments: i.attachments.map((a) => ({
-            filename: headerText(a.filename, 100),
-            content: a.content,
-            contentType: a.contentType,
-          })),
+          attachments: [
+            ...(i.html
+              ? (i.inline ?? []).map((a) => ({
+                  filename: headerText(a.filename, 100),
+                  content: a.content,
+                  contentType: a.contentType,
+                  cid: a.cid,
+                  contentDisposition: 'inline' as const,
+                }))
+              : []),
+            ...(i.attachments ?? []).map((a) => ({
+              filename: headerText(a.filename, 100),
+              content: a.content,
+              contentType: a.contentType,
+            })),
+          ],
         }
       : {}),
     messageId: i.messageId,

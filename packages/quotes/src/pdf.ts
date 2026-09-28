@@ -7,6 +7,7 @@ import {
   PDF_MUTED as MUTED,
   PDF_RULE as RULE,
   pdfBrandColor,
+  pdfBrandTextColor,
 } from './pdf-base.ts';
 import { formatDate } from './texts.ts';
 
@@ -74,14 +75,14 @@ export function renderQuotePdf(q: QuotePdfInput): Promise<Buffer> {
       doc
         .font('b')
         .fontSize(18)
-        .fillColor(INK)
+        .fillColor(pdfBrandTextColor(q.brand.color))
         .text(q.brand.companyName, L, y + 12, { width: W / 2 });
     }
   } else {
     doc
       .font('b')
       .fontSize(18)
-      .fillColor(INK)
+      .fillColor(pdfBrandTextColor(q.brand.color))
       .text(q.brand.companyName, L, y + 12, { width: W / 2 });
   }
   doc.font('b').fontSize(22).fillColor(INK).text(t.quote, L, y, { width: W, align: 'right' });

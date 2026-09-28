@@ -1,4 +1,4 @@
-import { PDF_INK as INK, PDF_MUTED as MUTED, formatDate } from '@noctiv/quotes';
+import { PDF_INK as INK, PDF_MUTED as MUTED, formatDate, pdfBrandTextColor } from '@noctiv/quotes';
 import type { Seller } from '../checks.ts';
 import { formatIban, formatSortCode } from '../checks.ts';
 
@@ -7,7 +7,7 @@ export interface DocBrand {
   color: string | null;
   website: string | null;
   phone: string | null;
-  /** PNG or JPEG bytes of the tenant's (allowlisted) logo, if it could be fetched. */
+  /** PNG or JPEG bytes: the uploaded logo, else the (allowlisted) logo address's image. */
   logo: Buffer | null;
 }
 
@@ -34,7 +34,7 @@ export function header(
     doc
       .font('b')
       .fontSize(18)
-      .fillColor(INK)
+      .fillColor(pdfBrandTextColor(c.brand.color))
       .text(c.brand.companyName, L, y + 12, { width: W / 2 });
   if (c.brand.logo) {
     try {

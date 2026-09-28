@@ -18,6 +18,24 @@ export const PDF_RULE = '#E3E6EE';
 export const pdfBrandColor = (c: string | null | undefined) =>
   c && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : '#2F3A56';
 
+const luminance = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+/**
+ * The company name in the brand colour when there is no logo: the colour
+ * itself if it reads on white (contrast 3:1, large bold text), else the
+ * default navy — the same rule as the e-mails (brandTextColor in core).
+ */
+export function pdfBrandTextColor(c: string | null | undefined): string {
+  const color = pdfBrandColor(c);
+  return 1.05 / (luminance(color) + 0.05) >= 3 ? color : '#2F3A56';
+}
+
 /**
  * An A4 pdfkit document with the Noctiv fonts registered as 'r' (regular),
  * 's' (semibold) and 'b' (bold), ligatures off (Manrope joins "tt", so

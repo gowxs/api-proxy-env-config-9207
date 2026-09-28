@@ -25,7 +25,7 @@ import {
   type DocumentRecord,
 } from '@noctiv/documents';
 import { createSafeFetcher, loadAllowlist, type SafeFetch } from '@noctiv/kb';
-import { fetchQuoteLogo } from '@noctiv/quotes';
+import { fetchQuoteLogo, loadStoredLogo } from '@noctiv/quotes';
 import type { FastifyInstance } from 'fastify';
 import type { TransactionSql } from 'postgres';
 import { z } from 'zod';
@@ -529,9 +529,16 @@ export function documentRoutes(
     const found = await tenantTx(req, async (tx) => {
       const d = await load(tx, idParams.parse(req.params).id);
       if (d.status === 'draft') throw new HttpError(409, 'Create the PDF first.');
-      return { d, allowed: logoAllowed(d.brand.logoUrl, await loadAllowlist(tx)) };
+      return {
+        d,
+        stored: await loadStoredLogo(tx),
+        allowed: logoAllowed(d.brand.logoUrl, await loadAllowlist(tx)),
+      };
     });
-    const logo = found.allowed ? await fetchQuoteLogo(fetchLogo, found.d.brand.logoUrl) : null;
+    // The uploaded logo first; else the logo address (allowlisted); else the name in the brand colour.
+    const logo =
+      found.stored ??
+      (found.allowed ? await fetchQuoteLogo(fetchLogo, found.d.brand.logoUrl) : null);
     const pdf = await renderDocumentPdf(found.d, logo);
     return reply
       .headers({

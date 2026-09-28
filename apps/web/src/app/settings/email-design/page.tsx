@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { BrandBlock, useUploadedLogo } from '@/components/brand-block';
 import { AppPage } from '@/components/shell';
 import {
   Button,
@@ -131,6 +132,7 @@ function DesignEditor({ tenant, reload }: { tenant: TenantDesign; reload: () => 
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const save = useAction();
+  const [uploaded, setUploaded] = useUploadedLogo(tenantId);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => {
     setSaved(false);
     setForm((f) => ({ ...f, [k]: v }));
@@ -150,9 +152,8 @@ function DesignEditor({ tenant, reload }: { tenant: TenantDesign; reload: () => 
         .catch((e: Error) => setPreviewError(e.message));
     }, 300);
     return () => clearTimeout(t);
-  }, [form, tenantId]);
+  }, [form, tenantId, uploaded]);
 
-  const html = form.emailTemplate !== 'plain';
   const logo =
     form.emailTemplate === 'logo' ||
     form.emailTemplate === 'branded' ||
@@ -209,56 +210,39 @@ function DesignEditor({ tenant, reload }: { tenant: TenantDesign; reload: () => 
             });
           }}
         >
+          <Card title="Your brand">
+            <div className="space-y-4">
+              <Field
+                label="Company name"
+                hint="Shown in your e-mails and documents; your business name if empty."
+              >
+                <input
+                  className={inputClass}
+                  value={form.brandCompanyName}
+                  placeholder={tenant.name}
+                  onChange={(e) => set('brandCompanyName', e.target.value)}
+                />
+              </Field>
+              <BrandBlock
+                tenantId={tenantId}
+                name={form.brandCompanyName.trim() || tenant.name}
+                color={form.brandColor}
+                logoUrl={form.brandLogoUrl}
+                onColor={(c) => set('brandColor', c)}
+                onLogoUrl={(u) => set('brandLogoUrl', u)}
+                logo={uploaded}
+                setLogo={setUploaded}
+              />
+              {!logo && form.emailTemplate !== 'plain' && (
+                <p className="text-xs text-neutral-500">
+                  The design you picked shows no logo; it is still used on your PDFs and the quote
+                  page. Designs 3–5 show it in e-mails.
+                </p>
+              )}
+            </div>
+          </Card>
           <Card title="Your details">
             <div className="space-y-3">
-              {html && (
-                <>
-                  <Field label="Company name">
-                    <input
-                      className={inputClass}
-                      value={form.brandCompanyName}
-                      placeholder={tenant.name}
-                      onChange={(e) => set('brandCompanyName', e.target.value)}
-                    />
-                  </Field>
-                  {logo && (
-                    <Field
-                      label="Logo address"
-                      hint="An image on your own website (a site in your knowledge base), starting with https://. Shown at most 160 px wide. Dark text on a transparent background can disappear in dark mode; a logo with its own background works everywhere."
-                    >
-                      <input
-                        className={inputClass}
-                        type="url"
-                        inputMode="url"
-                        value={form.brandLogoUrl}
-                        placeholder="https://your-site.com/logo.png"
-                        onChange={(e) => set('brandLogoUrl', e.target.value)}
-                      />
-                    </Field>
-                  )}
-                  {(form.emailTemplate === 'branded' || form.emailTemplate === 'card') && (
-                    <Field label="Brand colour">
-                      <div className="flex gap-2">
-                        <input
-                          type="color"
-                          aria-label="Pick a colour"
-                          className="h-11 w-14 cursor-pointer rounded-lg border border-neutral-300 bg-white p-1"
-                          value={
-                            /^#[0-9a-f]{6}$/i.test(form.brandColor) ? form.brandColor : '#2f3a56'
-                          }
-                          onChange={(e) => set('brandColor', e.target.value.toUpperCase())}
-                        />
-                        <input
-                          className={inputClass}
-                          value={form.brandColor}
-                          placeholder="#2F3A56"
-                          onChange={(e) => set('brandColor', e.target.value)}
-                        />
-                      </div>
-                    </Field>
-                  )}
-                </>
-              )}
               <Field label="Website">
                 <input
                   className={inputClass}

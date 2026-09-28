@@ -6,6 +6,7 @@ import {
   nextFollowupAt,
   ownerNotificationPayload,
   renderReplyEmail,
+  LOGO_CID,
   type EmailTemplate,
   type Logger,
   type TenantMode,
@@ -13,6 +14,7 @@ import {
 import { loadAllowlist, type SafeFetch } from '@noctiv/kb';
 import {
   fetchQuoteLogo,
+  loadStoredLogo,
   loadQuoteDocument,
   quoteAcceptUrl,
   quotePdfFileName,
@@ -120,6 +122,10 @@ interface SendPlan {
   attachedDocuments: DocumentRecord[];
   /** The tenant's logo may be fetched for those documents (allowlisted). */
   attachLogos: boolean;
+  /** The uploaded logo (PNG): used on the PDFs before any logo address, and inline in the HTML. */
+  storedLogo: Buffer | null;
+  /** The HTML shows the uploaded logo (Content-ID LOGO_CID). */
+  inlineLogo: boolean;
 }
 
 type PlanResult =
@@ -194,9 +200,9 @@ export function mailSendHandler(deps: MailSendDeps) {
         { tenantId, quoteId: doc.id, validUntil: doc.validUntil },
         deps.quotes.secret,
       );
-      const logo = logoAllowed
-        ? await fetchQuoteLogo(deps.quotes.fetchLogo, doc.brand.logoUrl)
-        : null;
+      const logo =
+        plan.storedLogo ??
+        (logoAllowed ? await fetchQuoteLogo(deps.quotes.fetchLogo, doc.brand.logoUrl) : null);
       const pdf = await renderQuotePdf(
         quotePdfInput(doc, quoteAcceptUrl(deps.quotes.publicApiUrl, token), logo),
       );
@@ -212,9 +218,10 @@ export function mailSendHandler(deps: MailSendDeps) {
     if (plan.document) {
       const { doc, logoAllowed } = plan.document;
       const logo =
-        logoAllowed && deps.fetchLogo
+        plan.storedLogo ??
+        (logoAllowed && deps.fetchLogo
           ? await fetchQuoteLogo(deps.fetchLogo, doc.brand.logoUrl)
-          : null;
+          : null);
       attachments = [
         {
           filename: documentFileName(doc),
@@ -227,9 +234,10 @@ export function mailSendHandler(deps: MailSendDeps) {
       attachments = [];
       for (const doc of plan.attachedDocuments) {
         const logo =
-          deps.fetchLogo && doc.brand.logoUrl && plan.attachLogos
+          plan.storedLogo ??
+          (deps.fetchLogo && doc.brand.logoUrl && plan.attachLogos
             ? await fetchQuoteLogo(deps.fetchLogo, doc.brand.logoUrl)
-            : null;
+            : null);
         attachments.push({
           filename: documentFileName(doc),
           content: await renderDocumentPdf(doc, logo),
@@ -249,6 +257,19 @@ export function mailSendHandler(deps: MailSendDeps) {
       references: plan.references,
       autoSubmitted: plan.outbound.sentVia === 'auto',
       attachments,
+      // The uploaded logo inside the designed e-mail (no remote image to load or block).
+      ...(plan.inlineLogo && plan.storedLogo
+        ? {
+            inline: [
+              {
+                cid: LOGO_CID,
+                filename: 'logo.png',
+                content: plan.storedLogo,
+                contentType: 'image/png',
+              },
+            ],
+          }
+        : {}),
     });
 
     let response: string;
@@ -537,6 +558,7 @@ async function planSend(
     outbound = { ...outbound, id: row!.id, messageId };
   }
 
+  const storedLogo = await loadStoredLogo(tx);
   // The tenant's e-mail design frames the reply; the reply text is unchanged.
   const rendered = renderReplyEmail({
     template: d.email_template,
@@ -550,6 +572,7 @@ async function planSend(
       phone: d.brand_phone,
       address: d.brand_address,
       socialLinks: d.brand_social_links,
+      logoInline: storedLogo !== null,
     },
     allowlist: d.email_template === 'plain' ? emptyAllowlist() : await loadAllowlist(tx),
   });
@@ -589,6 +612,8 @@ async function planSend(
       document,
       attachedDocuments,
       attachLogos,
+      storedLogo,
+      inlineLogo: rendered.inlineLogo,
     },
   };
 }

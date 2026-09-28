@@ -1,6 +1,7 @@
 import { createLogger, generateSealingKeyPair } from '@noctiv/core';
 import { seedTenant, type SeededTenant } from '@noctiv/db/testing';
 import postgres from 'postgres';
+import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
 import { createTokenVerifier } from '../src/auth.ts';
@@ -31,11 +32,13 @@ beforeAll(async () => {
               values (${A.tenantId}, ${A.sourceId}, 'domain', 'nordlicht.test')`;
   await owner`insert into public.kb_allowlist (tenant_id, source_id, kind, value)
               values (${B.tenantId}, ${B.sourceId}, 'domain', 'other-shop.test')`;
+  // These businesses use a logo address; the uploaded logo is tested on its own below.
+  await owner`delete from public.tenant_logos where tenant_id in (${A.tenantId}, ${B.tenantId})`;
 });
 afterAll(() => Promise.all([owner.end(), apiSql.end()]));
 
 async function call(
-  method: 'GET' | 'PATCH' | 'POST',
+  method: 'GET' | 'PATCH' | 'POST' | 'PUT' | 'DELETE',
   s: SeededTenant,
   path: string,
   body?: unknown,
@@ -126,5 +129,76 @@ describe('e-mail design settings', () => {
 
     const plain = await call('POST', A, '/email-design/preview', { emailTemplate: 'plain' });
     expect(plain.json.html).toBeNull();
+  });
+});
+
+describe('uploaded logo (Your brand)', () => {
+  const png = (w: number, h: number) =>
+    sharp({ create: { width: w, height: h, channels: 3, background: '#3B2FD0' } })
+      .png()
+      .toBuffer();
+
+  it('PNG, JPG or SVG up to 500 KB, stored as PNG of at most 400 px; used first; removable', async () => {
+    const big = await png(1200, 300);
+    const up = await call('PUT', A, '/brand/logo', { data: big.toString('base64') });
+    expect(up.status).toBe(200);
+    expect(up.json.logo).toMatchObject({ width: 400, height: 100, sourceType: 'png' });
+    const [row] = await owner<{ width: number; bytes: number }[]>`
+      select width, octet_length(png) as bytes from public.tenant_logos where tenant_id = ${A.tenantId}`;
+    expect(row!.width).toBe(400);
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="#0A7"/></svg>';
+    const s = await call('PUT', A, '/brand/logo', { data: Buffer.from(svg).toString('base64') });
+    // A vector logo is rendered sharp at 400 px.
+    expect(s.json.logo).toMatchObject({ width: 400, height: 200, sourceType: 'svg' });
+
+    for (const bad of [
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://tracker.evil.test/x.png"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>',
+      'GIF89a not a logo',
+    ]) {
+      const r = await call('PUT', A, '/brand/logo', { data: Buffer.from(bad).toString('base64') });
+      expect(r.status).toBe(400);
+    }
+    const tooBig = Buffer.alloc(501 * 1024, 1);
+    tooBig.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(
+      (await call('PUT', A, '/brand/logo', { data: tooBig.toString('base64') })).json.error,
+    ).toContain('500 KB');
+
+    // The uploaded logo is used before the logo address, inside the e-mail (cid) and in the preview.
+    await call('PUT', A, '/brand/logo', { data: big.toString('base64') });
+    const prev = await call('POST', A, '/email-design/preview', { emailTemplate: 'logo' });
+    expect(prev.json.html).toContain('<img src="data:image/png;base64,');
+    expect(prev.json.html).not.toContain('nordlicht.test/logo.png');
+    expect((await call('GET', A, '/brand/logo')).json.logo.width).toBe(400);
+    // Another business sees nothing of it.
+    expect((await call('GET', B, '/brand/logo')).json.logo).toBeNull();
+
+    expect((await call('DELETE', A, '/brand/logo')).status).toBe(200);
+    expect((await call('GET', A, '/brand/logo')).json.logo).toBeNull();
+    const logs = await owner<{ action: string }[]>`
+      select action from public.audit_log where tenant_id = ${A.tenantId} and action like 'brand.logo%'
+      order by created_at`;
+    expect(logs.at(-1)!.action).toBe('brand.logo_removed');
+  });
+
+  it('no logo: the company name in the brand colour, darkened when too light', async () => {
+    const dark = await call('POST', A, '/email-design/preview', {
+      emailTemplate: 'logo',
+      brandLogoUrl: '',
+      brandCompanyName: 'Nordlicht',
+      brandColor: '#8A1F5C',
+    });
+    expect(dark.json.html).toContain('font-weight:700;color:#8A1F5C">Nordlicht</p>');
+    const light = await call('POST', A, '/email-design/preview', {
+      emailTemplate: 'logo',
+      brandLogoUrl: '',
+      brandCompanyName: 'Nordlicht',
+      brandColor: '#FFE066',
+    });
+    expect(light.json.html).toContain('font-weight:700;color:#2F3A56">Nordlicht</p>');
   });
 });

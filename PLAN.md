@@ -996,3 +996,25 @@ QA.md lists the findings; these are the decisions and how they were built.
   - Confirm made INV-2026-0003 Ready. Send (dialog) delivered the e-mail with `Invoice-INV-2026-0003.pdf`.
   - "Mark invoice INV-2026-0001 as paid" set it to paid.
 
+
+## 28. Your brand: logo and colour (founder request 2026-10-01)
+
+- **Where:**
+  - Onboarding step 2 of 5, "Your brand", after "Your business" (the name is already set). It can be skipped.
+  - In the assistant setup, a "Logo & colour" button opens the same block.
+  - Settings → E-mail design has the same block in the "Your brand" card, for every design, since the PDFs use it too.
+- **Logo upload:**
+  - PNG, JPG or SVG, at most 500 KB. The type is detected from the bytes, not the file name.
+  - Stored in the database (`tenant_logos`, one per business, RLS) as a PNG of at most 400 px. `sharp` is used; photos are rotated by their EXIF data.
+  - An SVG is rendered to PNG and never stored or served as SVG. SVGs with scripts, event handlers, entities, `foreignObject` or any external reference are refused.
+  - Upload and removal take effect at once and are logged (`brand.logo_uploaded`, `brand.logo_removed`).
+  - The logo address (`brand_logo_url`, allowlisted host) stays as the option for those who have one. An uploaded logo wins.
+- **Brand colour:**
+  - A picker plus a hex field, with a contrast check against white: 4.5:1 "reads well", 3:1 fine for the name and headings, below 3:1 a warning.
+  - A colour that is too light is still used for bars and buttons, but the company name and links fall back to dark navy. The same rule applies everywhere (`brandTextColor` in core, `pdfBrandTextColor` in quotes).
+- **Live preview:** the invoice header and the e-mail signature, as customers will see them.
+- **Where the logo is used:**
+  - **Quote, invoice and delivery-note PDFs:** the uploaded logo, else the logo address's image, else the company name in the brand colour. CMR stays standard.
+  - **E-mail designs 3–5 (logo, branded, card):** the uploaded logo travels inside the e-mail (`multipart/related`, `Content-ID: <brand-logo@noctiv>`), so there is no remote image for mail apps to block and no allowlist check is needed. Without a logo, the company name is shown in the brand colour. The preview shows it from the page.
+  - **The customer's Accept page:** the logo is embedded in the page as a data URI (CSP `img-src data:` only), or the company name in the brand colour.
+  - **Unsubscribe page:** there is no customer-facing unsubscribe page. The only one is the owner's weekly-summary page, which now shows the business's logo or name the same way.

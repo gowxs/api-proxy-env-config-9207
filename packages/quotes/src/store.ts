@@ -292,6 +292,15 @@ type LogoFetch = (url: string, accept: string) => Promise<{ status: number; body
  * fetched with the caller's safe fetcher. Any failure → null (company name
  * instead). The caller checks the knowledge-base allowlist first.
  */
+/**
+ * The business's uploaded logo (PNG, at most 400 px), read inside its RLS
+ * context; it is used before any logo address. null when none was uploaded.
+ */
+export async function loadStoredLogo(tx: TransactionSql): Promise<Buffer | null> {
+  const [r] = await tx<{ png: Buffer }[]>`select png from public.tenant_logos limit 1`;
+  return r?.png ?? null;
+}
+
 export async function fetchQuoteLogo(
   fetcher: LogoFetch,
   url: string | null,

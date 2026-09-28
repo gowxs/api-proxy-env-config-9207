@@ -34,6 +34,8 @@ export function page(
   body: string,
   form?: { label: string; danger: boolean },
   link?: { href: string; label: string },
+  /** The business's logo or name (brandHeader), above the title. */
+  brand?: string,
 ) {
   const button = form
     ? `<form method="post"><button type="submit" style="font-size:16px;padding:10px 18px;border:0;border-radius:6px;color:#fff;background:${form.danger ? '#8a1f1f' : '#1f3a5f'};cursor:pointer">${escapeHtml(form.label)}</button></form>`
@@ -44,7 +46,7 @@ export function page(
       'content-type': 'text/html; charset=utf-8',
       // No scripts, no external resources; the form may only post back here.
       'content-security-policy':
-        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
       'referrer-policy': 'no-referrer',
       'cache-control': 'no-store',
       'x-robots-tag': 'noindex, nofollow',
@@ -54,7 +56,7 @@ export function page(
     .send(
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · Noctiv</title></head>` +
         `<body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:48px auto;padding:0 16px;color:#1a1a1a">` +
-        `<h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${button}${link ? `<p><a href="${escapeHtml(link.href)}" style="color:#1f3a5f">${escapeHtml(link.label)}</a></p>` : ''}</body></html>`,
+        `${brand ?? ''}<h1 style="font-size:20px">${escapeHtml(title)}</h1><p>${escapeHtml(body)}</p>${button}${link ? `<p><a href="${escapeHtml(link.href)}" style="color:#1f3a5f">${escapeHtml(link.label)}</a></p>` : ''}</body></html>`,
     );
 }
 

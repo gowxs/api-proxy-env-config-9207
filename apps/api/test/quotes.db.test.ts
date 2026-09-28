@@ -425,7 +425,23 @@ describe('price list', () => {
       expect(r.body).toContain('<html lang="de">');
     });
 
+    it("shows the business's logo (embedded), or its name in the brand colour", async () => {
+      const valid = future();
+      const { quoteId } = await pendingQuote(A, candle, { status: 'sent', validUntil: valid });
+      const url = link(A.tenantId, quoteId, valid);
+      // seedTenant uploads a 1×1 logo: it is part of the page, no request leaves it.
+      const withLogo = await app.inject({ method: 'GET', url });
+      expect(withLogo.body).toContain('<img src="data:image/png;base64,');
+      expect(withLogo.headers['content-security-policy']).toContain('img-src data:;');
+      await owner`delete from public.tenant_logos where tenant_id = ${A.tenantId}`;
+      await owner`update public.tenants set brand_color = '#8A1F5C' where id = ${A.tenantId}`;
+      const named = await app.inject({ method: 'GET', url });
+      expect(named.body).not.toContain('<img');
+      expect(named.body).toMatch(/font-weight:700;color:#8A1F5C">[^<]+<\/p>/);
+    });
+
     it('downloads the PDF', async () => {
+      await owner`delete from public.tenant_logos where tenant_id = ${A.tenantId}`;
       const valid = future();
       const { quoteId } = await pendingQuote(A, candle, { status: 'sent', validUntil: valid });
       const res = await app.inject({
@@ -435,6 +451,20 @@ describe('price list', () => {
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toBe('application/pdf');
       expect(res.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+      expect(res.rawPayload.toString('latin1')).not.toContain('/Subtype /Image');
+      // With an uploaded logo, it is embedded in the PDF.
+      const onePx = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64',
+      );
+      await owner`insert into public.tenant_logos (tenant_id, png, width, height, source_type, sha256)
+                  values (${A.tenantId}, ${onePx}, 1, 1, 'png', ${'0'.repeat(64)})
+                  on conflict (tenant_id) do nothing`;
+      const withLogo = await app.inject({
+        method: 'GET',
+        url: `${link(A.tenantId, quoteId, valid)}/pdf`,
+      });
+      expect(withLogo.rawPayload.toString('latin1')).toContain('/Subtype /Image');
     });
   });
 });

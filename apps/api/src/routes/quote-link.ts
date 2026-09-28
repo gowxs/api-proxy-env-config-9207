@@ -1,9 +1,10 @@
-import { logoAllowed } from '@noctiv/core';
+import { brandTextColor, logoAllowed } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import { createSafeFetcher, loadAllowlist, type SafeFetch } from '@noctiv/kb';
 import { DOCUMENTS_AUTOMATION_QUEUE, vatNoValid } from '@noctiv/documents';
 import {
   fetchQuoteLogo,
+  loadStoredLogo,
   formatDate,
   formatMoney,
   formatQty,
@@ -43,7 +44,7 @@ const HEADERS = {
   'content-type': 'text/html; charset=utf-8',
   // No scripts, no external resources; the form may only post back here.
   'content-security-policy':
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   'referrer-policy': 'no-referrer',
   'cache-control': 'no-store',
   'x-robots-tag': 'noindex, nofollow',
@@ -190,6 +191,18 @@ function billingFields(
   );
 }
 
+/**
+ * The business's logo (embedded in the page: no request leaves it), or its
+ * name in the brand colour (darkened when too light to read on white).
+ */
+export function brandHeader(name: string, color: string | null, logo: Buffer | null): string {
+  if (logo) {
+    const mime = logo[0] === 0xff && logo[1] === 0xd8 ? 'image/jpeg' : 'image/png';
+    return `<img src="data:${mime};base64,${logo.toString('base64')}" alt="${escapeHtml(name)}" style="display:block;max-width:180px;max-height:56px;width:auto;height:auto;margin:0 0 12px">`;
+  }
+  return `<p style="margin:0 0 4px;font-size:18px;font-weight:700;color:${brandTextColor(color)}">${escapeHtml(name)}</p>`;
+}
+
 function quotePage(
   reply: FastifyReply,
   token: string,
@@ -200,6 +213,7 @@ function quotePage(
     billing: { name: '', address: '', regNo: '', vatNo: '' },
     errors: {},
   },
+  logo: Buffer | null = null,
 ) {
   const t = quoteLabels(d.language);
   const lang = quoteLang(d.language);
@@ -227,7 +241,7 @@ function quotePage(
         : total(t.total, d.totalCents, true);
   const inner =
     `<section style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.06)">` +
-    `<p style="margin:0;color:#5B6275;font-size:14px">${escapeHtml(d.brand.companyName)}</p>` +
+    brandHeader(d.brand.companyName, d.brand.color, logo) +
     `<h1 style="margin:4px 0 2px;font-size:22px">${escapeHtml(t.quote)} <span style="white-space:nowrap">${escapeHtml(d.number)}</span></h1>` +
     `<p style="margin:0 0 16px;color:#5B6275;font-size:14px">${escapeHtml(t.validUntil)} ${escapeHtml(formatDate(d.validUntil, lang))}</p>` +
     `<table style="width:100%;border-collapse:collapse;font-size:15px">${rows}</table>` +
@@ -255,6 +269,17 @@ function quotePage(
 export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
   const fetchLogo =
     deps.fetchLogo ?? createSafeFetcher({ maxBytes: 1024 * 1024, timeoutMs: 8_000 });
+
+  /** The uploaded logo, else the logo address's image (allowlisted), else none. */
+  const pageLogo = async (tenantId: string, d: QuoteDocument): Promise<Buffer | null> => {
+    const found = await withTenant(deps.sql, tenantId, async (tx) => ({
+      stored: await loadStoredLogo(tx),
+      allowed: logoAllowed(d.brand.logoUrl, await loadAllowlist(tx)),
+    }));
+    return (
+      found.stored ?? (found.allowed ? await fetchQuoteLogo(fetchLogo, d.brand.logoUrl) : null)
+    );
+  };
 
   const claimsOr = (
     req: FastifyRequest<{ Params: { token: string } }>,
@@ -333,6 +358,7 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       statusNote(status, d.language),
       status === 'sent' || status === 'viewed',
       { billing, errors: {} },
+      await pageLogo(c.tenantId, d),
     );
   });
 
@@ -349,7 +375,15 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
     const open = ['sent', 'viewed'].includes(current.doc.status) && !current.past;
     // Billing details are needed to accept; a decided or expired quote just shows its state.
     if (open && Object.keys(errors).length)
-      return quotePage(reply, req.params.token, current.doc, null, true, { billing, errors });
+      return quotePage(
+        reply,
+        req.params.token,
+        current.doc,
+        null,
+        true,
+        { billing, errors },
+        await pageLogo(c.tenantId, current.doc),
+      );
     const d = await withTenant(deps.sql, c.tenantId, async (tx) => {
       const [past] = await isPastValidity(tx, c.quoteId);
       const [q] = await tx<
@@ -418,7 +452,15 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
     });
     if (!d || !['sent', 'viewed', 'accepted', 'expired', 'rejected'].includes(d.status))
       return notFound(reply, req);
-    return quotePage(reply, req.params.token, d, statusNote(d.status, d.language), false);
+    return quotePage(
+      reply,
+      req.params.token,
+      d,
+      statusNote(d.status, d.language),
+      false,
+      undefined,
+      await pageLogo(c.tenantId, d),
+    );
   });
 
   app.get<{ Params: { token: string } }>('/q/:token/pdf', async (req, reply) => {
@@ -428,11 +470,13 @@ export function quoteLinkRoutes(app: FastifyInstance, deps: QuoteLinkDeps) {
       const d = await loadQuoteDocument(tx, c.quoteId);
       if (!d) return null;
       const allowed = logoAllowed(d.brand.logoUrl, await loadAllowlist(tx));
-      return { d, allowed };
+      return { d, allowed, stored: await loadStoredLogo(tx) };
     });
     if (!found || !['sent', 'viewed', 'accepted', 'expired'].includes(found.d.status))
       return notFound(reply, req);
-    const logo = found.allowed ? await fetchQuoteLogo(fetchLogo, found.d.brand.logoUrl) : null;
+    const logo =
+      found.stored ??
+      (found.allowed ? await fetchQuoteLogo(fetchLogo, found.d.brand.logoUrl) : null);
     const pdf = await renderQuotePdf(
       quotePdfInput(found.d, quoteAcceptUrl(deps.publicApiUrl, req.params.token), logo),
     );
