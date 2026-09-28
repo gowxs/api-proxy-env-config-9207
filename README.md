@@ -206,16 +206,19 @@ the attacker completely.
 Both providers implement the same `LlmProvider` / `EmbeddingProvider` interfaces
 (`packages/core/src/llm/types.ts`) on Google's `@google/genai` SDK.
 
-| Provider                 | When                                                    | Data                                                     | Mailboxes processed    |
-| ------------------------ | ------------------------------------------------------- | -------------------------------------------------------- | ---------------------- |
-| `VertexGeminiProvider`   | `GCP_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS` set | Paid tier, `europe-west4` regional endpoint, no training | all                    |
-| `GoogleAiStudioProvider` | only `GEMINI_API_KEY` set                               | **Free tier: Google may train on it**                    | only `is_test_mailbox` |
-| `FakeProvider`           | `LLM_PROVIDER=fake` (never in production)               | stays local                                              | all                    |
+| Provider                 | When                                                    | Data                                  | Mailboxes processed    |
+| ------------------------ | ------------------------------------------------------- | ------------------------------------- | ---------------------- |
+| `VertexGeminiProvider`   | `GCP_PROJECT_ID` + `GOOGLE_APPLICATION_CREDENTIALS` set | Paid tier, EU endpoints, no training  | all                    |
+| `GoogleAiStudioProvider` | only `GEMINI_API_KEY` set                               | **Free tier: Google may train on it** | only `is_test_mailbox` |
+| `FakeProvider`           | `LLM_PROVIDER=fake` (never in production)               | stays local                           | all                    |
 
 Default models: `gemini-3.8-flash` (replies), `gemini-3.5-flash-lite`
 (classification) and `gemini-embedding-001` at 768 dimensions. The same names
 are used on both providers, so stored embeddings stay comparable.
 `kb_chunks.embedding_model` records which model produced each vector.
+On Vertex, Google serves them in different EU locations: production runs
+`GCP_LOCATION=eu` (the Gemini 3 models) and `GCP_EMBEDDING_LOCATION=europe-west4`
+(`gemini-embedding-001`). Non-EU locations are refused at startup.
 
 **Test mailboxes.** Two independent locks keep customer data away from the free tier:
 

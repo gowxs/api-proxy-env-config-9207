@@ -29,7 +29,7 @@ Customer ──email──▶ Tenant's mailbox (Gmail / Yahoo / …)
                          │                     messages, threads, leads, drafts …
                          │  prompt: email text + knowledge-base excerpts
                          ▼
-                    LLM (Vertex AI, europe-west4, no training)
+                    LLM (Vertex AI, EU: eu + europe-west4, no training)
                          │  JSON only; code decides what happens
                          ▼
           draft ──▶ owner notification (Brevo, FR; privacy mode) ──▶ owner approves
