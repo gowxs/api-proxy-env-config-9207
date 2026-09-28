@@ -19,7 +19,7 @@
 </section>
 
 <section class="section">
-  <div class="wrap split">
+  <div class="wrap split split--start">
     <h2 class="visually-hidden">The overnight inbox, step by step</h2>
     <ol class="timeline" style="margin-top: 0" data-new>
       <li>
@@ -74,12 +74,21 @@
         </div>
       </li>
     </ol>
-    <div class="night" style="border-radius: var(--r-lg); padding: var(--s-4)">{{> demo}}</div>
+    <div class="sticky-visual">
+      <div class="phone phone--hero">
+        <div class="phone-screen">
+          <span class="phone-island" aria-hidden="true"></span>
+          {{> demo}}
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
+{{> flow}}
+
 <section class="section" id="quotes">
-  <div class="wrap">
+  <div class="wrap home-split">
     <div class="section-head" data-new>
       <h2>Quotes (beta).</h2>
       <p class="lead">
@@ -90,11 +99,24 @@
         mode, and above your own limit (€500 unless you change it) they always wait for you.
       </p>
     </div>
+    <figure class="shot">
+      <div class="paper">
+        <img
+          src="/img/mini-quote.webp"
+          alt="A quote PDF from Noctiv: 20 lavender soy candles at €24.00, €580.80 with VAT, with a link to accept it online."
+          width="240"
+          height="300"
+          loading="lazy"
+          decoding="async"
+        />
+      </div>
+      <figcaption>A quote as the customer receives it: PDF and an Accept link.</figcaption>
+    </figure>
   </div>
 </section>
 
 <section class="section" id="documents">
-  <div class="wrap">
+  <div class="wrap home-split home-split--flip">
     <div class="section-head" data-new>
       <h2>Invoices, delivery notes and CMR (beta).</h2>
       <p class="lead">
@@ -105,10 +127,35 @@
         is sent without you. Not accounting software: there are no ledgers or e-invoicing formats.
       </p>
     </div>
+    <figure class="shot">
+      <div class="paper-stack">
+        <div class="paper">
+          <img
+            src="/img/mini-invoice.webp"
+            alt="An invoice PDF from Noctiv with payment details and a due date."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <div class="paper paper--app">
+          <img
+            src="/img/mini-paid.webp"
+            alt="The same invoice in the app, marked Paid."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      </div>
+      <figcaption>The invoice PDF, and the same invoice once it is paid.</figcaption>
+    </figure>
   </div>
 </section>
 
-{{> jobs}} {{> rules}} {{> steps}}
+{{> jobs}} {{> summary}} {{> rules}} {{> steps}}
 
 <section class="section" id="never">
   <div class="wrap">
@@ -144,10 +191,12 @@
 
 <section class="section closing">
   <div class="wrap">
-    <h2 data-new>See it work on your own inbox.</h2>
-    <div class="actions">
-      <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
-      <a class="btn btn--secondary" href="/contact/">Ask a question</a>
+    <div class="cta-card night">
+      <h2 data-new>See it work on your own inbox.</h2>
+      <div class="actions">
+        <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
+        <a class="btn btn--secondary" href="/contact/">Ask a question</a>
+      </div>
     </div>
   </div>
 </section>

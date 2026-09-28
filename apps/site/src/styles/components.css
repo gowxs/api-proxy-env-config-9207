@@ -777,10 +777,10 @@
   }
 }
 
-/* ---------- Rows: rule-lined items instead of card grids ---------- */
+/* ---------- Rows: a grid of cards (the same surface as .tile) ---------- */
 .rows {
   display: grid;
-  gap: 0 var(--s-6);
+  gap: var(--s-4);
   margin-top: var(--s-7);
 }
 @media (min-width: 48rem) {
@@ -792,8 +792,23 @@
   }
 }
 .row {
-  padding-block: var(--s-5) var(--s-6);
-  border-top: 1px solid var(--line);
+  padding: 1.5rem 1.5rem 1.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+.row:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+}
+.night .row {
+  background: rgb(255 255 255 / 0.035);
+  border-color: rgb(255 255 255 / 0.09);
+  box-shadow: none;
 }
 .row h3 {
   margin-bottom: var(--s-2);

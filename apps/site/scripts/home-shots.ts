@@ -225,8 +225,8 @@ await page.evaluate(() => {
 await save(page, 'mini-paid', await page.screenshot(), 240, 300);
 
 // Quote and invoice: the top of each PDF.
-await save(page, 'mini-quote', pdfTop(quotePdf), 240, 300);
-await save(page, 'mini-invoice', pdfTop(invoicePdf), 240, 300);
+await save(page, 'mini-quote', pdfTop(quotePdf), 360, 450);
+await save(page, 'mini-invoice', pdfTop(invoicePdf), 360, 450);
 
 // The Monday e-mail at a mail app's reading width.
 const week = {

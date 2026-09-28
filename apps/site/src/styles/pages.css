@@ -458,9 +458,30 @@
 }
 
 /* ---------- Inner page header ---------- */
+/* A short night band that fades into the page like the hero (no hard edge). */
 .page-head {
+  --head-fade-h: clamp(4.5rem, 3rem + 5vw, 7.5rem);
   position: relative;
-  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem) clamp(3rem, 2rem + 4vw, 5rem);
+  isolation: isolate;
+  padding-block: clamp(3rem, 2rem + 4vw, 5.5rem)
+    calc(clamp(2.5rem, 1.5rem + 3vw, 4rem) + var(--head-fade-h));
+  background:
+    radial-gradient(60% 120% at 85% 0%, rgb(91 79 232 / 0.22), transparent 60%), var(--night-900);
+}
+.page-head::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 -1px 0;
+  height: var(--head-fade-h);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, #3a2a5c 45%, transparent) 40%,
+    color-mix(in srgb, var(--dawn-1) 40%, var(--bg)) 80%,
+    var(--bg)
+  );
+  pointer-events: none;
 }
 .page-head h1 {
   font-size: clamp(2.125rem, 1.5rem + 2.8vw, 3.25rem);
@@ -471,34 +492,72 @@
   max-width: 52ch;
 }
 .page-head .dawn-line {
-  position: absolute;
-  inset: auto 0 0 0;
+  display: none;
 }
 
-/* ---------- Timeline (How it works) ---------- */
+/* ---------- Timeline (How it works): time-stamped cards on one line ---------- */
 .timeline {
-  list-style: none;
-  padding: 0;
-  margin-top: var(--s-7);
+  position: relative;
   display: grid;
-  gap: 0;
+  gap: var(--s-4);
+  margin-top: var(--s-7);
+  padding: 0;
+  list-style: none;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 1.5rem;
+  bottom: 1.5rem;
+  left: 2.75rem;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--night-600), var(--dawn-2));
+  opacity: 0.35;
 }
 .timeline li {
+  position: relative;
   display: grid;
-  grid-template-columns: 4.25rem 1fr;
+  grid-template-columns: 4rem 1fr;
   gap: var(--s-4);
-  padding-block: var(--s-5);
-  border-top: 1px solid var(--line);
+  align-items: start;
+  padding: 1.25rem 1.5rem 1.375rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 .timeline time {
+  display: grid;
+  place-items: center;
+  min-height: 2rem;
+  padding: 0 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--night-900);
+  color: var(--moon);
   font-weight: 800;
-  font-size: 1.125rem;
-  letter-spacing: -0.02em;
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Morning: the approval and after. */
+.timeline li:nth-child(n + 4) time {
+  background: color-mix(in srgb, var(--dawn-1) 45%, var(--surface));
+  color: #3a2410;
 }
 .timeline p {
   color: var(--text-2);
   margin-top: var(--s-1);
+}
+/* A visual that stays in view beside a long column (desktop). */
+@media (min-width: 60rem) {
+  .sticky-visual {
+    position: sticky;
+    top: 6rem;
+  }
+  .split--start {
+    align-items: start;
+  }
 }
 .split {
   display: grid;
@@ -568,10 +627,15 @@
 .table-scroll table {
   min-width: 34rem;
 }
-.facts {
+dl.facts {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: var(--s-2) var(--s-5);
+  gap: var(--s-3) var(--s-5);
+  padding: var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 .facts dt {
   color: var(--text-3);
@@ -598,15 +662,26 @@
   word-break: break-all;
 }
 
-/* ---------- Closing call to action ---------- */
-.closing {
-  text-align: left;
+/* ---------- Closing call to action: one night card ---------- */
+.cta-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  justify-items: center;
+  gap: var(--s-4);
+  padding: clamp(2.5rem, 1.5rem + 4vw, 4.5rem) clamp(1.25rem, 0.5rem + 3vw, 3rem);
+  border-radius: var(--r-lg);
+  text-align: center;
+  background:
+    radial-gradient(70% 90% at 50% 120%, rgb(242 169 126 / 0.28), transparent 70%), var(--night-900);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06) inset;
 }
-.closing h2 {
+.cta-card h2 {
   max-width: 20ch;
 }
-.closing .actions {
-  margin-top: var(--s-6);
+.cta-card .actions {
+  justify-content: center;
+  margin-top: var(--s-3);
 }
 
 /* ---------- Integrations ---------- */
@@ -893,15 +968,40 @@
 
 /* ---------- Pricing: time saved (ROI) ---------- */
 .roi {
-  max-width: 44rem;
-  padding: var(--s-5) 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: var(--s-5) var(--s-8);
+  padding: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+@media (min-width: 48rem) {
+  .roi {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+}
+.roi-stat {
+  font-size: clamp(3rem, 2.4rem + 3vw, 4.5rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.roi-stat small {
+  display: block;
+  margin-top: var(--s-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-3);
 }
 .roi .roi-figure {
-  margin-top: var(--s-3);
+  margin-top: var(--s-2);
   font-size: var(--fs-h3);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.012em;
 }
 .roi .muted {
@@ -1015,6 +1115,15 @@
 }
 .table-scroll {
   overflow-x: auto;
+  padding: var(--s-2) var(--s-5) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.table-scroll .facts tbody tr:first-child th,
+.table-scroll .facts tbody tr:first-child td {
+  border-top-color: var(--line);
 }
 /* Phones: each comparison row becomes a small card, labels from data-label. */
 @media (max-width: 40rem) {
@@ -1722,4 +1831,54 @@
 .plan-more {
   margin-top: var(--s-5);
   font-size: var(--fs-small);
+}
+
+/* ---------- Paper: a PDF page as a frame (How it works) ---------- */
+.paper {
+  overflow: hidden;
+  width: min(100%, 22rem);
+  margin-inline: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+.paper > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* The invoice, and the app card on top of it, offset. */
+.paper-stack {
+  position: relative;
+  width: min(100%, 26rem);
+  margin-inline: auto;
+  padding: 0 4rem 5rem 0;
+}
+.paper-stack .paper {
+  width: 100%;
+}
+.paper-stack .paper--app {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 58%;
+  border-radius: var(--r-md);
+}
+
+/* Comparison tables: space under the heading; no rule above the first row on phones. */
+.section-head + .table-scroll {
+  margin-top: var(--s-6);
+}
+@media (max-width: 40rem) {
+  .table-scroll .facts tbody tr:first-child {
+    border-top: 0;
+  }
+}
+/* A fact list inside a card is not a second card. */
+.panel dl.facts {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
