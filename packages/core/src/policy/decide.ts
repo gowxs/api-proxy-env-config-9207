@@ -4,7 +4,7 @@ import {
   HARD_ESCALATION_CATEGORIES,
   type Action,
   type Classification,
-  type Generation,
+  type GenerationLike,
 } from '../llm/schemas.ts';
 
 export const CONFIDENCE_THRESHOLD = 0.8;
@@ -49,7 +49,13 @@ export type DraftReason =
   | 'injection_suspected'
   | 'reply_to_mismatch'
   | 'model_chose_draft'
-  | 'not_verified';
+  | 'not_verified'
+  /** Asked for a price the excerpts state; the reply does not give it. */
+  | 'price_omitted'
+  /** A figure in the reply differs from the owner's newest note. */
+  | 'contradicts_owner_note'
+  /** Excerpts disagree on a figure in the reply (the owner is told which). */
+  | 'source_conflict';
 
 export type Reason = EscalateReason | DraftReason;
 
@@ -72,7 +78,7 @@ export interface PolicyInput {
   tenant: { mode: TenantMode; budgetState: 'ok' | 'draft_forced' | 'halted' };
   classification: Pick<Classification, 'category' | 'sentiment' | 'urgency' | 'language'>;
   /** null when the model output failed validation (after the retry). */
-  generation: Generation | null;
+  generation: GenerationLike | null;
   unknownSourceLabels: string[];
   citedSourceCount: number;
   claimKinds: ClaimKind[];
@@ -88,6 +94,17 @@ export interface PolicyInput {
   };
   /** Result of the optional grounding verifier (Q6). Auto-send requires 'passed'. */
   verifier: 'passed' | 'failed' | 'not_run';
+  /**
+   * Source checks (production case 2026-09-28). Optional so callers without
+   * excerpts (none today) keep the old behaviour.
+   */
+  sourceChecks?: {
+    priceOmitted: boolean;
+    /** One entry per conflicting figure in the reply. */
+    conflicts: { replyUsesPreferred: boolean; hasPreferred: boolean }[];
+    /** Disagreements the model itself reported. */
+    modelReportedConflicts: number;
+  };
 }
 
 export interface PolicyDecision {
@@ -163,6 +180,12 @@ export function decideAction(input: PolicyInput): PolicyDecision {
   if (input.injectionSuspected) draft.push('injection_suspected');
   if (input.replyToMismatch) draft.push('reply_to_mismatch');
   if (reply.action === 'draft') draft.push('model_chose_draft');
+  const checks = input.sourceChecks;
+  if (checks?.priceOmitted) draft.push('price_omitted');
+  if (checks?.conflicts.some((c) => c.hasPreferred && !c.replyUsesPreferred))
+    draft.push('contradicts_owner_note');
+  else if (checks && (checks.conflicts.length > 0 || checks.modelReportedConflicts > 0))
+    draft.push('source_conflict');
 
   if (draft.length) {
     return {

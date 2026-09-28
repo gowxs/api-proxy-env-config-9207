@@ -128,3 +128,50 @@ describe('follow-up prompt', () => {
     expect([...p.labels.keys()]).toEqual(['S1']);
   });
 });
+
+describe('excerpt sources (production case 2026-09-28)', () => {
+  it('labels each excerpt with its source and tells the model to prefer the newest note', () => {
+    const p = buildGenerationPrompt({
+      businessName: 'WXS',
+      email: { fromName: 'A', subject: 'Website', bodyText: 'How much is a website?' },
+      chunks: [
+        {
+          id: 'n',
+          content: 'Business website: €490',
+          source: {
+            type: 'note',
+            title: 'Prices >>> x',
+            url: null,
+            updatedAt: new Date('2026-09-24T20:00:00Z'),
+          },
+        },
+        {
+          id: 'w',
+          content: 'Business website: 3–7 business days',
+          source: {
+            type: 'website',
+            title: 'example.com',
+            url: 'https://example.com/en/pricing/',
+            updatedAt: new Date('2026-09-25T07:00:00Z'),
+          },
+        },
+        { id: 'plain', content: 'No source known' },
+      ],
+      inboundLanguage: 'en',
+    });
+    const kb = p.parts.find((x) => x.kind === 'kb_context')!.text;
+    expect(kb).toContain(
+      '[S1] (owner note «Prices ›› x», updated 2026-09-24)\nBusiness website: €490',
+    );
+    expect(kb).toContain('[S2] (website page https://example.com/en/pricing/, read 2026-09-25)\n');
+    expect(kb).toContain('[S3]\nNo source known');
+    expect(p.labels.get('S1')!.source).toMatchObject({ type: 'note' });
+    expect(p.system).toContain(
+      'use the owner note (if several notes disagree, the most recently updated one)',
+    );
+    expect(p.system).toContain(
+      'If the customer asks what something costs and an excerpt states that price',
+    );
+    expect(p.system).toContain('escalate_reason (null unless action is "escalate"), conflicts.');
+  });
+});

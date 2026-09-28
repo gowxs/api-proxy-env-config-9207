@@ -76,7 +76,7 @@ const fake = new FakeProvider({
     const kb = req.parts.find((p) => p.kind === 'kb_context')?.text ?? '';
     const label =
       /\[(S\d+)\]/.exec(
-        kb.split(/\n(?=\[S\d+\]\n)/).find((b) => b.includes('cost 24 EUR')) ?? '',
+        kb.split(/\n(?=\[S\d+\](?: \(.*\))?\n)/).find((b) => b.includes('cost 24 EUR')) ?? '',
       )?.[1] ?? 'S1';
     return JSON.stringify({
       intent: 'price',

@@ -1,5 +1,11 @@
 import { verifyClaims, type Claim } from '../claims/detect.ts';
 import {
+  asksForPrice,
+  findSourceConflicts,
+  pricesInExcerpts,
+  type SourceConflict,
+} from '../claims/source-checks.ts';
+import {
   GenerationSchema,
   parseModelJson,
   type Classification,
@@ -27,6 +33,12 @@ export interface GuardInput {
   labels: Map<string, LabelledChunk>;
   caps: PolicyInput['caps'];
   verifier?: PolicyInput['verifier'];
+  /**
+   * Hold a reply that leaves out a price the customer asked for and the
+   * excerpts state. Off for follow-ups (a check-in, not an answer) and for the
+   * part of a quote e-mail that a separate program prices.
+   */
+  checkPrice?: boolean;
 }
 
 export interface GuardedReply {
@@ -44,6 +56,20 @@ export interface GuardedReply {
   injection: InjectionCheck;
   /** Reply-To points somewhere other than From (a hijack signal); blocks every automatic send. */
   replyToMismatch: boolean;
+  /** Price and source-conflict checks, kept for the owner and the processing record. */
+  sourceChecks: SourceChecks;
+}
+
+export interface SourceChecks {
+  priceAsked: boolean;
+  /** Amounts stated in the excerpts the model was shown. */
+  excerptPrices: string[];
+  /** Amounts in the reply that the cited excerpts back. */
+  replyPrices: string[];
+  priceOmitted: boolean;
+  conflicts: SourceConflict[];
+  /** What the model reported (labels resolved by the caller when shown). */
+  modelConflicts: { fact: string; used: string; other: string[] }[];
 }
 
 /**
@@ -81,6 +107,29 @@ export function guardReply(input: GuardInput): GuardedReply {
       })
     : { claims: [], unsupported: [] };
 
+  const inboundText = `${input.inbound.subject ?? ''}\n${input.inbound.bodyText}`;
+  const excerpts = [...input.labels].map(([label, chunk]) => ({ label, chunk }));
+  const priceAsked = asksForPrice(inboundText, input.classification.category);
+  const excerptPrices = pricesInExcerpts(excerpts.map((e) => e.chunk.content));
+  const replyPrices = verification.claims
+    .filter((c) => c.kind === 'money' && !verification.unsupported.includes(c))
+    .map((c) => c.text);
+  const sourceChecks: SourceChecks = {
+    priceAsked,
+    excerptPrices,
+    replyPrices,
+    priceOmitted:
+      input.checkPrice !== false &&
+      priceAsked &&
+      excerptPrices.length > 0 &&
+      replyPrices.length === 0 &&
+      sanitized.text.trim() !== '',
+    conflicts: generation
+      ? findSourceConflicts({ reply: sanitized.text, inboundText, excerpts })
+      : [],
+    modelConflicts: generation?.conflicts ?? [],
+  };
+
   const decision = decideAction({
     tenant: { mode: input.tenant.mode, budgetState: input.tenant.budgetState },
     classification: input.classification,
@@ -94,6 +143,14 @@ export function guardReply(input: GuardInput): GuardedReply {
     replyToMismatch: recipient.replyToMismatch,
     caps: input.caps,
     verifier: input.verifier ?? 'not_run',
+    sourceChecks: {
+      priceOmitted: sourceChecks.priceOmitted,
+      conflicts: sourceChecks.conflicts.map((c) => ({
+        replyUsesPreferred: c.replyUsesPreferred,
+        hasPreferred: Boolean(c.preferred),
+      })),
+      modelReportedConflicts: sourceChecks.modelConflicts.length,
+    },
   });
 
   return {
@@ -108,5 +165,6 @@ export function guardReply(input: GuardInput): GuardedReply {
     unsupportedClaims: verification.unsupported,
     injection,
     replyToMismatch: recipient.replyToMismatch,
+    sourceChecks,
   };
 }

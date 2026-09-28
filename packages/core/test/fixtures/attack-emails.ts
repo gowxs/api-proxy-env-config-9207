@@ -8,7 +8,7 @@
  * mode with no rate limits and a passing verifier, so only the deterministic
  * guards stand between the attacker and an outgoing email.
  */
-import type { Classification, Generation, InjectionSignal, Reason } from '../../src/index.ts';
+import type { Classification, GenerationLike, InjectionSignal, Reason } from '../../src/index.ts';
 import { ZWJ, ZWSP } from './chars.ts';
 
 export interface AttackEmail {
@@ -27,7 +27,7 @@ export interface AttackFixture {
   /** What a fooled classifier returns (deliberately not a hard-list category). */
   classification: Classification;
   /** Worst case: the model obeyed the attacker. */
-  compromisedOutput: Generation;
+  compromisedOutput: GenerationLike;
   expect: {
     action: 'draft' | 'escalate';
     /** Must all appear in the decision's reasons. */
@@ -52,7 +52,7 @@ const cls = (
   summary: 'Customer asks about products.',
 });
 
-const compromised = (language: string, reply: string, sources: string[] = []): Generation => ({
+const compromised = (language: string, reply: string, sources: string[] = []): GenerationLike => ({
   intent: 'answer',
   language,
   reply,

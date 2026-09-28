@@ -111,6 +111,76 @@ export interface RetrievedChunk {
   sourceId: string;
   content: string;
   metadata: Record<string, unknown>;
+  /** Where the chunk comes from; filled in by retrieveKnowledge. */
+  source?: ChunkSource;
+}
+
+export interface ChunkSource {
+  type: 'website' | 'file' | 'note';
+  title: string;
+  url: string | null;
+  /** When the owner last saved the note, or the page/file was last read. */
+  updatedAt: Date;
+}
+
+/** Type, title and date of each source, for labelling excerpts. */
+export async function sourceInfo(
+  tx: TransactionSql,
+  sourceIds: string[],
+): Promise<Map<string, ChunkSource>> {
+  if (!sourceIds.length) return new Map();
+  const rows = await tx<
+    { id: string; type: ChunkSource['type']; title: string; url: string | null; at: Date }[]
+  >`
+    select id, type, title, url, coalesce(ingested_at, updated_at) as at
+    from public.kb_sources where id = any(${sourceIds}::uuid[])`;
+  return new Map(
+    rows.map((r) => [r.id, { type: r.type, title: r.title, url: r.url, updatedAt: r.at }]),
+  );
+}
+
+/**
+ * The owner's own notes, searched on their own: a tenant's notes are a few
+ * chunks among hundreds of website chunks, and near-duplicate website text
+ * can push them out of the general ranking (production case 2026-09-28: the
+ * note with the price ranked 6th–7th for "how much does a business website
+ * cost"). Vector and full-text lists, as in the general search.
+ */
+export async function noteSearch(
+  tx: TransactionSql,
+  args: { tenantId: string; model: string; embedding: number[]; query: string; limit: number },
+): Promise<[RetrievedChunk[], RetrievedChunk[]]> {
+  type Row = {
+    chunk_id: string;
+    source_id: string;
+    content: string;
+    metadata: Record<string, unknown>;
+  };
+  const toChunk = (r: Row): RetrievedChunk => ({
+    id: r.chunk_id,
+    sourceId: r.source_id,
+    content: r.content,
+    metadata: r.metadata,
+  });
+  const vector = await tx.unsafe<Row[]>(
+    `select c.id as chunk_id, c.source_id, c.content, c.metadata
+     from public.kb_chunks c join public.kb_sources s on s.id = c.source_id
+     where c.tenant_id = $1 and s.type = 'note' and c.embedding_model = $2 and c.embedding is not null
+     -- "+ 0": an exact scan. Notes are few, and the HNSW index with this filter could return fewer rows.
+     order by (c.embedding operator(extensions.<=>) $3::extensions.vector) + 0
+     limit $4`,
+    [args.tenantId, args.model, `[${args.embedding.join(',')}]`, args.limit],
+  );
+  const text = args.query
+    ? await tx<Row[]>`
+        select c.id as chunk_id, c.source_id, c.content, c.metadata
+        from public.kb_chunks c join public.kb_sources s on s.id = c.source_id,
+             websearch_to_tsquery('simple', ${args.query}) q
+        where c.tenant_id = ${args.tenantId} and s.type = 'note' and c.fts @@ q
+        order by ts_rank(c.fts, q) desc
+        limit ${args.limit}`
+    : [];
+  return [vector.map(toChunk), text.map(toChunk)];
 }
 
 export async function vectorSearch(

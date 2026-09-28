@@ -62,8 +62,23 @@ export const GenerationSchema = z.strictObject({
   confidence: z.number().min(0).max(1),
   action: z.enum(ACTIONS),
   escalate_reason: z.string().trim().max(500).nullable(),
+  /** Disagreements between excerpts the model noticed (shown to the owner). */
+  conflicts: z
+    .array(
+      z.strictObject({
+        fact: z.string().trim().max(200),
+        used: z.string().trim().max(20),
+        other: z.array(z.string().trim().max(20)).max(12),
+      }),
+    )
+    .max(8)
+    .default([])
+    // A malformed list must not turn a good reply into invalid output; it only informs the owner.
+    .catch([]),
 });
 export type Generation = z.infer<typeof GenerationSchema>;
+/** A generation as written by hand (tests, fixed texts): `conflicts` may be left out. */
+export type GenerationLike = z.input<typeof GenerationSchema>;
 
 /** Grounding verifier output (PLAN.md Q6): runs only on auto-send candidates. */
 export const VerifierSchema = z.strictObject({

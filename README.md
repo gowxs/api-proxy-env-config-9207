@@ -189,6 +189,7 @@ Pure functions with no I/O. The pipeline in step 8 calls them in this order:
 | `safety/injection.ts`      | Heuristic injection signals (EN/DE/NL/FR/ES/LV); any signal blocks auto-send                                                                |
 | `safety/sanitize-reply.ts` | Removes links and addresses that aren't in the knowledge base, plus invisible characters                                                    |
 | `claims/*`                 | Detects prices, percentages, durations, dates, times, weekdays and commitment wording in 6 languages; checks each against the cited sources |
+| `claims/source-checks.ts`  | Price asked but left out; excerpts that disagree on a figure (the newest owner note wins)                                                   |
 | `policy/decide.ts`         | Final action: escalate > draft > auto_send; the three sending modes                                                                         |
 | `policy/acknowledge.ts`    | Mode 3: the fixed per-language acknowledgement for messages that can't be grounded, and its safety gates                                    |
 | `guard/guard-reply.ts`     | Runs all of the above on one model output; builds the recipient and threading headers from the original email only                          |

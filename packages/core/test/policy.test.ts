@@ -244,3 +244,47 @@ describe('ordering', () => {
     }
   });
 });
+
+describe('source checks (production case 2026-09-28): held for the owner, never escalated', () => {
+  const checks = (patch: Partial<NonNullable<PolicyInput['sourceChecks']>> = {}) => ({
+    priceOmitted: false,
+    conflicts: [],
+    modelReportedConflicts: 0,
+    ...patch,
+  });
+  const reasons = (sourceChecks: PolicyInput['sourceChecks']) =>
+    decideAction(input({ sourceChecks })).reasons;
+
+  it('a price question answered without the price waits', () => {
+    expect(decideAction(input({ sourceChecks: checks({ priceOmitted: true }) }))).toEqual({
+      action: 'draft',
+      keepSuggestion: true,
+      reasons: ['price_omitted'],
+      eligibleForVerification: false,
+    });
+  });
+
+  it('a figure against the newest note waits; so does any other disagreement', () => {
+    expect(
+      reasons(checks({ conflicts: [{ hasPreferred: true, replyUsesPreferred: false }] })),
+    ).toEqual(['contradicts_owner_note']);
+    expect(
+      reasons(checks({ conflicts: [{ hasPreferred: true, replyUsesPreferred: true }] })),
+    ).toEqual(['source_conflict']);
+    expect(
+      reasons(checks({ conflicts: [{ hasPreferred: false, replyUsesPreferred: false }] })),
+    ).toEqual(['source_conflict']);
+    expect(reasons(checks({ modelReportedConflicts: 1 }))).toEqual(['source_conflict']);
+  });
+
+  it('clean checks change nothing', () => {
+    expect(decideAction(input({ sourceChecks: checks() })).action).toBe('auto_send');
+  });
+
+  it('escalation reasons still win', () => {
+    const d = decideAction(
+      input({ sourceChecks: checks({ priceOmitted: true }) }, { action: 'escalate' }),
+    );
+    expect(d).toMatchObject({ action: 'escalate', reasons: ['model_escalated'] });
+  });
+});

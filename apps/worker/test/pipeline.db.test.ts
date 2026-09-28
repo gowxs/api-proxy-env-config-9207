@@ -74,7 +74,7 @@ function scripted(
 /** The prompt label ("S3") of the knowledge-base excerpt containing `text`. */
 function labelOf(req: GenerateRequest, text: string): string {
   const kb = req.parts.find((p) => p.kind === 'kb_context')?.text ?? '';
-  const blocks = kb.split(/\n(?=\[S\d+\]\n)/);
+  const blocks = kb.split(/\n(?=\[S\d+\](?: \(.*\))?\n)/);
   const hit = blocks.find((b) => b.includes(text));
   return /\[(S\d+)\]/.exec(hit ?? '')?.[1] ?? 'S1';
 }
@@ -605,5 +605,218 @@ describe('end to end through GreenMail', () => {
       to_address: GREENMAIL_USERS.customer2.address,
       subject: 'Re: Candle price',
     });
+  });
+});
+
+// Production case 2026-09-28: "how much does a business website cost and how long does it take?"
+// The owner's note says €490 and 10 business days; the website says 3–7 business days, no price.
+describe('pipeline: price questions and sources that disagree', () => {
+  let T: SeededTenant;
+  const QUESTION = 'Hi, how much does a business website cost and how long does it take?';
+  const NOTE =
+    'Services and prices (EUR, excl. VAT):\n- Landing page: €290\n- Business website (up to 6 pages): €490\n\n' +
+    'Delivery times:\n- Landing page: 5 business days\n- Business website: 10 business days';
+  const WEBSITE = [
+    'Frequently asked questions › About development A landing page — 3–5 business days, a business website — 3–7 business days after we receive the content.',
+    'Pricing › Business website A complete site for a small business. - 3–8 pages - Custom design - Ready in 3–7 business days',
+  ];
+
+  beforeAll(async () => {
+    T = await seedTenant(owner, 'pipe-sources', { embeddingAxis: 51 });
+    await owner`update public.tenants set mode = 'auto_send', name = 'WXS' where id = ${T.tenantId}`;
+    const embeddings = new FakeProvider();
+    const note = await withTenant(worker, T.tenantId, (tx) =>
+      createNoteSource(tx, { tenantId: T.tenantId, title: 'Services and prices', text: NOTE }),
+    );
+    await ingestSource({ sql: worker, embeddings, fetcher: createSafeFetcher() }, T.tenantId, note);
+    const site = randomUUID();
+    await owner`insert into public.kb_sources (id, tenant_id, type, title, url, status, ingested_at)
+      values (${site}, ${T.tenantId}, 'website', 'example.com', 'https://example.com/', 'ready', now())`;
+    const vectors = await embeddings.embed(WEBSITE, 'document', 'test_fixture');
+    for (const [i, content] of WEBSITE.entries()) {
+      await owner`
+        insert into public.kb_chunks (tenant_id, source_id, chunk_index, content, token_count, metadata, embedding, embedding_model)
+        values (${T.tenantId}, ${site}, ${i}, ${content}, 40, ${owner.json({ url: 'https://example.com/en/' })},
+                ${`[${vectors.vectors[i]!.join(',')}]`}, ${embeddings.model})`;
+    }
+  });
+
+  const report = (id: string) =>
+    owner<
+      {
+        downgrade_reasons: string[];
+        retrieved_chunk_ids: string[];
+        guard_report: {
+          excerpts: { label: string; type: string; cited: boolean }[];
+          claims: { kind: string; text: string; supported: boolean }[];
+          price: { asked: boolean; inExcerpts: string[]; inReply: string[]; omitted: boolean };
+          conflicts: {
+            about: string;
+            reply: string;
+            preferred: { label: string; text: string } | null;
+            replyUsesPreferred: boolean;
+          }[];
+        };
+      }[]
+    >`select downgrade_reasons, retrieved_chunk_ids, guard_report from public.message_processing where message_id = ${id}`.then(
+      (r) => r[0]!,
+    );
+  const notification = (id: string) =>
+    owner<{ kind: string; payload: { reasons: string[]; conflicts?: unknown[] } }[]>`
+      select kind, payload from public.notifications where tenant_id = ${T.tenantId} and payload->>'messageId' = ${id}`.then(
+      (r) => r[0]!,
+    );
+
+  it('the production reply (website duration, no price) is held, and the owner is told why', async () => {
+    let prompt = '';
+    const llm = scripted({
+      classify: cls({ category: 'quote_request' }),
+      generate: (req) => {
+        prompt = req.parts.find((p) => p.kind === 'kb_context')!.text;
+        return gen({
+          reply:
+            'Hello,\n\nA business website takes 3–7 business days to complete after we receive the content.',
+          sources: [labelOf(req, 'About development')],
+          confidence: 0.95,
+          action: 'auto_send',
+        });
+      },
+    });
+    const id = await receive(T, inbound({ subject: 'Business website', text: QUESTION }));
+    expect(await run(T, llm, id)).toEqual({
+      status: 'drafted',
+      reasons: ['price_omitted', 'contradicts_owner_note'],
+    });
+    expect(calls(llm, 'verify')).toBe(0);
+
+    // The model saw the note first, labelled as the owner's note, and the website as a website.
+    expect(prompt).toMatch(
+      /\[S1\] \(owner note «Services and prices», updated \d{4}-\d{2}-\d{2}\)\n/,
+    );
+    expect(prompt).toMatch(
+      /\[S\d\] \(website page https:\/\/example\.com\/, read \d{4}-\d{2}-\d{2}\)\n/,
+    );
+
+    const r = await report(id);
+    expect(r.retrieved_chunk_ids.length).toBe(r.guard_report.excerpts.length);
+    expect(r.guard_report.excerpts[0]).toMatchObject({ label: 'S1', type: 'note', cited: false });
+    expect(r.guard_report.claims).toEqual([
+      { kind: 'duration', text: '3–7 business days', supported: true },
+    ]);
+    expect(r.guard_report.price).toEqual({
+      asked: true,
+      inExcerpts: ['€290', '€490'],
+      inReply: [],
+      omitted: true,
+    });
+    expect(r.guard_report.conflicts).toEqual([
+      expect.objectContaining({
+        about: 'business website',
+        reply: '3–7 business days',
+        preferred: { label: 'S1', text: '10 business days' },
+        replyUsesPreferred: false,
+      }),
+    ]);
+
+    const n = await notification(id);
+    expect(n.kind).toBe('draft_ready');
+    expect(n.payload.reasons).toEqual(['price_omitted', 'contradicts_owner_note']);
+    expect(n.payload.conflicts).toEqual([
+      {
+        about: 'business website',
+        reply: '3–7 business days',
+        replyUsesNote: false,
+        sources: [
+          {
+            says: '10 business days',
+            source: expect.stringMatching(
+              /^your note "Services and prices" \(\d{4}-\d{2}-\d{2}\)$/,
+            ),
+            preferred: true,
+          },
+          {
+            says: '3–7 business days',
+            source: expect.stringMatching(
+              /^your website example\.com\/en\/ \(read \d{4}-\d{2}-\d{2}\)$/,
+            ),
+            preferred: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('a reply with the note’s price and time still waits, flagged, while the website disagrees', async () => {
+    const llm = scripted({
+      classify: cls({ category: 'quote_request' }),
+      generate: (req) =>
+        gen({
+          reply:
+            'Hello,\n\nA business website (up to 6 pages) costs €490 (excl. VAT) and takes 10 business days once we have your content.',
+          sources: [labelOf(req, '€490')],
+          confidence: 0.95,
+          action: 'auto_send',
+          conflicts: [{ fact: 'business website delivery time', used: 'S1', other: ['S2'] }],
+        }),
+    });
+    const id = await receive(
+      T,
+      inbound({ subject: 'Business website', text: QUESTION, from: 'ben@example-mail.test' }),
+    );
+    expect(await run(T, llm, id)).toEqual({ status: 'drafted', reasons: ['source_conflict'] });
+    const r = await report(id);
+    expect(r.guard_report.price).toMatchObject({ omitted: false, inReply: ['€490'] });
+    expect(r.guard_report.conflicts.map((c) => [c.reply, c.replyUsesPreferred])).toEqual([
+      ['10 business days', true],
+    ]);
+    const n = await notification(id);
+    expect(n.payload.conflicts).toEqual([
+      expect.objectContaining({ reply: '10 business days', replyUsesNote: true }),
+    ]);
+  });
+
+  it('when the sources agree and the price is given, the reply goes out as before', async () => {
+    const llm = scripted({
+      classify: cls({ category: 'quote_request' }),
+      generate: (req) =>
+        gen({
+          reply: 'Hello,\n\nA landing page costs €290 (excl. VAT).',
+          sources: [labelOf(req, '€290')],
+          confidence: 0.95,
+          action: 'auto_send',
+        }),
+    });
+    const id = await receive(
+      T,
+      inbound({
+        subject: 'Landing page',
+        text: 'How much is a landing page?',
+        from: 'cara@example-mail.test',
+      }),
+    );
+    expect(await run(T, llm, id)).toEqual({ status: 'auto_send', reasons: [] });
+  });
+
+  it('an escalation keeps what was retrieved and what the guards found', async () => {
+    const llm = scripted({
+      classify: cls({ category: 'quote_request' }),
+      generate: () =>
+        gen({
+          reply: 'Hello,\n\nThanks for asking.',
+          sources: [],
+          confidence: 0.5,
+          action: 'escalate',
+          escalate_reason: 'The excerpts do not state the price.',
+        }),
+    });
+    const id = await receive(
+      T,
+      inbound({ subject: 'Business website', text: QUESTION, from: 'dan@example-mail.test' }),
+    );
+    expect((await run(T, llm, id)).status).toBe('escalated');
+    const r = await report(id);
+    expect(r.retrieved_chunk_ids.length).toBeGreaterThan(0);
+    expect(r.guard_report.excerpts[0]).toMatchObject({ type: 'note' });
+    expect(r.guard_report.price).toMatchObject({ asked: true, omitted: true });
   });
 });

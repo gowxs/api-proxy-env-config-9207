@@ -214,7 +214,7 @@ export async function generateFollowup(
     businessName: t.tenant_name,
     customer: { fromName: customer.from_name, subject: customer.subject, bodyText: body },
     ourLastReply: prep.ourLastReply,
-    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content })),
+    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content, source: c.source })),
     language: classification.language,
     followupNumber,
   });
@@ -256,7 +256,7 @@ export async function generateFollowup(
       maxPerHour: t.max_replies_per_hour,
     },
   };
-  let guarded = guardReply({ ...guardInput, verifier: 'not_run' });
+  let guarded = guardReply({ ...guardInput, verifier: 'not_run', checkPrice: false });
   if (guarded.decision.eligibleForVerification && guarded.replyText) {
     const cited = knowledge.chunks
       .filter((c) => guarded.citedChunkIds.includes(c.id))
@@ -275,6 +275,7 @@ export async function generateFollowup(
     llmCalls += v.attempts;
     guarded = guardReply({
       ...guardInput,
+      checkPrice: false,
       verifier:
         v.ok && v.value.supported && v.value.unsupported_claims.length === 0 ? 'passed' : 'failed',
     });

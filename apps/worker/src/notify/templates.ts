@@ -23,6 +23,10 @@ const REASONS: Record<string, string> = {
   reply_to_mismatch: 'the reply address differs from the sender',
   model_chose_draft: 'the assistant was not sure enough to send it alone',
   not_verified: 'the facts in the reply could not be double-checked',
+  price_omitted:
+    'the customer asked for a price your knowledge base has, and the reply left it out',
+  contradicts_owner_note: 'a figure in the reply differs from your own note',
+  source_conflict: 'your note and your website (or files) give different figures',
   invalid_output: 'the assistant produced no usable answer',
   model_escalated: 'the assistant asked for a human',
   low_confidence: 'the assistant was not confident',
@@ -161,10 +165,62 @@ const EMAIL_HEADER_URL = 'https://noctiv.io/brand/email-header.png';
 const FOOTER =
   'Sent by Noctiv, your email assistant. You get this because you own this Noctiv account.';
 
+/**
+ * "business website: your note "Prices" (2026-09-24) says 10 business days (newest note);
+ * your website example.com/en/ (read 2026-09-25) says 3–7 business days. The reply says
+ * 3–7 business days, not your note's figure: edit it before approving."
+ * Everything here comes from the tenant's knowledge base or the reply, so it is escaped.
+ */
+export function describeConflicts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(0, 5)
+    .map(
+      (c: {
+        about?: unknown;
+        reply?: unknown;
+        replyUsesNote?: unknown;
+        sources?: unknown;
+        byModel?: unknown;
+      }) => {
+        const sources = (Array.isArray(c.sources) ? c.sources : [])
+          .slice(0, 6)
+          .map((s: { says?: unknown; source?: unknown; preferred?: unknown }) => {
+            const mark = s.preferred ? ' (newest note)' : '';
+            return str(s.says)
+              ? `${untrusted(s.source, 160)} says ${untrusted(s.says, 60)}${mark}`
+              : `${untrusted(s.source, 160)}${mark}`;
+          })
+          .join('; ');
+        const about = untrusted(c.about, 80) || 'a figure';
+        const reply = untrusted(c.reply, 60);
+        const verdict = !reply
+          ? ''
+          : c.replyUsesNote === false
+            ? ` The reply says ${reply}, not your note's figure: edit it before approving.`
+            : c.replyUsesNote === true
+              ? ` The reply uses your note's figure (${reply}).`
+              : ` The reply says ${reply}.`;
+        return `${c.byModel ? `${about} (noticed by the assistant)` : about}: ${sources}.${verdict}`;
+      },
+    );
+}
+
 /** Owner and admin notification emails (English UI). */
 export function renderNotificationEmail(n: Notification): RenderedEmail {
   const p = n.payload;
   const reasons = list(p.reasons).map(describeReason).join('; ');
+  const conflicts = describeConflicts(p.conflicts);
+  const conflictSection = conflicts.length
+    ? {
+        sections: [
+          {
+            title: 'Sources disagree',
+            lines: [...conflicts, 'Please correct the source that is out of date.'],
+          },
+        ],
+      }
+    : {};
   const subjectLine = untrusted(p.subject, 200) || '(no subject)';
   const from = p.senderName
     ? `${untrusted(p.senderName, 100)} (${str(p.senderDomain)})`
@@ -174,6 +230,7 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
     case 'draft_ready':
       return render(`Reply ready for approval: ${subjectLine}`, {
         heading: 'A reply is waiting for your approval.',
+        ...conflictSection,
         lines: [
           ['From', from],
           ['Subject', subjectLine],
@@ -196,6 +253,7 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
     case 'escalation':
       return render(`Please reply yourself: ${subjectLine}`, {
         heading: 'I could not answer this email — please reply manually.',
+        ...conflictSection,
         lines: [
           ['From', from],
           ['Subject', subjectLine],

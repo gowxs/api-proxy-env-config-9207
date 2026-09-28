@@ -355,3 +355,76 @@ describe('retrieval', () => {
     expect(chunks.map((c) => c.content)).toContain('Our soy candles burn for 40 hours.');
   });
 });
+
+// Production case 2026-09-28: the owner's note with the price lost its place
+// to near-duplicate website chunks that matched the question better.
+describe('retrieval: owner notes and repeated website text', () => {
+  let C: SeededTenant;
+  let noteId: string;
+  const question =
+    'Business website\nHi, how much does a business website cost and how long does it take?';
+
+  beforeAll(async () => {
+    C = await seedTenant(owner, 'kb-c', { embeddingAxis: 12 });
+    noteId = await addSource(C, {
+      type: 'note',
+      title: 'Services and prices',
+      note_text:
+        'Services and prices (EUR, excl. VAT):\n- Landing page: €290\n- Business website (up to 6 pages): €490\n\nDelivery times:\n- Business website: 10 business days',
+    });
+    await ingestSource(deps(), C.tenantId, noteId);
+
+    // One site, the same package text on many pages, each matching the question better than the note.
+    const site = await addSource(C, {
+      type: 'website',
+      title: 'example.com',
+      url: 'https://example.com/',
+      status: 'ready',
+    });
+    const pages = ['', 'pricing/', 'services/', 'packages/', 'faq/', 'about/', 'contact/', 'blog/'];
+    const texts = pages.map(
+      (p) =>
+        `${p || 'Home'} › Business website A business website for your business: how long does a business website take? ` +
+        'A business website takes 3–7 business days. Business website, business website, business website.',
+    );
+    texts.push(
+      'Our work › We built a business website for a bakery, a business website for a dentist and a business website for a gym.',
+    );
+    const vectors = await provider.embed(texts, 'document', 'test_fixture');
+    for (const [i, content] of texts.entries()) {
+      await owner`
+        insert into public.kb_chunks (tenant_id, source_id, chunk_index, content, token_count, metadata, embedding, embedding_model)
+        values (${C.tenantId}, ${site}, ${i}, ${content}, 40, ${owner.json({ url: `https://example.com/${pages[i] ?? 'work/'}` })},
+                ${`[${vectors.vectors[i]!.join(',')}]`}, ${provider.model})`;
+    }
+  });
+
+  it('keeps a place for the note and drops repeated website text', async () => {
+    const { chunks } = await retrieveKnowledge(
+      { sql: worker, embeddings: provider },
+      { tenantId: C.tenantId, query: question, origin: 'customer_data' },
+    );
+    expect(chunks.length).toBeLessThanOrEqual(6);
+    expect(chunks[0]!.content).toContain('Business website (up to 6 pages): €490');
+    expect(chunks[0]!.source).toMatchObject({
+      type: 'note',
+      title: 'Services and prices',
+      url: null,
+    });
+    expect(chunks[0]!.source.updatedAt).toBeInstanceOf(Date);
+    // Eight copies of the package text become one; the "Our work" chunk keeps its own place.
+    const copies = chunks.filter((c) => c.content.includes('takes 3–7 business days'));
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.source).toMatchObject({ type: 'website', url: 'https://example.com/' });
+    expect(chunks.some((c) => c.content.startsWith('Our work'))).toBe(true);
+  });
+
+  it('a tenant with notes only gets them as before', async () => {
+    const { chunks } = await retrieveKnowledge(
+      { sql: worker, embeddings: provider },
+      { tenantId: B.tenantId, query: 'How long is shipping to Germany?', origin: 'customer_data' },
+    );
+    expect(chunks.map((c) => c.source.type)).toEqual(chunks.map(() => 'note'));
+    expect(chunks[0]!.content).toContain('Berlin warehouse');
+  });
+});

@@ -55,4 +55,52 @@ describe('notification templates', () => {
     expect(r.subject).toBe('Last day of your Noctiv free trial');
     expect(r.text).toContain('ends in less than a day, on Thursday, 8 October 2026 at 15:30 (UTC)');
   });
+
+  it('lists sources that disagree and says which figure the reply uses', () => {
+    const r = renderNotificationEmail({
+      id: 'n9',
+      tenantId: 't1',
+      tenantName: 'WXS',
+      audience: 'owner',
+      kind: 'draft_ready',
+      payload: {
+        senderDomain: 'example-mail.test',
+        subject: 'Business website',
+        summary: 'Asks about cost and timeline.',
+        reasons: ['price_omitted', 'contradicts_owner_note'],
+        conflicts: [
+          {
+            about: 'business website',
+            reply: '3–7 business days',
+            replyUsesNote: false,
+            sources: [
+              {
+                says: '10 business days',
+                source: 'your note "Prices <b>" (2026-09-24)',
+                preferred: true,
+              },
+              {
+                says: '3–7 business days',
+                source: 'your website example.com/en/ (read 2026-09-25)',
+                preferred: false,
+              },
+            ],
+          },
+        ],
+      },
+      links: { dashboard: 'https://app.example/' },
+    });
+    expect(r.text).toContain(
+      'the customer asked for a price your knowledge base has, and the reply left it out; a figure in the reply differs from your own note',
+    );
+    expect(r.text).toContain('SOURCES DISAGREE');
+    expect(r.text).toContain(
+      'business website: your note "Prices <b>" (2026-09-24) says 10 business days (newest note); ' +
+        'your website example.com/en/ (read 2026-09-25) says 3–7 business days. ' +
+        "The reply says 3–7 business days, not your note's figure: edit it before approving.",
+    );
+    expect(r.text).toContain('Please correct the source that is out of date.');
+    expect(r.html).toContain('Prices &lt;b&gt;');
+    expect(r.html).not.toContain('Prices <b>');
+  });
 });

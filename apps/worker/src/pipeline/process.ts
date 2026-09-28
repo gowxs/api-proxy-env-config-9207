@@ -437,6 +437,7 @@ export async function processMessage(
         summary: classification.summary,
         classification,
         ...(ack.send ? { acknowledgement: { text: ack.text, envelope: guarded.envelope } } : {}),
+        knowledge,
       },
       usage,
       llmCalls,
@@ -465,6 +466,7 @@ export async function processMessage(
       guarded,
       knowledge.chunks.map((c) => c.id),
       usage,
+      guardReport(knowledge, guarded),
     );
     await recordUsage(tx, { tenantId, usage, llmCalls, embedTokens });
     await setLeadStage(
@@ -490,6 +492,7 @@ export async function processMessage(
         reasons: d.reasons,
         draftText: guarded.replyText,
         unverifiedSuggestion: false,
+        conflicts: conflictNotes(knowledge, guarded),
         ref: { draftId: draft!.id, messageId: m.id },
       });
     }
@@ -530,7 +533,7 @@ export async function generateGrounded(
   const prompt = buildGenerationPrompt({
     businessName: l.tenant.name,
     email,
-    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content })),
+    chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content, source: c.source })),
     inboundLanguage: i.classification.language,
     ...(i.focus?.length ? { focus: i.focus } : {}),
   });
@@ -574,6 +577,8 @@ export async function generateGrounded(
     classification: i.classification,
     modelOutput: gen.ok ? gen.value : gen.raw,
     labels: prompt.labels,
+    // The quote prices the other items; this reply must not (founder decision D4).
+    checkPrice: !i.focus?.length,
     caps: {
       senderRepliesLast24h: context.caps.sender,
       maxPerSender24h: l.tenant.maxPerSender24h,
@@ -626,10 +631,12 @@ async function writeProcessing(
   guarded: GuardedReply | null,
   retrieved: string[],
   usage: TokenUsage,
+  report: GuardReport | null = null,
 ) {
   await tx`
     update public.message_processing
     set status = ${status}, final_action = ${finalAction}, downgrade_reasons = ${reasons},
+        guard_report = ${report ? tx.json(report as never) : null},
         classification = ${classification ? tx.json(classification) : null},
         model_output = ${guarded?.generation ? tx.json(guarded.generation) : guarded ? tx.json({ invalid: true, error: guarded.validationError }) : null},
         confidence = ${guarded?.generation?.confidence ?? null},
@@ -653,6 +660,8 @@ export async function notifyOwner(
     ref: Record<string, string>;
     /** Mode 3: the acknowledgement that was sent to the customer. */
     acknowledgement?: string;
+    /** Sources that disagree on a figure in the reply (owner decides which is right). */
+    conflicts?: ConflictNote[];
   },
 ) {
   const payload = {
@@ -670,6 +679,7 @@ export async function notifyOwner(
     }),
     ...n.ref,
     ...(n.acknowledgement ? { acknowledgement: n.acknowledgement } : {}),
+    ...(n.conflicts?.length ? { conflicts: n.conflicts } : {}),
   };
   await tx`
     insert into public.notifications (tenant_id, channel, kind, dedupe_key, payload)
@@ -694,6 +704,8 @@ async function escalate(
     classification?: Classification;
     /** Mode 3: fixed text sent to the customer while the owner answers. */
     acknowledgement?: { text: string; envelope: GuardedReply['envelope'] };
+    /** The excerpts the model was shown (uncertain escalations after generation). */
+    knowledge?: Knowledge;
   },
   usage: TokenUsage,
   llmCalls: number,
@@ -741,8 +753,9 @@ async function escalate(
       e.reasons,
       e.classification ?? null,
       guarded,
-      [],
+      e.knowledge?.chunks.map((c) => c.id) ?? [],
       usage,
+      e.knowledge && guarded ? guardReport(e.knowledge, guarded) : null,
     );
     await recordUsage(tx, { tenantId, usage, llmCalls, embedTokens });
     await setLeadStage(tx, tenantId, leadId, 'escalated', e.reasons[0] ?? 'escalated');
@@ -754,6 +767,7 @@ async function escalate(
       reasons: e.reasons,
       draftText: suggestion,
       unverifiedSuggestion: Boolean(suggestion),
+      ...(e.knowledge && guarded ? { conflicts: conflictNotes(e.knowledge, guarded) } : {}),
       ...(e.acknowledgement ? { acknowledgement: e.acknowledgement.text } : {}),
       ref: {
         escalationId: esc!.id,
@@ -763,4 +777,103 @@ async function escalate(
     });
   });
   return { status: 'escalated', reasons: e.reasons };
+}
+
+type Knowledge = Awaited<ReturnType<typeof retrieveKnowledge>>;
+
+/** One line per disagreement for the owner: which source says what, and which one the reply follows. */
+export interface ConflictNote {
+  about: string;
+  /** The figure the reply uses ('' when the model reported the conflict). */
+  reply: string;
+  /** Whether that is the newest note's figure; null when no note is involved. */
+  replyUsesNote: boolean | null;
+  sources: { says: string; source: string; preferred: boolean }[];
+  /** Reported by the model rather than found by code. */
+  byModel?: boolean;
+}
+
+function sourceName(k: Knowledge['chunks'][number] | undefined): string {
+  if (!k) return 'an excerpt';
+  const day = k.source.updatedAt.toISOString().slice(0, 10);
+  if (k.source.type === 'note') return `your note "${k.source.title}" (${day})`;
+  if (k.source.type === 'file') return `your file "${k.source.title}" (${day})`;
+  // The page the chunk came from ("example.com/en/pricing/"), else the site.
+  const url = typeof k.metadata?.url === 'string' ? k.metadata.url : k.source.url;
+  const page = url ? url.replace(/^https?:\/\//, '') : k.source.title;
+  return `your website ${page} (read ${day})`;
+}
+
+export function conflictNotes(knowledge: Knowledge, guarded: GuardedReply): ConflictNote[] {
+  const byLabel = (label: string) => knowledge.chunks[Number(label.slice(1)) - 1];
+  const found: ConflictNote[] = guarded.sourceChecks.conflicts.map((c) => ({
+    about: c.about,
+    reply: c.replyValue,
+    replyUsesNote: c.preferred ? c.replyUsesPreferred : null,
+    sources: c.statements
+      .map((st) => ({
+        says: st.text,
+        source: sourceName(byLabel(st.label)),
+        preferred: c.preferred?.label === st.label && c.preferred.text === st.text,
+      }))
+      // The same page quoted twice (two chunks) is one line.
+      .filter(
+        (x, i, all) => all.findIndex((y) => y.source === x.source && y.says === x.says) === i,
+      ),
+  }));
+  // What the model noticed and code did not (different wording, no figure in the reply).
+  const model: ConflictNote[] = found.length
+    ? []
+    : guarded.sourceChecks.modelConflicts.slice(0, 3).map((c) => ({
+        about: c.fact,
+        reply: '',
+        replyUsesNote: null,
+        sources: [c.used, ...c.other].map((label, i) => ({
+          says: '',
+          source: sourceName(byLabel(label)),
+          preferred: i === 0,
+        })),
+        byModel: true,
+      }));
+  return [...found, ...model];
+}
+
+/** What the guards saw and decided, stored with the message (PLAN.md §4.3; production case 2026-09-28). */
+export type GuardReport = ReturnType<typeof guardReport>;
+
+export function guardReport(knowledge: Knowledge, guarded: GuardedReply) {
+  const sc = guarded.sourceChecks;
+  return {
+    excerpts: knowledge.chunks.map((c, i) => ({
+      label: `S${i + 1}`,
+      chunkId: c.id,
+      type: c.source.type,
+      title: c.source.title,
+      url: c.source.url,
+      updatedAt: c.source.updatedAt.toISOString(),
+      score: Number(c.score.toFixed(5)),
+      cited: guarded.citedChunkIds.includes(c.id),
+    })),
+    claims: guarded.claims.map((c) => ({
+      kind: c.kind,
+      text: c.text,
+      supported: !guarded.unsupportedClaims.includes(c),
+    })),
+    price: {
+      asked: sc.priceAsked,
+      inExcerpts: sc.excerptPrices,
+      inReply: sc.replyPrices,
+      omitted: sc.priceOmitted,
+    },
+    conflicts: sc.conflicts.map((c) => ({
+      kind: c.kind,
+      about: c.about,
+      reply: c.replyValue,
+      statements: c.statements.map((st) => ({ label: st.label, text: st.text })),
+      preferred: c.preferred ?? null,
+      replyUsesPreferred: c.replyUsesPreferred,
+    })),
+    modelConflicts: sc.modelConflicts,
+    decision: guarded.decision,
+  };
 }
