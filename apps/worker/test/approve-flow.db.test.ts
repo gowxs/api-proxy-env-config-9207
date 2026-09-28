@@ -28,6 +28,7 @@ const apiSql = postgres(inject('apiDatabaseUrl'), { max: 4, onnotice: () => {} }
 const U = GREENMAIL_USERS;
 const SECRET = 'approve-flow-secret-0123456789abcdef';
 const API = 'https://api.noctiv.test';
+const APP_URL = 'https://app.noctiv.test';
 
 const app = buildApp({
   logger: createLogger({ service: 'api-test', level: 'silent' }),
@@ -188,9 +189,25 @@ describe('approve by email link, end to end', () => {
     for (let i = 0; i < 2; i++) {
       const page = await app.inject({ method: 'GET', url: mail.approve });
       expect(page.statusCode).toBe(200);
-      expect(page.body).toContain('<form method="post">');
       expect(page.body).toContain('Approve and send');
     }
+    // The page shows everything needed to decide (privacy mode limits the e-mail, not this signed page).
+    const review = (await app.inject({ method: 'GET', url: mail.approve })).body;
+    expect(review).toContain('The customer wrote');
+    expect(review).toContain(U.sendCustomer.address);
+    expect(review).toContain('Hello, how much is one candle?');
+    expect(review).toContain('Your reply, as it will be sent');
+    expect(review).toContain('one candle costs 24 EUR');
+    expect(review).toContain('Lumen Studio team'); // the signature, as the customer gets it
+    expect(review).toContain('Why it waits for you');
+    expect(review).toContain('your account is set to approve everything');
+    expect(review).toContain(`href="${APP_URL}/drafts/${draftId}"`);
+    expect(review).not.toMatch(/<script/i);
+    // Each button posts its own signed link, relative, so it works under /api/actions too.
+    const actions = [...review.matchAll(/<form method="post" action="([^"]+)"/g)].map((m) => m[1]);
+    expect(actions).toHaveLength(2);
+    expect(`/actions/${actions[0]}`).toBe(mail.approve);
+    expect(actions[1]).not.toBe(actions[0]);
     expect((await draft(draftId)).status).toBe('pending_approval');
     expect(await sendJobs(draftId)).toHaveLength(0);
 
@@ -247,7 +264,7 @@ describe('approve by email link, end to end', () => {
     const draftId = await customerAsks('Another question', '<ask-2@example-mail.test>');
     const mail = await ownerEmailFor(draftId);
     const confirm = await app.inject({ method: 'GET', url: mail.reject });
-    expect(confirm.body).toContain('Reject draft');
+    expect(confirm.body).toContain('Reject this reply?');
     const rejected = await app.inject({ method: 'POST', url: mail.reject });
     expect(rejected.body).toContain('Rejected');
     expect((await draft(draftId)).status).toBe('rejected');
@@ -266,5 +283,47 @@ describe('approve by email link, end to end', () => {
     const res = await app.inject({ method: 'POST', url: `/actions/${token}` });
     expect(res.statusCode).toBe(404);
     expect((await draft(other.draftId)).status).toBe('pending_approval');
+  });
+});
+
+describe('the review page behind an e-mail link', () => {
+  it('Reject on the Approve page rejects; the reject link shows the same page', async () => {
+    const draftId = await customerAsks('Gift set?', '<ask-review@example-mail.test>');
+    const mail = await ownerEmailFor(draftId);
+    // As written by the pipeline when the note and the website disagree.
+    await owner`update public.notifications set payload = payload || ${owner.json({
+      conflicts: [
+        {
+          about: 'gift set',
+          reply: '65 EUR',
+          replyUsesNote: true,
+          sources: [
+            { says: '65 EUR', source: 'your note "Prices" (2026-09-24)', preferred: true },
+            {
+              says: '60 EUR',
+              source: 'your website shop.test/gifts/ (read 2026-09-25)',
+              preferred: false,
+            },
+          ],
+        },
+      ],
+    })} where kind = 'draft_ready' and payload->>'draftId' = ${draftId}`;
+    const page = (await app.inject({ method: 'GET', url: mail.approve })).body;
+    expect(page).toContain('Sources disagree');
+    expect(page).toContain(
+      'gift set: your note &quot;Prices&quot; (2026-09-24) says 65 EUR (newest note); your website shop.test/gifts/ (read 2026-09-25) says 60 EUR.',
+    );
+    const [, rejectAction] = [...page.matchAll(/<form method="post" action="([^"]+)"/g)].map(
+      (m) => m[1],
+    );
+    // The reject link from the e-mail opens the same review, with Reject as the question.
+    const fromReject = (await app.inject({ method: 'GET', url: mail.reject })).body;
+    expect(fromReject).toContain('Reject this reply?');
+    expect(fromReject).toContain('Hello, how much is one candle?');
+
+    const res = await app.inject({ method: 'POST', url: `/actions/${rejectAction}` });
+    expect(res.body).toContain('Rejected');
+    expect((await draft(draftId)).status).toBe('rejected');
+    expect(await sendJobs(draftId)).toHaveLength(0);
   });
 });

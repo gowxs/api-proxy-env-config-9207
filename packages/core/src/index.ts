@@ -32,6 +32,7 @@ export * from './kb/near-duplicates.ts';
 export * from './kb/rank-fusion.ts';
 export * from './schedule/business-time.ts';
 export * from './notify/action-token.ts';
+export * from './notify/describe.ts';
 export * from './notify/waitlist-token.ts';
 export * from './notify/report-token.ts';
 export * from './notify/channel.ts';
