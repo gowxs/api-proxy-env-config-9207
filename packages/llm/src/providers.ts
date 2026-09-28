@@ -91,26 +91,44 @@ export class NonEuRegionError extends Error {
  */
 export class VertexGeminiProvider extends GeminiBackend {
   readonly location: string;
+  readonly embeddingLocation: string;
 
   constructor(
-    opts: CommonOptions & { projectId: string; location: string; credentialsFile: string },
+    opts: CommonOptions & {
+      projectId: string;
+      location: string;
+      /**
+       * Where embeddings run, when not at `location`. Google serves models per
+       * location: in the "eu" multi-region the Gemini 3 models but not
+       * gemini-embedding-001, in europe-west4 the reverse (found live).
+       */
+      embeddingLocation?: string;
+      credentialsFile: string;
+    },
   ) {
-    if (!EU_VERTEX_LOCATIONS.has(opts.location)) throw new NonEuRegionError(opts.location);
+    const embeddingLocation = opts.embeddingLocation ?? opts.location;
+    for (const l of [opts.location, embeddingLocation])
+      if (!EU_VERTEX_LOCATIONS.has(l)) throw new NonEuRegionError(l);
     const factory = opts.clientFactory ?? defaultClientFactory;
-    super({
-      name: 'vertex',
-      trainingPolicy: 'no_training',
-      client: factory({
+    const clientAt = (location: string) =>
+      factory({
         enterprise: true,
         httpOptions,
         project: opts.projectId,
         // Explicit: without it the SDK defaults to the non-regional "global" endpoint.
-        location: opts.location,
+        location,
         googleAuthOptions: {
           keyFilename: opts.credentialsFile,
           scopes: ['https://www.googleapis.com/auth/cloud-platform'],
         },
-      }),
+      });
+    super({
+      name: 'vertex',
+      trainingPolicy: 'no_training',
+      client: clientAt(opts.location),
+      ...(embeddingLocation !== opts.location
+        ? { embeddingClient: clientAt(embeddingLocation) }
+        : {}),
       models: opts.models,
       embeddingModel: opts.embeddingModel,
       // Conservative until verified live: one input per embedding request.
@@ -121,5 +139,6 @@ export class VertexGeminiProvider extends GeminiBackend {
       maxRetries: opts.maxRetries,
     });
     this.location = opts.location;
+    this.embeddingLocation = embeddingLocation;
   }
 }

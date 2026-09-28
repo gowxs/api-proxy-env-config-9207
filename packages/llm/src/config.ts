@@ -13,6 +13,8 @@ export const llmEnvSchema = z.object({
   GEMINI_API_KEY: optionalString,
   GCP_PROJECT_ID: optionalString,
   GCP_LOCATION: z.string().trim().default('europe-west4'),
+  /** Where embeddings run; defaults to GCP_LOCATION. EU locations only. */
+  GCP_EMBEDDING_LOCATION: optionalString,
   GOOGLE_APPLICATION_CREDENTIALS: optionalString,
   LLM_MODEL_FAST: z.string().trim().min(1).default(DEFAULT_MODELS.fast),
   LLM_MODEL_QUALITY: z.string().trim().min(1).default(DEFAULT_MODELS.quality),
@@ -29,6 +31,7 @@ export type LlmConfig =
       provider: 'vertex';
       projectId: string;
       location: string;
+      embeddingLocation: string;
       credentialsFile: string;
       common: Common;
     }
@@ -98,6 +101,7 @@ export function resolveLlmConfig(
         provider,
         projectId: env.GCP_PROJECT_ID!,
         location: env.GCP_LOCATION,
+        embeddingLocation: env.GCP_EMBEDDING_LOCATION ?? env.GCP_LOCATION,
         credentialsFile: env.GOOGLE_APPLICATION_CREDENTIALS!,
         common,
       };
@@ -117,6 +121,7 @@ export interface Providers {
     trainingPolicy: LlmProvider['trainingPolicy'];
     models: { fast: string; quality: string; embedding: string };
     location?: string;
+    embeddingLocation?: string;
   };
 }
 
@@ -138,6 +143,7 @@ export function createProviders(
       ...shared,
       projectId: config.projectId,
       location: config.location,
+      embeddingLocation: config.embeddingLocation,
       credentialsFile: config.credentialsFile,
     });
   } else if (config.provider === 'google_ai_studio') {
@@ -152,7 +158,14 @@ export function createProviders(
       provider: config.provider,
       trainingPolicy: provider.trainingPolicy,
       models: { ...provider.models, embedding: provider.model },
-      ...(config.provider === 'vertex' ? { location: config.location } : {}),
+      ...(config.provider === 'vertex'
+        ? {
+            location: config.location,
+            ...(config.embeddingLocation !== config.location
+              ? { embeddingLocation: config.embeddingLocation }
+              : {}),
+          }
+        : {}),
     },
   };
 }

@@ -4,6 +4,8 @@
  *   pnpm dev:stack --empty    start from the signup/onboarding wizard
  *   pnpm dev:stack --gemini   real model (GEMINI_API_KEY from .env, free tier;
  *                             only the demo test mailbox is processed)
+ *   pnpm dev:stack --vertex   real model on Vertex AI (GCP_* and
+ *                             GOOGLE_APPLICATION_CREDENTIALS from env or .env)
  *
  * Starts Postgres (Supabase image) and GreenMail with Docker, applies the
  * migrations, creates the demo owner, then runs API (:4000), worker and web
@@ -175,9 +177,23 @@ async function main() {
     SYSTEM_SMTP_SECURITY: 'none',
     SYSTEM_MAIL_FROM: 'Noctiv <notify@noctiv.local>',
     ADMIN_EMAIL: 'admin@noctiv.local',
-    ...(args.has('--gemini') && dotenv.GEMINI_API_KEY
-      ? { GEMINI_API_KEY: dotenv.GEMINI_API_KEY }
-      : { LLM_PROVIDER: 'fake' }),
+    ...(args.has('--vertex')
+      ? {
+          LLM_PROVIDER: 'vertex',
+          ...Object.fromEntries(
+            [
+              'GCP_PROJECT_ID',
+              'GCP_LOCATION',
+              'GCP_EMBEDDING_LOCATION',
+              'GOOGLE_APPLICATION_CREDENTIALS',
+            ]
+              .map((k) => [k, process.env[k] ?? dotenv[k]] as const)
+              .filter((e): e is readonly [string, string] => Boolean(e[1])),
+          ),
+        }
+      : args.has('--gemini') && dotenv.GEMINI_API_KEY
+        ? { GEMINI_API_KEY: dotenv.GEMINI_API_KEY }
+        : { LLM_PROVIDER: 'fake' }),
     // Model overrides, e.g. when the free tier's daily quota for one model is used up.
     ...Object.fromEntries(
       ['LLM_MODEL_FAST', 'LLM_MODEL_QUALITY', 'EMBED_MODEL']

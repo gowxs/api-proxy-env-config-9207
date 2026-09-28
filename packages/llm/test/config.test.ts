@@ -114,6 +114,41 @@ describe('createProviders', () => {
     );
   });
 
+  it('runs embeddings at GCP_EMBEDDING_LOCATION when set', async () => {
+    const { factory, created } = mockClientFactory();
+    const v = createProviders(
+      resolveLlmConfig({ ...GCP, GCP_LOCATION: 'eu', GCP_EMBEDDING_LOCATION: 'europe-west4' }),
+      { clientFactory: factory },
+    );
+    expect(v.description).toMatchObject({ location: 'eu', embeddingLocation: 'europe-west4' });
+    expect(created.map((c) => c.options.location)).toEqual(['eu', 'europe-west4']);
+    await v.embeddings.embed(['a'], 'document', 'test_fixture');
+    await v.llm.generate({
+      tier: 'fast',
+      origin: 'test_fixture',
+      system: 's',
+      parts: [{ kind: 'instruction', text: 'x' }],
+      responseJsonSchema: {},
+      maxOutputTokens: 10,
+    });
+    expect(created[0]!.embedCalls).toHaveLength(0);
+    expect(created[1]!.embedCalls).toHaveLength(1);
+    expect(created[0]!.generateCalls).toHaveLength(1);
+    expect(created[1]!.generateCalls).toHaveLength(0);
+
+    const same = mockClientFactory();
+    createProviders(resolveLlmConfig(GCP), { clientFactory: same.factory });
+    expect(same.created).toHaveLength(1);
+  });
+
+  it('refuses a non-EU GCP_EMBEDDING_LOCATION at startup', () => {
+    expect(() =>
+      createProviders(resolveLlmConfig({ ...GCP, GCP_EMBEDDING_LOCATION: 'us-central1' }), {
+        clientFactory: mockClientFactory().factory,
+      }),
+    ).toThrow(/not an EU region/);
+  });
+
   it('refuses a non-EU GCP_LOCATION at startup', () => {
     expect(() =>
       createProviders(resolveLlmConfig({ ...GCP, GCP_LOCATION: 'us-central1' }), {

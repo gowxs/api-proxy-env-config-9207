@@ -35,6 +35,8 @@ export interface GeminiBackendOptions {
   name: ProviderName;
   trainingPolicy: TrainingPolicy;
   client: GeminiClient;
+  /** Client for embeddings when they are served elsewhere (Vertex: another EU location). */
+  embeddingClient?: GeminiClient;
   models: Record<ModelTier, string>;
   embeddingModel: string;
   /** Inputs per embedContent request. */
@@ -115,6 +117,7 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
   readonly model: string;
   readonly dimensions = EMBEDDING_DIMENSIONS;
   private readonly client: GeminiClient;
+  private readonly embeddingClient: GeminiClient;
   private readonly opts: GeminiBackendOptions;
   private readonly cache: LruCache<number[]> | undefined;
   /** Recent embedding requests (time, texts, estimated tokens), for pacing. */
@@ -126,6 +129,7 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
     this.name = opts.name;
     this.trainingPolicy = opts.trainingPolicy;
     this.client = opts.client;
+    this.embeddingClient = opts.embeddingClient ?? opts.client;
     this.models = opts.models;
     this.model = opts.embeddingModel;
     this.cache = opts.embedCacheSize ? new LruCache(opts.embedCacheSize) : undefined;
@@ -277,7 +281,7 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
       await this.reserveEmbedding(batch.length, estimateTokens(batch));
       const response = await this.withRetry(
         () =>
-          this.client.models.embedContent({
+          this.embeddingClient.models.embedContent({
             model: this.model,
             contents: batch,
             config: {
@@ -321,11 +325,14 @@ export class GeminiBackend implements LlmProvider, EmbeddingProvider {
 
   /** Confirms every configured model is served to this project/region. */
   async checkModels(): Promise<{ model: string; ok: boolean; error?: string }[]> {
-    const names = [...new Set([...Object.values(this.models), this.model])];
+    const names = [
+      ...[...new Set(Object.values(this.models))].map((m) => [m, this.client] as const),
+      [this.model, this.embeddingClient] as const,
+    ];
     return Promise.all(
-      names.map(async (model) => {
+      names.map(async ([model, client]) => {
         try {
-          await this.client.models.get({ model });
+          await client.models.get({ model });
           return { model, ok: true };
         } catch (e) {
           return { model, ok: false, error: classifyError(this.name, e).message };
