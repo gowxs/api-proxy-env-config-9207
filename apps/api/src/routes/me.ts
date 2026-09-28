@@ -49,7 +49,9 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     return {
       userId: user.userId,
       email: user.email ?? null,
-      inviteRequired: deps.inviteCodes.length > 0,
+      // Self-serve sign-up (founder decision 2026-10-02): an invite code is optional.
+      inviteRequired: false,
+      inviteCodes: deps.inviteCodes.length > 0,
       tenants: withState,
     };
   });
@@ -102,10 +104,12 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
   app.post('/v1/tenants', async (req, reply) => {
     const user = req.user!;
     const b = createBody.parse(req.body);
-    if (deps.inviteCodes.length && !deps.inviteCodes.includes(b.inviteCode ?? ''))
+    // Optional; a code that was typed must be a real one (a typo is pointed out, not ignored).
+    const invite = b.inviteCode?.trim() || null;
+    if (invite && !deps.inviteCodes.includes(invite))
       throw new HttpError(
-        403,
-        'That invite code is not valid. Noctiv is invite-only during early access: ask us for a code at contact@noctiv.io.',
+        400,
+        'That invite code is not valid. Check it, or leave the field empty: you can sign up without one.',
       );
     const existing = await deps.sql`select 1 from app.user_tenants(${user.userId})`;
     if (existing.length) throw new HttpError(409, 'You already have a business account.');

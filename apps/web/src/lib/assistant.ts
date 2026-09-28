@@ -151,7 +151,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Dismissed',
     failed: 'Could not apply',
     intro:
-      'Hi! I can answer questions about your account, explain how Noctiv works and propose settings changes for you to confirm.',
+      'Hi! I can answer questions about your account, explain how Noctiv works, and prepare invoices, e-mails and settings changes for you to confirm.',
     onboardingIntro:
       "Hi! Let's set up Noctiv together. First: what does your business sell, and to whom?",
     suggestions: ['How did last week go?', 'Which quotes are open?', 'Explain the reply modes'],
@@ -205,7 +205,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Verworfen',
     failed: 'Nicht übernommen',
     intro:
-      'Hallo! Ich beantworte Fragen zu Ihrem Konto, erkläre Noctiv und schlage Einstellungen vor, die Sie bestätigen.',
+      'Hallo! Ich beantworte Fragen zu Ihrem Konto, erkläre, wie Noctiv funktioniert, und bereite Rechnungen, E-Mails und Einstellungen vor, die Sie bestätigen.',
     onboardingIntro:
       'Hallo! Richten wir Noctiv gemeinsam ein. Zuerst: Was verkauft Ihr Unternehmen, und an wen?',
     suggestions: [
@@ -264,7 +264,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Noraidīts',
     failed: 'Neizdevās',
     intro:
-      'Sveiki! Es atbildu uz jautājumiem par jūsu kontu, izskaidroju Noctiv un piedāvāju iestatījumu izmaiņas, ko jūs apstiprināt.',
+      'Sveiki! Es varu atbildēt uz jautājumiem par jūsu kontu, izskaidrot, kā darbojas Noctiv, un sagatavot rēķinus, e-pastus un iestatījumu izmaiņas, ko jūs apstiprināt.',
     onboardingIntro: 'Sveiki! Iestatīsim Noctiv kopā. Vispirms: ko jūsu uzņēmums pārdod un kam?',
     suggestions: [
       'Kā gāja pagājušajā nedēļā?',
@@ -320,7 +320,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Genegeerd',
     failed: 'Niet gelukt',
     intro:
-      'Hoi! Ik beantwoord vragen over je account, leg Noctiv uit en stel wijzigingen voor die jij bevestigt.',
+      'Hallo! Ik beantwoord vragen over je account, leg uit hoe Noctiv werkt en bereid facturen, e-mails en wijzigingen in instellingen voor die jij bevestigt.',
     onboardingIntro:
       'Hoi! Laten we Noctiv samen instellen. Eerst: wat verkoopt je bedrijf, en aan wie?',
     suggestions: ['Hoe ging vorige week?', 'Welke offertes staan open?', 'Leg de antwoordmodi uit'],
@@ -374,7 +374,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Ignoré',
     failed: 'Échec',
     intro:
-      'Bonjour ! Je réponds aux questions sur votre compte, j’explique Noctiv et je propose des réglages que vous confirmez.',
+      'Bonjour ! Je réponds à vos questions sur votre compte, j’explique le fonctionnement de Noctiv et je prépare factures, e-mails et réglages que vous confirmez.',
     onboardingIntro:
       'Bonjour ! Configurons Noctiv ensemble. D’abord : que vend votre entreprise, et à qui ?',
     suggestions: [
@@ -432,7 +432,7 @@ export const WORDS: Record<AssistantLocale, Words> = {
     dismissed: 'Descartado',
     failed: 'No se pudo aplicar',
     intro:
-      '¡Hola! Respondo preguntas sobre tu cuenta, explico Noctiv y propongo cambios de configuración que tú confirmas.',
+      '¡Hola! Respondo preguntas sobre tu cuenta, explico cómo funciona Noctiv y preparo facturas, correos y cambios de ajustes para que los confirmes.',
     onboardingIntro: '¡Hola! Configuremos Noctiv juntos. Primero: ¿qué vende tu negocio y a quién?',
     suggestions: [
       '¿Qué tal fue la semana pasada?',

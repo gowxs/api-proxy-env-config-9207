@@ -120,7 +120,7 @@ origin; `/api/*` is forwarded to the API (`API_INTERNAL_URL`). Sign-in is Supaba
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The API verifies the token and membership on
 every request; the browser never reads the database directly.
 
-- **Onboarding:** business + time zone (+ invite code) → mailbox (provider, App Password
+- **Onboarding:** business + time zone (+ optional invite code) → your brand (logo, colour) → mailbox (provider, App Password
   guide with screenshot placeholders, live test with the exact error) → knowledge (website,
   files, notes) → summary. Every business starts in mode 1 (approve everything); modes 2
   (auto-reply to grounded questions) and 3 (fully automatic) are chosen in Settings.

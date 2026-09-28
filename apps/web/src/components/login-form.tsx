@@ -9,7 +9,7 @@ import { DEV_LOGIN, devLogin, SUPABASE_ENABLED, supabase } from '@/lib/auth';
  * without JavaScript); the query string (?next, ?deleted) is read in the
  * browser so the page itself stays static.
  */
-export function LoginForm() {
+export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' | 'signup' }) {
   const [next, setNext] = useState('/');
   const [deleted, setDeleted] = useState(false);
   useEffect(() => {
@@ -17,7 +17,7 @@ export function LoginForm() {
     setNext(q.get('next') || '/');
     setDeleted(q.has('deleted'));
   }, []);
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);

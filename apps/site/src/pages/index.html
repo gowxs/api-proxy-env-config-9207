@@ -11,15 +11,19 @@
       <h1>Your inbox, answered while you sleep.</h1>
       <p class="lead">
         Noctiv reads every customer e-mail, drafts a reply from your own prices and policies, and
-        follows up with the ones who go quiet. You approve with one click from your phone.
+        follows up with the ones who go quiet. You approve with one click from your phone<span
+          data-new
+          >, or just tell the Noctiv Assistant: “Send Anna an invoice for €290, due in 7
+          days.”</span
+        >
       </p>
       <div class="actions">
-        <a class="btn" href="#pricing">Start 14-day free trial</a>
+        <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
         <a class="btn btn--secondary" href="#how">See how it works</a>
       </div>
-      <p class="note">
-        Connects to Gmail, Google Workspace and any business mailbox in 2 minutes. No migration, no
-        new helpdesk.
+      <p class="note mailboxes" data-new>
+        <b>Works with any business mailbox</b> — Gmail, Google Workspace, Hostinger, Zoho, any IMAP
+        — not just Gmail. Connected in 2 minutes; no migration, no new helpdesk.
       </p>
     </div>
 
@@ -47,7 +51,7 @@
   <hr class="dawn-line" />
 </section>
 
-{{> jobs}}
+{{> jobs}} {{> flow}} {{> summary}}
 
 <section class="section" id="who">
   <div class="wrap">
@@ -172,6 +176,13 @@
         <p>
           It replies in the language the customer wrote in. Your knowledge base can be in any
           language.
+        </p>
+      </details>
+      <details data-new>
+        <summary>Does it work with Outlook / Microsoft 365?</summary>
+        <p>
+          Not yet. <a href="/contact/">Tell us</a> and we'll prioritise it. Every other business
+          mailbox works: Gmail, Google Workspace, Hostinger, Zoho and any IMAP mailbox.
         </p>
       </details>
       <details>

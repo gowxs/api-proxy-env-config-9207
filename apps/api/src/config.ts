@@ -24,7 +24,7 @@ export const apiEnvSchema = z
     PUBLIC_SITE_URL: z.url().default('https://noctiv.io'),
     /** Founder's bearer token for GET /admin/waitlist.csv; unset = export off. */
     WAITLIST_EXPORT_TOKEN: z.string().min(32).optional(),
-    /** Comma-separated invite codes; signup is gated while set (required in production, Q12). */
+    /** Comma-separated invite codes; optional at sign-up (self-serve since 2026-10-02). */
     SIGNUP_INVITE_CODES: z
       .string()
       .default('')
@@ -60,10 +60,6 @@ export const apiEnvSchema = z
   .refine((e) => !(e.NODE_ENV === 'production' && e.DEV_LOGIN_USER_ID), {
     path: ['DEV_LOGIN_USER_ID'],
     message: 'must not be set in production',
-  })
-  .refine((e) => e.NODE_ENV !== 'production' || e.SIGNUP_INVITE_CODES.length > 0, {
-    path: ['SIGNUP_INVITE_CODES'],
-    message: 'is required in production (invite-only signup)',
   })
   .refine((e) => dataRegionProblem(e) === null, {
     path: ['DATA_REGION_IN_EU'],

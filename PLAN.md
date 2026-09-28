@@ -555,7 +555,7 @@ placeholders), Q15 sender-only replies (default: yes).
 ### Decisions made during step 12 (web app)
 
 - **The browser talks only to our API** (through a same-origin `/api` proxy), not to Supabase's database API. One place checks membership and RLS context; no CORS. Supabase is used in the browser for sign-in only.
-- **Signup is invite-only (Q12 default):** creating a business needs one of `SIGNUP_INVITE_CODES`; required in production. One business per account in Phase 1.
+- **Signup is self-serve since 2026-10-02** (app.noctiv.io/signup; an invite code is optional, and a mistyped one is pointed out). Previously **invite-only (Q12 default):** creating a business needs one of `SIGNUP_INVITE_CODES`; required in production. One business per account in Phase 1.
 - **Onboarding** can skip the mailbox and the knowledge base (connect later in Settings); it always ends in draft-only mode. App Password screenshots are placeholders (Q13 default).
 - **Auto-send switch:** a dialog explaining what changes plus a confirmation checkbox; the API also requires `confirmAutoSend: true` and a connected mailbox, and audits the change. Switching back needs no confirmation.
 - **Editing** a draft marks it `edited` and sends the owner's text as written (owner text is trusted). Approving an unverified suggestion closes its escalation.

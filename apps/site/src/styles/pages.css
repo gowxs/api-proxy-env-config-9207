@@ -597,6 +597,199 @@
   font-size: var(--fs-small);
 }
 
+/* ---------- From e-mail to paid: the five steps ---------- */
+.flow {
+  list-style: none;
+  padding: 0;
+  margin-top: var(--s-7);
+  display: grid;
+  counter-reset: flow;
+}
+.flow li {
+  position: relative;
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-4) 0 var(--s-4) 3rem;
+  border-top: 1px solid var(--line);
+}
+.flow li::before {
+  counter-increment: flow;
+  content: counter(flow);
+  position: absolute;
+  left: 0;
+  top: var(--s-4);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 800;
+  font-size: var(--fs-small);
+}
+.flow b {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+}
+.flow span {
+  color: var(--text-2);
+}
+@media (min-width: 60rem) {
+  .flow {
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--s-5);
+  }
+  .flow li {
+    padding: 3rem 0 0;
+    border-top: 0;
+  }
+  .flow li::before {
+    top: 0;
+  }
+  /* The line that joins the steps. */
+  .flow li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 1rem;
+    left: 2.5rem;
+    right: calc(-1 * var(--s-5) + 0.5rem);
+    height: 2px;
+    background: var(--line-strong);
+  }
+}
+.flow-show {
+  display: grid;
+  gap: var(--s-7);
+  margin-top: var(--s-8);
+  align-items: start;
+}
+@media (min-width: 60rem) {
+  .flow-show {
+    grid-template-columns: minmax(0, 26rem) 1fr;
+  }
+}
+
+/* The assistant example: owner message, answer, invoice card (light in both themes, like the hero demo). */
+.chat {
+  display: grid;
+  gap: var(--s-3);
+}
+.chat .msg--owner {
+  justify-self: end;
+  max-width: 85%;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.card {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid #c9c6f2;
+  border-radius: var(--r-md);
+  background: #fff;
+}
+.card-kind {
+  font-size: var(--fs-label);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #3b2fd0;
+}
+.card-who {
+  margin-top: var(--s-1);
+  font-weight: 700;
+}
+.card-lines {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-1) var(--s-4);
+  margin: var(--s-3) 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.card-lines dt {
+  color: #4a5270;
+}
+.card-lines dd {
+  margin: 0;
+  text-align: right;
+}
+.card-lines .total {
+  padding-top: var(--s-2);
+  border-top: 1px solid #e3e6ef;
+  color: #131a2e;
+  font-weight: 800;
+}
+.card-due {
+  margin-top: var(--s-2);
+  color: #4a5270;
+  font-size: var(--fs-small);
+}
+.card-actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.card-actions .btn {
+  pointer-events: none;
+}
+/* The card stays light in both themes, like the hero demo. */
+.card-actions .btn--secondary {
+  background: #fff;
+  color: #131a2e;
+  border-color: #c9cde0;
+}
+.card-next {
+  margin-top: var(--s-3);
+  font-size: var(--fs-small);
+  color: #4a5270;
+}
+
+/* ---------- Product screenshots in a simple phone outline ---------- */
+.phones {
+  display: grid;
+  gap: var(--s-7);
+  justify-items: center;
+}
+.phones .device {
+  width: min(100%, 18rem);
+}
+@media (min-width: 40rem) {
+  .phones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-5);
+    align-items: start;
+    max-width: 36rem;
+  }
+  .phones .device {
+    width: 100%;
+  }
+}
+.device {
+  margin: 0;
+}
+.device img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 6px solid var(--night-800);
+  border-radius: 1.75rem;
+  /* Visible on the dark page too. */
+  outline: 1px solid var(--line-strong);
+  background: #fff;
+  box-shadow:
+    0 1px 0 var(--line),
+    0 18px 40px -24px rgb(7 11 28 / 0.45);
+}
+.device figcaption {
+  margin-top: var(--s-3);
+  text-align: center;
+  font-size: var(--fs-small);
+  color: var(--text-3);
+}
+.hero .note.mailboxes b {
+  color: var(--night-text);
+}
+
 /* ---------- Review mode (?review): outlines copy that still needs approval ---------- */
 .review [data-new] {
   outline: 2px dashed #d97706;

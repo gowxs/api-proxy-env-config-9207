@@ -47,12 +47,13 @@ async function call(
 const t = (s: SeededTenant, path = '') => `/v1/tenants/${s.tenantId}${path}`;
 
 describe('account and onboarding', () => {
-  it('a new user creates their business with an invite code; it starts in draft-only mode', async () => {
+  it('a new user creates their business (invite code optional); it starts in draft-only mode', async () => {
     const userId = randomUUID();
     await owner`insert into auth.users (id, email, aud, role) values (${userId}, ${`new-${userId.slice(0, 8)}@example.test`}, 'authenticated', 'authenticated')`;
     expect((await call('GET', '/v1/me', userId)).json).toMatchObject({
       tenants: [],
-      inviteRequired: true,
+      inviteRequired: false,
+      inviteCodes: true,
     });
 
     const body = {
@@ -60,7 +61,10 @@ describe('account and onboarding', () => {
       timezone: 'Europe/Riga',
       websiteUrl: 'https://lumen.example',
     };
-    expect((await call('POST', '/v1/tenants', userId, body)).status).toBe(403);
+    // A mistyped code is pointed out; no code at all is fine (self-serve sign-up).
+    expect(
+      (await call('POST', '/v1/tenants', userId, { ...body, inviteCode: 'EARLY-2O26' })).status,
+    ).toBe(400);
     expect(
       (
         await call('POST', '/v1/tenants', userId, {
@@ -100,8 +104,8 @@ describe('account and onboarding', () => {
     const ukShop = await call('POST', '/v1/tenants', uk, {
       name: 'Hearth & Wick',
       timezone: 'Europe/London',
-      inviteCode: 'EARLY-2026',
     });
+    expect(ukShop.status).toBe(201);
     expect((await call('GET', `/v1/tenants/${ukShop.json.id}`, uk)).json).toMatchObject({
       quotes_currency: 'GBP',
       quotes_vat_rate: 20,

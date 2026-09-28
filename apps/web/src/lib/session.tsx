@@ -17,6 +17,8 @@ export interface Me {
   userId: string;
   email: string | null;
   inviteRequired: boolean;
+  /** Invite codes exist: the field is shown, optional. */
+  inviteCodes?: boolean;
   tenants: TenantSummary[];
 }
 

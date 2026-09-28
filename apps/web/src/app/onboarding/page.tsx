@@ -58,7 +58,7 @@ function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> 
               name: name.trim(),
               timezone,
               websiteUrl: w ? (/^https?:\/\//i.test(w) ? w : `https://${w}`) : null,
-              ...(me.inviteRequired ? { inviteCode: invite.trim() } : {}),
+              ...(invite.trim() ? { inviteCode: invite.trim() } : {}),
             },
           });
           await onDone(created.id);
@@ -103,11 +103,13 @@ function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> 
           ))}
         </select>
       </Field>
-      {me.inviteRequired && (
-        <Field label="Invite code" hint="Noctiv is invite-only during early access.">
+      {(me.inviteRequired || me.inviteCodes) && (
+        <Field
+          label="Invite code (optional)"
+          hint="Got one from us? Enter it here. You can sign up without one."
+        >
           <input
             className={inputClass}
-            required
             value={invite}
             onChange={(e) => setInvite(e.target.value)}
           />

@@ -49,15 +49,16 @@ describe('api config: action links', () => {
     CREDENTIALS_PUBLIC_KEY: 'a'.repeat(43),
   };
   const prod = { ...api, NODE_ENV: 'production', DATA_REGION_IN_EU: 'true' };
-  it('production needs the link secret and invite codes; dev login is refused', () => {
+  it('production needs the link secret; invite codes are optional; dev login is refused', () => {
     expect(loadApiConfig(api).ACTION_LINK_SECRET).toBeUndefined();
     expect(loadApiConfig(api).SIGNUP_INVITE_CODES).toEqual([]);
     expect(() => loadApiConfig({ ...prod, SIGNUP_INVITE_CODES: 'A1' })).toThrow(
       /ACTION_LINK_SECRET/,
     );
-    expect(() => loadApiConfig({ ...prod, ACTION_LINK_SECRET: 'y'.repeat(32) })).toThrow(
-      /SIGNUP_INVITE_CODES/,
-    );
+    // Self-serve sign-up: production runs without invite codes too.
+    expect(
+      loadApiConfig({ ...prod, ACTION_LINK_SECRET: 'y'.repeat(32) }).SIGNUP_INVITE_CODES,
+    ).toEqual([]);
     const ok = { ...prod, ACTION_LINK_SECRET: 'y'.repeat(32), SIGNUP_INVITE_CODES: ' A1 , B2 ' };
     expect(loadApiConfig(ok).SIGNUP_INVITE_CODES).toEqual(['A1', 'B2']);
     expect(() =>
