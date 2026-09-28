@@ -997,6 +997,24 @@ QA.md lists the findings; these are the decisions and how they were built.
   - "Mark invoice INV-2026-0001 as paid" set it to paid.
 
 
+### 27.3 Connect the mailbox from the chat (founder request 2026-10-02)
+
+- **When:** the owner names the address they want to connect ("connect info@kerzenwerk.de") or their provider ("we use Zoho"). The assistant calls `mailbox_setup`, then proposes a `connect_mailbox` card. In setup mode it asks for the address.
+- **Detection** (`packages/mail/src/detect.ts`):
+  - **From the address:** consumer domains (Gmail, Yahoo, iCloud, Zoho, GMX, WEB.DE, Fastmail; Outlook/Hotmail/Live are recognised as not supported).
+  - **From MX records** (DNS, 3 s timeout) for business domains: Google Workspace, Hostinger, Microsoft 365 (not supported), Zoho (region from the MX), Yahoo, IONOS, GoDaddy, Namecheap, OVHcloud, one.com, STRATO, Fastmail, iCloud.
+  - **Otherwise:** "Other (IMAP/SMTP)" with empty servers for the owner to fill in.
+  - Hosts and ports are the providers' documented IMAP (993) and SMTP (465, or 587 with STARTTLS) settings. Known providers keep using their preset on the server side.
+- **The card:**
+  - It shows the provider, the address, the servers (for "Other") and how they were found.
+  - **"Open the form"** opens the usual connect form inside the card: provider preset, address and servers are filled in, and the cursor is in the App Password field.
+  - The form's own connection test runs before saving, as always.
+  - Saving completes the card: `apply` checks that this address is connected, else 409.
+  - Microsoft addresses and mailboxes that are already connected get no card.
+- **Owner-typed rule:** the address must be one the owner typed. An address found only in a customer's e-mail never becomes a card.
+- **Help:** App Password steps for Zoho, iCloud, GMX/WEB.DE and hosting providers were added to the help text.
+- **Migration:** 20261002000100 adds the card type.
+
 ## 28. Your brand: logo and colour (founder request 2026-10-01)
 
 - **Where:**

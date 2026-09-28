@@ -13,6 +13,14 @@ import {
 import { loadValueRows } from '@noctiv/db';
 import { formatMoney } from '@noctiv/quotes';
 import type { TransactionSql } from 'postgres';
+import { resolveMx } from 'node:dns/promises';
+import {
+  detectMailbox,
+  EMAIL_ADDRESS,
+  mailboxFromName,
+  PRESETS,
+  type DetectedMailbox,
+} from '@noctiv/mail';
 import { describeReason } from '../notify/templates.ts';
 
 /**
@@ -82,6 +90,43 @@ export interface ToolContext {
   nonce: string;
   /** Runs a mailbox connection test (the worker's health check). */
   checkMailbox: (connectionId: string) => Promise<{ ok: boolean; code?: string | null }>;
+  /** MX lookup for mailbox_setup (DNS; a stub in tests). */
+  resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
+}
+
+/** DNS MX lookup with a short timeout: an unknown or slow domain is simply "unknown". */
+export const dnsResolveMx = (domain: string) =>
+  Promise.race([
+    resolveMx(domain),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dns timeout')), 3000)),
+  ]);
+
+/** A detected provider as fact lines (servers: the preset for known providers). */
+export function mailboxLines(what: string, d: DetectedMailbox): string[] {
+  if (d.unsupported)
+    return [
+      `${what}: ${d.label}. Not supported yet (Microsoft switched off password sign-in for IMAP/SMTP); tell the owner, and do not propose connect_mailbox.`,
+    ];
+  if (d.source === 'unknown')
+    return [
+      `${what}: could not tell who hosts it. The form opens as "Other (IMAP/SMTP)": the owner fills in the server names from their email host's help pages.`,
+    ];
+  const preset = PRESETS[d.provider];
+  const imap = preset
+    ? `${preset.imap.host}:${preset.imap.port}`
+    : `${d.imap!.host}:${d.imap!.port}`;
+  const smtp = preset
+    ? `${preset.smtp.host}:${preset.smtp.port}`
+    : `${d.smtp!.host}:${d.smtp!.port}`;
+  const how =
+    d.source === 'address'
+      ? 'from the address'
+      : d.source === 'mx'
+        ? "from the domain's mail servers"
+        : 'from the provider name';
+  return [
+    `${what}: ${d.label} (${how}). Servers: IMAP ${imap}, SMTP ${smtp}. The owner only types an App Password; propose connect_mailbox.`,
+  ];
 }
 
 const ago = (d: Date | null) => {
@@ -337,6 +382,22 @@ export async function runTool(
           (i) => `${i.name}: ${money(i.unit_price_cents, t!.currency)} per ${i.unit} (${i.status})`,
         ),
       ];
+    }
+    case 'mailbox_setup': {
+      const q = (args.query ?? '').trim();
+      if (!q) return ['mailbox_setup needs the e-mail address or the provider name (query).'];
+      const connected = await tx<{ email_address: string }[]>`
+        select email_address from public.email_connections where status = 'connected'`;
+      const already = connected.find((c) => c.email_address.toLowerCase() === q.toLowerCase());
+      if (already) return [`${already.email_address} is already connected: nothing to set up.`];
+      if (EMAIL_ADDRESS.test(q))
+        return mailboxLines(q, await detectMailbox(q, c.resolveMx ?? dnsResolveMx));
+      const named = mailboxFromName(q);
+      return named
+        ? mailboxLines(`Provider "${q.slice(0, 60)}"`, named)
+        : [
+            `"${q.slice(0, 60)}" is not a provider Noctiv knows by name: ask for the e-mail address instead.`,
+          ];
     }
     case 'mailbox_check': {
       const boxes = await tx<{ id: string; email_address: string; provider: string }[]>`

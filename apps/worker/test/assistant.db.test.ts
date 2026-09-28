@@ -38,6 +38,7 @@ const card = (p: Record<string, unknown>) => ({
   email_body: '',
   attach: [],
   document_number: '',
+  mailbox: '',
   ...p,
 });
 const settings = (pairs: [string, string][]) =>
@@ -407,5 +408,75 @@ describe('Noctiv Assistant turn (PLAN.md §27)', () => {
     const [m] = await owner<{ text: string }[]>`
       select text from public.assistant_messages where conversation_id = ${conversationId} and role = 'assistant'`;
     expect(m!.text).toContain('Some of this is not shown as a card');
+  });
+
+  it('"connect info@kerzenwerk.de": the servers from its MX records, a card that opens the form filled in', async () => {
+    const [c] = await owner<{ id: string }[]>`
+      insert into public.assistant_conversations (tenant_id, user_id) values (${A.tenantId}, ${A.userId})
+      returning id`;
+    await owner`insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+                values (${A.tenantId}, ${c!.id}, 'owner', 'Please connect info@kerzenwerk.de, and my other one at work.')`;
+    const llm = new FakeProvider({
+      responder: (_req, i) =>
+        i === 0
+          ? step({
+              tool: 'mailbox_setup',
+              tool_args: {
+                period: null,
+                thread_id: null,
+                timezone: null,
+                query: 'info@kerzenwerk.de',
+              },
+            })
+          : step({
+              reply:
+                'Your mailbox is at Google Workspace. Open the form and type your App Password.',
+              proposals: [
+                card({ type: 'connect_mailbox', mailbox: 'info@kerzenwerk.de' }),
+                // Not an address the owner wrote: no card.
+                card({ type: 'connect_mailbox', mailbox: 'attacker@evil.test' }),
+              ],
+            }),
+    });
+    const asked: string[] = [];
+    await assistantTurnHandler({
+      sql: worker,
+      llm,
+      checkMailbox: async () => ({ ok: true }),
+      resolveMx: async (domain) => {
+        asked.push(domain);
+        return [{ exchange: 'aspmx.l.google.com' }];
+      },
+    })({
+      id: randomUUID(),
+      tenantId: A.tenantId,
+      queue: QUEUES.assistantTurn,
+      payload: { conversationId: c!.id },
+      attempts: 1,
+      maxAttempts: 1,
+    });
+    expect(text(llm.calls[1]!)).toContain(
+      "info@kerzenwerk.de: Google Workspace (from the domain's mail servers). Servers: IMAP imap.gmail.com:993, SMTP smtp.gmail.com:465.",
+    );
+    expect(asked).toContain('kerzenwerk.de');
+    const cards = await owner<
+      { type: string; payload: Record<string, unknown>; requires_confirmation: boolean }[]
+    >`
+      select type, payload, requires_confirmation from public.assistant_proposals
+      where conversation_id = ${c!.id}`;
+    expect(cards).toEqual([
+      {
+        type: 'connect_mailbox',
+        payload: {
+          email: 'info@kerzenwerk.de',
+          provider: 'google_workspace',
+          label: 'Google Workspace',
+          source: 'mx',
+          imap: null,
+          smtp: null,
+        },
+        requires_confirmation: false,
+      },
+    ]);
   });
 });

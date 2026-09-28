@@ -31,6 +31,7 @@ const proposal = (
   email_body: '',
   attach: [],
   document_number: '',
+  mailbox: '',
   ...p,
 });
 const ctx = (ownerSaid: string, tool = '') => {

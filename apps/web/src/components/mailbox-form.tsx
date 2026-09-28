@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { Button, ErrorText, Field, inputClass, Notice } from './ui';
 
-type Provider = 'gmail' | 'google_workspace' | 'yahoo' | 'hostinger' | 'generic' | 'outlook';
+export type Provider = 'gmail' | 'google_workspace' | 'yahoo' | 'hostinger' | 'generic' | 'outlook';
 
 const PROVIDERS: { id: Provider; label: string }[] = [
   { id: 'gmail', label: 'Gmail' },
@@ -113,26 +113,38 @@ type TestResult =
   | { status: 'failed'; code: string; stage: string; message: string; detail?: string }
   | { status: 'pending'; testId: string };
 
+/** What the Noctiv Assistant found (provider, address, servers): the owner types only the password. */
+export interface MailboxPrefill {
+  provider: Provider;
+  email: string | null;
+  imap: { host: string; port: number } | null;
+  smtp: { host: string; port: number } | null;
+}
+
 export function MailboxForm({
   tenantId,
   reconnect,
+  prefill,
   onSaved,
   onTested,
 }: {
   tenantId: string;
   reconnect?: { id: string; email: string; provider: Provider };
+  prefill?: MailboxPrefill;
   onSaved: () => void;
   /** Called when the connection test passes or the form changes after it. */
   onTested?: (ok: boolean) => void;
 }) {
-  const [provider, setProvider] = useState<Provider>(reconnect?.provider ?? 'gmail');
-  const [email, setEmail] = useState(reconnect?.email ?? '');
+  const [provider, setProvider] = useState<Provider>(
+    reconnect?.provider ?? prefill?.provider ?? 'gmail',
+  );
+  const [email, setEmail] = useState(reconnect?.email ?? prefill?.email ?? '');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
-  const [imapHost, setImapHost] = useState('');
-  const [imapPort, setImapPort] = useState(993);
-  const [smtpHost, setSmtpHost] = useState('');
-  const [smtpPort, setSmtpPort] = useState(465);
+  const [imapHost, setImapHost] = useState(prefill?.imap?.host ?? '');
+  const [imapPort, setImapPort] = useState(prefill?.imap?.port ?? 993);
+  const [smtpHost, setSmtpHost] = useState(prefill?.smtp?.host ?? '');
+  const [smtpPort, setSmtpPort] = useState(prefill?.smtp?.port ?? 465);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -295,6 +307,8 @@ export function MailboxForm({
             hint="Stored encrypted. Only the mail worker can unlock it; nobody can read it back."
           >
             <input
+              // Everything else is filled in by the assistant: the password is next.
+              autoFocus={Boolean(prefill)}
               className={inputClass}
               type="password"
               autoComplete="off"

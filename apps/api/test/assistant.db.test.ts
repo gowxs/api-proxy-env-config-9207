@@ -316,4 +316,25 @@ describe('Noctiv Assistant: proposals are applied only when the owner confirms (
       'document.paid',
     ]);
   });
+
+  it('the mailbox card is done only when that mailbox is connected (the form saved it)', async () => {
+    const id = await propose(A, 'connect_mailbox', {
+      email: 'info@kerzenwerk.test',
+      provider: 'google_workspace',
+      label: 'Google Workspace',
+      source: 'mx',
+      imap: null,
+      smtp: null,
+    });
+    const early = await apply(A, id);
+    expect(early.status).toBe(409);
+    expect(early.json.error).toContain('Save the mailbox in the form first');
+    await owner`update public.email_connections set email_address = 'info@kerzenwerk.test'
+                where tenant_id = ${A.tenantId}`;
+    const done = await apply(A, id);
+    expect(done.json.proposal).toMatchObject({
+      status: 'applied',
+      result: { email: 'info@kerzenwerk.test' },
+    });
+  });
 });

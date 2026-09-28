@@ -11,7 +11,8 @@ import {
 import { documentTotals } from '@noctiv/documents';
 import { formatMoney, type VatMode } from '@noctiv/quotes';
 import type { TransactionSql } from 'postgres';
-import { customerOnFile, findCustomers } from './tools.ts';
+import { detectMailbox, EMAIL_ADDRESS, mailboxFromName } from '@noctiv/mail';
+import { customerOnFile, dnsResolveMx, findCustomers } from './tools.ts';
 
 /**
  * The action cards (PLAN.md §27.2): a document, an e-mail, a payment. The
@@ -32,6 +33,8 @@ export interface ActionContext {
   evidence: AssistantEvidence;
   /** Everything the owner wrote in this conversation (customers and addresses must come from it). */
   ownerText: string;
+  /** MX lookup for connect_mailbox. */
+  resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
 }
 
 const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[a-z]{2,}$/i;
@@ -97,7 +100,9 @@ export async function normalizeActions(
   // The document first: an e-mail in the same answer may attach it.
   const ordered = [
     ...proposals.filter((p) => p.type === 'create_document').slice(0, 1),
-    ...proposals.filter((p) => p.type === 'send_email' || p.type === 'mark_paid'),
+    ...proposals.filter(
+      (p) => p.type === 'send_email' || p.type === 'mark_paid' || p.type === 'connect_mailbox',
+    ),
   ];
   for (const p of ordered) {
     if (p.type === 'create_document') {
@@ -252,6 +257,48 @@ export async function normalizeActions(
         // Always the confirmation dialog: this e-mail goes out from the business mailbox.
         requiresConfirmation: true,
         attachNew,
+      });
+      continue;
+    }
+
+    if (p.type === 'connect_mailbox') {
+      // The address the owner wrote (never one from a customer's e-mail), or their provider's name.
+      const raw = p.mailbox.trim();
+      const address =
+        EMAIL_ADDRESS.test(raw) && ownerNamed(raw, ownerText) ? raw.toLowerCase() : null;
+      const detected = address
+        ? await detectMailbox(address, ctx.resolveMx ?? dnsResolveMx)
+        : ownerNamed(raw, ownerText)
+          ? mailboxFromName(raw)
+          : null;
+      if (!detected || detected.unsupported) {
+        dropped.push(
+          `connect_mailbox: ${detected?.unsupported ? 'unsupported' : 'no address or provider'}`,
+        );
+        continue;
+      }
+      if (address) {
+        const same = await tx`select 1 from public.email_connections
+                              where status = 'connected' and lower(email_address) = ${address}`;
+        if (same.length) {
+          dropped.push('connect_mailbox: already connected');
+          continue;
+        }
+      }
+      cards.push({
+        type: 'connect_mailbox',
+        title: p.title.trim().slice(0, 120) || `Connect ${address ?? detected.label}`,
+        payload: {
+          email: address,
+          provider: detected.provider,
+          label: detected.label,
+          source: detected.source,
+          // Servers for "Other (IMAP/SMTP)"; known providers use their preset.
+          imap: detected.imap,
+          smtp: detected.smtp,
+        },
+        // Nothing is changed by the card: it opens the connect form, which tests before saving.
+        requiresConfirmation: false,
       });
       continue;
     }

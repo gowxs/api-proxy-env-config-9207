@@ -30,3 +30,10 @@ export {
   SmtpSendError,
   type OutboundInput,
 } from './outbound.ts';
+export {
+  detectMailbox,
+  EMAIL_ADDRESS,
+  mailboxFromName,
+  UNKNOWN_MAILBOX,
+  type DetectedMailbox,
+} from './detect.ts';

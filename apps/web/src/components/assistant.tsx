@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AutoSendDialog } from '@/components/auto-send-dialog';
+import { MailboxForm } from '@/components/mailbox-form';
 import { Button, cx, ErrorText } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import {
@@ -134,7 +135,10 @@ function ProposalCard({
       setBusy(false);
     }
   };
+  const [formOpen, setFormOpen] = useState(false);
   const confirm = () => {
+    // The mailbox card opens the prefilled form; saving the mailbox completes the card.
+    if (p.type === 'connect_mailbox') return setFormOpen((o) => !o);
     if (!p.requires_confirmation) return void decide('apply');
     // Moving to a more automatic mode: the same dialog as Settings → Reply mode.
     if (targetMode && (!currentMode || modeRank(targetMode) > modeRank(currentMode)))
@@ -158,7 +162,9 @@ function ProposalCard({
             ? a.email
             : p.type === 'mark_paid'
               ? a.paid
-              : null;
+              : p.type === 'connect_mailbox'
+                ? a.mailbox
+                : null;
   const docLines = p.type === 'create_document' ? (pl.lines as unknown as DocLine[]) : [];
   const dialogText =
     p.type === 'send_email'
@@ -294,6 +300,43 @@ function ProposalCard({
           ))}
         </div>
       )}
+      {p.type === 'connect_mailbox' && (
+        <div className="mt-2 space-y-1">
+          <p>
+            <span className="font-medium">{pl.label}</span>
+            {pl.email ? ` · ${pl.email}` : ''}
+          </p>
+          {pl.provider === 'generic' && pl.imap && pl.smtp && (
+            <p className="text-xs text-neutral-500">
+              IMAP {pl.imap.host}:{pl.imap.port} · SMTP {pl.smtp.host}:{pl.smtp.port}
+            </p>
+          )}
+          {pl.source === 'mx' && (
+            <p className="text-xs text-neutral-500">Found from your domain&apos;s mail servers.</p>
+          )}
+          {formOpen && p.status === 'proposed' && (
+            <div className="mt-3 border-t border-indigo-100 pt-3">
+              <p className="mb-3 text-neutral-700">{a.passwordOnly}</p>
+              <MailboxForm
+                tenantId={tenantId}
+                prefill={{
+                  provider: pl.provider ?? 'generic',
+                  email: pl.email ?? null,
+                  imap: pl.imap ?? null,
+                  smtp: pl.smtp ?? null,
+                }}
+                onSaved={() => void decide('apply')}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      {p.type === 'connect_mailbox' && p.status === 'applied' && (
+        <p className="mt-2 text-sm font-medium text-green-800">
+          ✓ {a.mailboxDone}
+          {p.result?.email ? `: ${p.result.email}` : ''}
+        </p>
+      )}
       {p.type === 'mark_paid' && (
         <dl className="mt-2 space-y-1">
           <div className="flex justify-between gap-3">
@@ -353,7 +396,13 @@ function ProposalCard({
             disabled={busy || (waitingFor !== undefined && waitingFor !== 'applied')}
             onClick={confirm}
           >
-            {p.type === 'send_email' ? a.send : w.confirm}
+            {p.type === 'send_email'
+              ? a.send
+              : p.type === 'connect_mailbox'
+                ? formOpen
+                  ? w.close
+                  : a.openForm
+                : w.confirm}
           </Button>
           <Button
             variant="secondary"

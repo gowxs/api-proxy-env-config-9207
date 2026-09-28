@@ -33,6 +33,8 @@ export interface AssistantDeps {
     connectionId: string,
   ) => Promise<{ ok: boolean; code?: string | null }>;
   logger?: Logger;
+  /** MX lookup for the mailbox tool and card (DNS by default; a stub in tests). */
+  resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
 }
 
 export type AssistantTurnResult =
@@ -59,7 +61,7 @@ const UNSURE: Record<AssistantLanguage, string> = {
   es: 'Lo siento, no pude responder con seguridad. ¿Puedes preguntarlo de otra forma?',
 };
 
-const ACTION_TYPES = new Set(['create_document', 'send_email', 'mark_paid']);
+const ACTION_TYPES = new Set(['create_document', 'send_email', 'mark_paid', 'connect_mailbox']);
 
 const NO_CARD: Record<AssistantLanguage, string> = {
   en: '(Some of this is not shown as a card: it is already set, or I could not use the values as given.)',
@@ -91,7 +93,9 @@ function describeCard(c: {
             ? `${String(p.docType)} with ${((p.lines as unknown[] | undefined) ?? []).length} line(s), due ${String(p.dueDate ?? '—')}`
             : c.type === 'send_email'
               ? `e-mail to ${String(p.to)}, subject "${String(p.subject ?? '')}"`
-              : `mark ${String(p.number)} as paid`;
+              : c.type === 'connect_mailbox'
+                ? `connect form for ${String(p.email ?? p.label)}`
+                : `mark ${String(p.number)} as paid`;
   const made =
     c.status === 'applied' && c.result?.number ? ` (created ${String(c.result.number)})` : '';
   const why = c.status === 'failed' && c.error ? ` (reason: ${c.error.slice(0, 200)})` : '';
@@ -277,6 +281,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
             timeZone: tz,
             nonce,
             checkMailbox: (id) => deps.checkMailbox(tenantId, id),
+            ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}),
           }),
         );
         toolsUsed.push(s.tool);
@@ -297,7 +302,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       const actions = await withTenant(deps.sql, tenantId, (tx) =>
         normalizeActions(
           s.proposals.filter((p) => ACTION_TYPES.has(p.type)),
-          { tx, evidence, ownerText },
+          { tx, evidence, ownerText, ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}) },
         ),
       );
       actionCards = actions.cards;

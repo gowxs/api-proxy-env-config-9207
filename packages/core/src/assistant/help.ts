@@ -32,6 +32,11 @@ APP PASSWORDS (connecting the mailbox)
 - Gmail / Google Workspace: turn on 2-Step Verification in the Google account, then create an App Password at myaccount.google.com → Security → App passwords (Workspace admins may have to allow it). Use it instead of the normal password. IMAP must be enabled in Gmail settings.
 - Yahoo: Account security → Generate app password.
 - Hostinger and most hosting providers: use the mailbox password, or a dedicated one if the provider offers it; IMAP and SMTP servers are shown in the provider's e-mail settings.
+- Zoho Mail: My Account (accounts.zoho.com) → Security → App Passwords → Generate New Password; IMAP access must be on in Zoho Mail settings.
+- iCloud Mail: turn on two-factor authentication, then appleid.apple.com → Sign-In and Security → App-Specific Passwords.
+- GMX and WEB.DE: allow POP3/IMAP access in the mailbox settings; use the normal password (or an app password if two-factor sign-in is on).
+- IONOS, STRATO, one.com, OVHcloud, GoDaddy: the mailbox password from the hosting control panel.
+- When the owner gives their e-mail address, the assistant can open the connect form already filled in (provider, address, servers); only the password is typed. Outlook / Microsoft 365 is not supported yet.
 - Outlook / Microsoft 365: not supported yet (Microsoft no longer allows password sign-in for these mailboxes).
 Noctiv tests the connection (IMAP and SMTP) before saving. The password is stored encrypted and can be revoked any time in the provider's settings.
 

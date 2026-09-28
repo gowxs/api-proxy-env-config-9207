@@ -26,6 +26,7 @@ export const ASSISTANT_TOOLS = [
   'locale_defaults',
   'find_customer',
   'documents',
+  'mailbox_setup',
 ] as const;
 export type AssistantTool = (typeof ASSISTANT_TOOLS)[number];
 
@@ -38,6 +39,7 @@ export const ASSISTANT_PROPOSAL_TYPES = [
   'create_document',
   'send_email',
   'mark_paid',
+  'connect_mailbox',
 ] as const;
 export type AssistantProposalType = (typeof ASSISTANT_PROPOSAL_TYPES)[number];
 
@@ -50,7 +52,7 @@ export const AssistantStepSchema = z.strictObject({
     period: z.enum(VALUE_PERIODS).nullable(),
     thread_id: z.string().max(40).nullable(),
     timezone: z.string().max(60).nullable(),
-    /** find_customer: a name or e-mail address the owner used. */
+    /** find_customer: a name or e-mail address the owner used; mailbox_setup: their address or provider. */
     query: z.string().max(200).nullable(),
   }),
   reply: z.string().max(4000),
@@ -87,6 +89,8 @@ export const AssistantStepSchema = z.strictObject({
       attach: z.array(z.string().max(40)),
       /** mark_paid: the document number. */
       document_number: z.string().max(40),
+      /** connect_mailbox: the owner's e-mail address, or their provider's name, as they wrote it. */
+      mailbox: z.string().max(254),
     }),
   ),
   suggestions: z.array(z.string().max(80)),

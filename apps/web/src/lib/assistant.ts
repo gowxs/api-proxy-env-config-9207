@@ -16,7 +16,13 @@ export const ASSISTANT_LOCALES: AssistantLocale[] = ['en', 'de', 'lv', 'nl', 'fr
 export interface AssistantProposal {
   id: string;
   type:
-    'settings' | 'knowledge_note' | 'price_items' | 'create_document' | 'send_email' | 'mark_paid';
+    | 'settings'
+    | 'knowledge_note'
+    | 'price_items'
+    | 'create_document'
+    | 'send_email'
+    | 'mark_paid'
+    | 'connect_mailbox';
   title: string;
   payload: {
     /** settings: the fields for PATCH /v1/tenants/:id, and readable lines for the card. */
@@ -43,6 +49,13 @@ export interface AssistantProposal {
     subject?: string;
     body?: string;
     attachLabels?: string[];
+    /** connect_mailbox: what the form opens with (the owner types only the password). */
+    email?: string | null;
+    provider?: 'gmail' | 'google_workspace' | 'yahoo' | 'hostinger' | 'generic' | 'outlook';
+    label?: string;
+    source?: 'address' | 'mx' | 'name' | 'unknown';
+    imap?: { host: string; port: number } | null;
+    smtp?: { host: string; port: number } | null;
     /** mark_paid */
     number?: string;
     customer?: string | null;
@@ -50,7 +63,12 @@ export interface AssistantProposal {
     automation?: boolean;
   };
   /** What confirming it made: the document, or the e-mail's conversation. */
-  result?: { documentId?: string; number?: string | null; threadId?: string } | null;
+  result?: {
+    documentId?: string;
+    number?: string | null;
+    threadId?: string;
+    email?: string;
+  } | null;
   requires_confirmation: boolean;
   status: 'proposed' | 'applied' | 'dismissed' | 'failed';
   error: string | null;
@@ -133,6 +151,10 @@ interface Words {
     open: string;
     confirmFirst: string;
     nothingToAttach: string;
+    mailbox: string;
+    openForm: string;
+    mailboxDone: string;
+    passwordOnly: string;
   };
 }
 
@@ -189,6 +211,10 @@ export const WORDS: Record<AssistantLocale, Words> = {
       open: 'Open',
       confirmFirst: 'Confirm the invoice card above first; then you can send it.',
       nothingToAttach: 'The document card above was not created, so there is nothing to attach.',
+      mailbox: 'Connect your mailbox',
+      openForm: 'Open the form',
+      mailboxDone: 'Mailbox connected',
+      passwordOnly: 'Everything is filled in: type your App Password, then Test connection.',
     },
   },
   de: {
@@ -248,6 +274,11 @@ export const WORDS: Record<AssistantLocale, Words> = {
       open: 'Öffnen',
       confirmFirst: 'Bestätigen Sie zuerst die Karte oben; dann können Sie senden.',
       nothingToAttach: 'Die Dokumentkarte oben wurde nicht erstellt; es gibt nichts anzuhängen.',
+      mailbox: 'Postfach verbinden',
+      openForm: 'Formular öffnen',
+      mailboxDone: 'Postfach verbunden',
+      passwordOnly:
+        'Alles ist ausgefüllt: Geben Sie Ihr App-Passwort ein und testen Sie die Verbindung.',
     },
   },
   lv: {
@@ -304,6 +335,10 @@ export const WORDS: Record<AssistantLocale, Words> = {
       open: 'Atvērt',
       confirmFirst: 'Vispirms apstipriniet kartīti augstāk; tad varēsiet sūtīt.',
       nothingToAttach: 'Dokumenta kartīte augstāk netika izveidota, tāpēc nav ko pievienot.',
+      mailbox: 'Pievienot pastkasti',
+      openForm: 'Atvērt veidlapu',
+      mailboxDone: 'Pastkaste pievienota',
+      passwordOnly: 'Viss ir aizpildīts: ievadiet lietotnes paroli un pārbaudiet savienojumu.',
     },
   },
   nl: {
@@ -358,6 +393,10 @@ export const WORDS: Record<AssistantLocale, Words> = {
       confirmFirst: 'Bevestig eerst de kaart hierboven; dan kun je versturen.',
       nothingToAttach:
         'De documentkaart hierboven is niet aangemaakt; er is niets om bij te voegen.',
+      mailbox: 'Mailbox koppelen',
+      openForm: 'Formulier openen',
+      mailboxDone: 'Mailbox gekoppeld',
+      passwordOnly: 'Alles is ingevuld: typ je app-wachtwoord en test de verbinding.',
     },
   },
   fr: {
@@ -416,6 +455,11 @@ export const WORDS: Record<AssistantLocale, Words> = {
       open: 'Ouvrir',
       confirmFirst: 'Confirmez d’abord la carte ci-dessus ; vous pourrez ensuite envoyer.',
       nothingToAttach: 'La carte du document ci-dessus n’a pas été créée : rien à joindre.',
+      mailbox: 'Connecter votre boîte mail',
+      openForm: 'Ouvrir le formulaire',
+      mailboxDone: 'Boîte mail connectée',
+      passwordOnly:
+        'Tout est rempli : saisissez votre mot de passe d’application, puis testez la connexion.',
     },
   },
   es: {
@@ -472,6 +516,11 @@ export const WORDS: Record<AssistantLocale, Words> = {
       open: 'Abrir',
       confirmFirst: 'Confirma primero la tarjeta de arriba; después podrás enviarlo.',
       nothingToAttach: 'La tarjeta del documento de arriba no se creó: no hay nada que adjuntar.',
+      mailbox: 'Conectar tu buzón',
+      openForm: 'Abrir el formulario',
+      mailboxDone: 'Buzón conectado',
+      passwordOnly:
+        'Todo está rellenado: escribe tu contraseña de aplicación y prueba la conexión.',
     },
   },
 };

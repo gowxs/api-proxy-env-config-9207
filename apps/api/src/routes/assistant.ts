@@ -386,6 +386,19 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
       });
       if (sent.statusCode >= 400) error = errorText(sent.body);
       else result = sent.json() as { threadId: string; draftId: string };
+    } else if (p.type === 'connect_mailbox') {
+      // The form saved the mailbox (its own test and checks); the card records that it is done.
+      const want = (p.payload.email as string | null) ?? null;
+      const [conn] = await withTenant(
+        deps.sql,
+        tenantId,
+        (tx) => tx<{ email_address: string }[]>`
+          select email_address from public.email_connections
+          where status = 'connected' and (${want}::text is null or lower(email_address) = ${want})
+          order by created_at desc limit 1`,
+      );
+      if (!conn) return reply.code(409).send({ error: 'Save the mailbox in the form first.' });
+      result = { email: conn.email_address };
     } else if (p.type === 'mark_paid') {
       const m = p.payload as { documentId: string; number: string };
       const res = await call('POST', `${base}/documents/${m.documentId}/mark`, { status: 'paid' });
