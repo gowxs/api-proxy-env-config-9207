@@ -35,6 +35,8 @@ export interface ActionContext {
   ownerText: string;
   /** MX lookup for connect_mailbox. */
   resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
+  /** Bookings (beta): the signed link to an intake form for this customer. */
+  formLink?: (formId: string, leadId: string | null) => string;
 }
 
 const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[a-z]{2,}$/i;
@@ -243,6 +245,21 @@ export async function normalizeActions(
         dropped.push(`send_email: ${text.reason}`);
         continue;
       }
+      // An intake form: its link for this customer goes below the text (never a link the model wrote).
+      let body = text.value.body;
+      let formName: string | null = null;
+      if (p.form.trim()) {
+        const [f] = await tx<{ id: string; name: string }[]>`
+          select id, name from public.intake_forms
+          where archived_at is null and lower(name) = ${p.form.trim().toLowerCase()} limit 1`;
+        if (!f || !ctx.formLink) {
+          dropped.push('send_email: unknown form');
+          continue;
+        }
+        const [lead] = await tx<{ id: string }[]>`select id from public.leads where email = ${to}`;
+        formName = f.name;
+        body = `${body}\n\n${f.name}: ${ctx.formLink(f.id, lead?.id ?? null)}`;
+      }
       cards.push({
         type: 'send_email',
         title: p.title.trim().slice(0, 120) || `E-mail to ${name || to}`,
@@ -250,9 +267,10 @@ export async function normalizeActions(
           to,
           name,
           subject: text.value.subject,
-          body: text.value.body,
+          body,
           documentIds,
           attachLabels,
+          ...(formName ? { formName } : {}),
         },
         // Always the confirmation dialog: this e-mail goes out from the business mailbox.
         requiresConfirmation: true,

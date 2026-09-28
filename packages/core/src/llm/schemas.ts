@@ -4,6 +4,8 @@ export const CATEGORIES = [
   'sales_inquiry',
   /** Asks what specific products or services would cost (Quotes beta; else like sales_inquiry). */
   'quote_request',
+  /** Asks to meet, book an appointment, a call or a visit (Bookings beta; else like sales_inquiry). */
+  'meeting_request',
   'product_question',
   'support',
   'complaint',

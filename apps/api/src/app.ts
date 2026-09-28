@@ -17,6 +17,9 @@ import { quoteRoutes } from './routes/quotes.ts';
 import { composeRoutes } from './routes/compose.ts';
 import { assistantRoutes } from './routes/assistant.ts';
 import { documentRoutes } from './routes/documents.ts';
+import { bookingRoutes } from './routes/bookings.ts';
+import { bookingPageRoutes } from './routes/booking-page.ts';
+import type { GoogleCalendarApi } from '@noctiv/bookings';
 import { HttpError, webRoutes } from './routes/web.ts';
 import { healthRoutes, readWorkerHealth, type WorkerHealth } from './routes/health.ts';
 
@@ -68,6 +71,10 @@ export interface AppDeps {
   waitlistExportToken?: string;
   /** Off only in tests that need many requests. */
   rateLimits?: boolean;
+  /** Google Calendar for Bookings (GOOGLE_OAUTH_*, or the fake with CALENDAR_FAKE=1). */
+  google?: GoogleCalendarApi;
+  /** How long a booking waits for the worker's confirmation (default 8 s). */
+  bookingWaitMs?: number;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -148,6 +155,11 @@ export function buildApp(
   documentRoutes(app, full);
   composeRoutes(app, full);
   assistantRoutes(app, full);
+  bookingRoutes(app, {
+    ...full,
+    appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+    publicApiUrl: publicApiUrl(deps),
+  });
   billingRoutes(app, {
     sql: deps.sql,
     billing: deps.billing ?? { env: 'sandbox' },
@@ -171,6 +183,15 @@ export function buildApp(
       sql: deps.sql,
       secret: deps.actionSecret,
       publicApiUrl: publicApiUrl(deps),
+    });
+    bookingPageRoutes(app, {
+      sql: deps.sql,
+      secret: deps.actionSecret,
+      appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+      publicApiUrl: publicApiUrl(deps),
+      credentialsPublicKey: deps.credentialsPublicKey,
+      ...(deps.google ? { google: deps.google } : {}),
+      ...(deps.bookingWaitMs !== undefined ? { waitMs: deps.bookingWaitMs } : {}),
     });
     weeklyReportRoutes(app, {
       sql: deps.sql,

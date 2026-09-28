@@ -14,6 +14,11 @@ export type NotificationKind =
   | 'trial_ending'
   /** Quotes (beta): the customer accepted a quote; a request had items not on the price list. */
   | 'quote_accepted'
+  | 'booking_created'
+  | 'booking_rescheduled'
+  | 'booking_cancelled'
+  | 'intake_submitted'
+  | 'calendar_disconnected'
   | 'quote_needs_you'
   /** Documents (beta): a bank credit matched an invoice (paid), or may match one (proposal). */
   | 'payment_matched'

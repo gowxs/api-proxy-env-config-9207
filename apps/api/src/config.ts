@@ -47,6 +47,14 @@ export const apiEnvSchema = z
       .string()
       .regex(/^pri_[a-z0-9]+$/, 'a Paddle price id (pri_…)')
       .optional(),
+    /** Google Calendar for Bookings (PLAN.md §29.2): an OAuth client of type "Web application". */
+    GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
+    /** Development and tests only: a fake Google Calendar (no network). */
+    CALENDAR_FAKE: z
+      .enum(['0', '1'])
+      .default('0')
+      .transform((v) => v === '1'),
     /** true behind the Caddy reverse proxy (client IP from X-Forwarded-For). */
     API_TRUST_PROXY: z
       .enum(['true', 'false'])
@@ -56,6 +64,14 @@ export const apiEnvSchema = z
   .refine((e) => !(e.NODE_ENV === 'production' && e.AUTH_JWKS_JSON), {
     path: ['AUTH_JWKS_JSON'],
     message: 'must not be set in production',
+  })
+  .refine((e) => !(e.NODE_ENV === 'production' && e.CALENDAR_FAKE), {
+    path: ['CALENDAR_FAKE'],
+    message: 'must not be set in production',
+  })
+  .refine((e) => Boolean(e.GOOGLE_OAUTH_CLIENT_ID) === Boolean(e.GOOGLE_OAUTH_CLIENT_SECRET), {
+    path: ['GOOGLE_OAUTH_CLIENT_SECRET'],
+    message: 'set both GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET, or neither',
   })
   .refine((e) => !(e.NODE_ENV === 'production' && e.DEV_LOGIN_USER_ID), {
     path: ['DEV_LOGIN_USER_ID'],

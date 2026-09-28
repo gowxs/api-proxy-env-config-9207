@@ -6,7 +6,7 @@
 export const BUSINESS_START_HOUR = 9;
 export const BUSINESS_END_HOUR = 17;
 
-interface LocalParts {
+export interface LocalParts {
   year: number;
   month: number;
   day: number;
@@ -34,7 +34,7 @@ function formatter(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
-function localParts(date: Date, timeZone: string): LocalParts {
+export function localParts(date: Date, timeZone: string): LocalParts {
   const p = Object.fromEntries(
     formatter(timeZone)
       .formatToParts(date)

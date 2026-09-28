@@ -13,4 +13,8 @@ export const QUEUES = {
   documentsAutomation: 'documents.automation',
   composeAssist: 'compose.assist',
   assistantTurn: 'assistant.turn',
+  calendarSync: 'calendar.sync',
+  calendarDisconnect: 'calendar.disconnect',
+  bookingsConfirm: 'bookings.confirm',
+  bookingsCancel: 'bookings.cancel',
 } as const;

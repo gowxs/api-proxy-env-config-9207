@@ -64,6 +64,25 @@ export function defaultRules(): Rule[] {
       limiter: new RateLimiter({ max: 30, windowMs: 10 * MIN }),
     },
     {
+      // Bookings (PLAN.md §29): browsing times is cheap, booking and forms are not.
+      name: 'booking-pages',
+      match: (req) =>
+        req.url.startsWith('/book/') || req.url.startsWith('/f/')
+          ? post(req)
+            ? `bkp:${req.ip}`
+            : `bk:${req.ip}`
+          : null,
+      limiter: new RateLimiter({ max: 120, windowMs: 10 * MIN }),
+    },
+    {
+      name: 'booking-posts',
+      match: (req) =>
+        post(req) && (req.url.startsWith('/book/') || req.url.startsWith('/f/'))
+          ? `bkpost:${req.ip}`
+          : null,
+      limiter: new RateLimiter({ max: 30, windowMs: 10 * MIN }),
+    },
+    {
       name: 'connection-test',
       match: (req) =>
         post(req) && /\/connections\/test$/.test(req.url) ? `ct:${tenantOf(req.url)}` : null,

@@ -21,7 +21,12 @@ const config: NextConfig = {
     ];
   },
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${API_INTERNAL_URL}/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${API_INTERNAL_URL}/:path*` },
+      // Bookings (PLAN.md §29): the public booking page and intake forms, served by the API.
+      { source: '/book/:path*', destination: `${API_INTERNAL_URL}/book/:path*` },
+      { source: '/f/:path*', destination: `${API_INTERNAL_URL}/f/:path*` },
+    ];
   },
   async headers() {
     return [

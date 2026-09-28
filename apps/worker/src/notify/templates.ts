@@ -32,6 +32,7 @@ const REASONS: Record<string, string> = {
   verifier_failed: 'a fact check found statements not backed by your knowledge base',
   acknowledgement_sent: 'the customer got a short acknowledgement (fully automatic mode)',
   quote_over_limit: 'the quote total is above your automatic-send limit',
+  bookings_disabled: 'Bookings was switched off after the reply was written',
   quote_unmapped: 'some requested items are not on your price list',
   quote_empty: 'nothing in the request matched your price list',
   partial_answer_check:
@@ -339,6 +340,115 @@ export function renderNotificationEmail(n: Notification): RenderedEmail {
         },
       );
     }
+    case 'booking_created':
+    case 'booking_rescheduled':
+    case 'booking_cancelled': {
+      const tz = str(p.timeZone) || 'UTC';
+      const when = (iso: string) =>
+        iso
+          ? new Intl.DateTimeFormat('en-GB', {
+              timeZone: tz,
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              hour: '2-digit',
+              minute: '2-digit',
+              hourCycle: 'h23',
+            }).format(new Date(iso))
+          : '';
+      const at = when(str(p.startsAt));
+      const who = untrusted(p.customerName, 100) || 'A customer';
+      const answers = Array.isArray(p.answers)
+        ? (p.answers as { label?: unknown; value?: unknown }[]).map(
+            (a) => [untrusted(a.label, 100), untrusted(a.value, 300)] as [string, string],
+          )
+        : [];
+      const detail: [string, string][] = [
+        ...(typeof p.email === 'string'
+          ? ([['E-mail', untrusted(p.email, 200)]] as [string, string][])
+          : []),
+        ...(typeof p.phone === 'string' && p.phone
+          ? ([['Phone', untrusted(p.phone, 30)]] as [string, string][])
+          : []),
+        ...(typeof p.note === 'string' && p.note
+          ? ([['Note', untrusted(p.note, 600)]] as [string, string][])
+          : []),
+        ...answers,
+      ];
+      const heading =
+        n.kind === 'booking_created'
+          ? `${who} booked ${at}.`
+          : n.kind === 'booking_rescheduled'
+            ? `${who} moved their booking to ${at}.`
+            : `${who} cancelled their booking on ${at}.`;
+      const notes = [
+        n.kind === 'booking_cancelled'
+          ? 'The event was removed from your calendar and the customer got a confirmation.'
+          : p.calendarError
+            ? 'The booking is confirmed, but the event could not be added to your calendar: add it yourself, and check the calendar connection in Bookings → Setup.'
+            : 'It is in your calendar, and the customer got a confirmation with a calendar invite.',
+        ...(p.noMailbox
+          ? ['No mailbox is connected, so the customer did not get an e-mail from you.']
+          : []),
+        ...(detail.length
+          ? []
+          : [
+              'Details and answers are in the app (turn on full text in notifications to see them here).',
+            ]),
+      ];
+      return render(
+        n.kind === 'booking_created'
+          ? `New booking: ${headerText(at, 60)}`
+          : n.kind === 'booking_rescheduled'
+            ? `Booking moved: ${headerText(at, 60)}`
+            : `Booking cancelled: ${headerText(at, 60)}`,
+        {
+          heading,
+          lines: [
+            ['Account', n.tenantName],
+            ['Customer', `${who} (${str(p.senderDomain)})`],
+            ['When', at],
+            ...(p.previousStartsAt
+              ? ([['Was', when(str(p.previousStartsAt))]] as [string, string][])
+              : []),
+            ...detail,
+          ],
+          note: notes.join(' '),
+          buttons: [['Open bookings', n.links.dashboard]],
+          footer: FOOTER,
+        },
+      );
+    }
+    case 'intake_submitted': {
+      const who = untrusted(p.customerName, 100) || 'A customer';
+      const form = untrusted(p.formName, 100);
+      const answers = Array.isArray(p.answers)
+        ? (p.answers as { label?: unknown; value?: unknown }[]).map(
+            (a) => [untrusted(a.label, 100), untrusted(a.value, 300)] as [string, string],
+          )
+        : [];
+      return render(`Form answers: ${headerText(form, 60)}`, {
+        heading: `${who} filled in “${form}”.`,
+        lines: [
+          ['Account', n.tenantName],
+          ['Customer', `${who} (${str(p.senderDomain)})`],
+          ...answers,
+        ],
+        note: answers.length
+          ? 'The answers are also saved with the customer’s lead.'
+          : `${typeof p.answerCount === 'number' ? p.answerCount : 'The'} answers are saved with the customer’s lead (turn on full text in notifications to see them here).`,
+        buttons: [['Open', n.links.dashboard]],
+        footer: FOOTER,
+      });
+    }
+    case 'calendar_disconnected':
+      return render('Your calendar is disconnected', {
+        heading: 'Noctiv can no longer read your Google Calendar.',
+        lines: [['Account', n.tenantName]],
+        note: 'Access was revoked or has expired. Bookings keep working, but Noctiv no longer sees your other appointments and cannot add new bookings to your calendar. Connect it again in Bookings → Setup.',
+        buttons: [['Open Bookings setup', n.links.dashboard]],
+        footer: FOOTER,
+      });
     case 'quote_accepted': {
       const total =
         typeof p.totalCents === 'number' ? formatMoney(p.totalCents, str(p.currency) || 'EUR') : '';

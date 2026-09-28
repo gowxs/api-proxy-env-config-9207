@@ -145,7 +145,9 @@ export async function draftQuote(
     const [caps] = await tx<{ sender: number; hour: number }[]>`
       select count(*) filter (where to_address = ${recipient.to} and created_at > now() - interval '24 hours')::int as sender,
              count(*) filter (where created_at > now() - interval '1 hour')::int as hour
-      from public.outbound_emails where sent_via = 'auto'`;
+      from public.outbound_emails o where sent_via = 'auto'
+        -- Booking confirmations (customer-initiated) do not count against reply caps.
+        and not exists (select 1 from public.drafts bd where bd.id = o.draft_id and bd.kind = 'booking')`;
     const guardReasons: string[] = [];
     if (i.budgetState !== 'ok') guardReasons.push('budget_limited');
     if (caps!.sender >= l.tenant.maxPerSender24h) guardReasons.push('sender_cap_reached');

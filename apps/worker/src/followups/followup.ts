@@ -231,7 +231,9 @@ export async function generateFollowup(
     const [caps] = await tx<{ sender: number; hour: number }[]>`
       select count(*) filter (where to_address = ${customer.reply_to ?? customer.from_address} and created_at > now() - interval '24 hours')::int as sender,
              count(*) filter (where created_at > now() - interval '1 hour')::int as hour
-      from public.outbound_emails where sent_via = 'auto' and status <> 'failed'`;
+      from public.outbound_emails o where sent_via = 'auto'
+        -- Booking confirmations (customer-initiated) do not count against reply caps.
+        and not exists (select 1 from public.drafts bd where bd.id = o.draft_id and bd.kind = 'booking') and status <> 'failed'`;
     return { caps: caps!, allowlist: await loadAllowlist(tx) };
   });
   const guardInput = {

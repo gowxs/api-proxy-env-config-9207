@@ -134,3 +134,8 @@ export function open(
 export function credentialsAssociatedData(tenantId: string, connectionId: string): string {
   return `noctiv:email_credentials:v1:${tenantId}:${connectionId}`;
 }
+
+/** Additional data binding a calendar refresh token to its row (Bookings, PLAN.md §29.2). */
+export function calendarCredentialsAssociatedData(tenantId: string, connectionId: string): string {
+  return `noctiv:calendar_credentials:v1:${tenantId}:${connectionId}`;
+}

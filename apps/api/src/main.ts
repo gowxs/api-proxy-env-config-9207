@@ -5,6 +5,7 @@ import { createPaddleClient } from './billing/paddle.ts';
 import { createTokenVerifier } from './auth.ts';
 import { loadApiConfig } from './config.ts';
 import { createDevAuth } from './routes/dev.ts';
+import { createFakeGoogleCalendar, createGoogleCalendar } from '@noctiv/bookings';
 
 const config = loadApiConfig();
 const logger = createLogger({ service: 'api', level: config.LOG_LEVEL });
@@ -55,6 +56,16 @@ const app = buildApp({
     ? { paddle: createPaddleClient({ apiKey: config.PADDLE_API_KEY, env: config.PADDLE_ENV }) }
     : {}),
   ...(devAuth ? { devRoutes: devAuth.routes } : {}),
+  ...(config.CALENDAR_FAKE
+    ? { google: createFakeGoogleCalendar() }
+    : config.GOOGLE_OAUTH_CLIENT_ID && config.GOOGLE_OAUTH_CLIENT_SECRET
+      ? {
+          google: createGoogleCalendar({
+            clientId: config.GOOGLE_OAUTH_CLIENT_ID,
+            clientSecret: config.GOOGLE_OAUTH_CLIENT_SECRET,
+          }),
+        }
+      : {}),
 });
 
 const shutdown = async (signal: string) => {

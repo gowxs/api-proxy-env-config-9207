@@ -27,6 +27,7 @@ export const ASSISTANT_TOOLS = [
   'find_customer',
   'documents',
   'mailbox_setup',
+  'bookings',
 ] as const;
 export type AssistantTool = (typeof ASSISTANT_TOOLS)[number];
 
@@ -91,6 +92,8 @@ export const AssistantStepSchema = z.strictObject({
       document_number: z.string().max(40),
       /** connect_mailbox: the owner's e-mail address, or their provider's name, as they wrote it. */
       mailbox: z.string().max(254),
+      /** send_email: the name of an intake form whose link goes into the e-mail ("" = none). */
+      form: z.string().max(100),
     }),
   ),
   suggestions: z.array(z.string().max(80)),
@@ -180,6 +183,7 @@ export const ASSISTANT_SETTINGS: Record<string, SettingDef> = {
   },
   replySignature: { label: 'Signature', sending: false, type: { kind: 'text', max: 1000 } },
   quotesEnabled: { label: 'Quotes (beta)', sending: true, type: { kind: 'bool' } },
+  bookingsEnabled: { label: 'Bookings (beta)', sending: true, type: { kind: 'bool' } },
   quotesCurrency: { label: 'Currency', sending: false, type: { kind: 'currency' } },
   quotesVatMode: {
     label: 'Prices and VAT',

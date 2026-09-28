@@ -18,6 +18,7 @@ import { api } from '@/lib/api';
 import type { Quote } from '@/lib/quotes';
 import { QuoteBlock } from '@/components/quote';
 import { ConversationDocuments, DraftDocument } from '@/components/documents';
+import { ConversationBookings, InsertFormLink } from '@/components/bookings';
 import type { Doc } from '@/lib/documents';
 import { reasonText, THREAD_STATUS } from '@/lib/reasons';
 import { useTenantId } from '@/lib/session';
@@ -46,7 +47,9 @@ interface Draft {
     | 'quote'
     | 'document'
     | 'payment_reminder'
-    | 'compose';
+    | 'compose'
+    | 'booking'
+    | 'booking_offer';
   status: string;
   to_address: string;
   subject: string;
@@ -112,9 +115,12 @@ function DraftCard({
   quote,
   document,
   tenantId,
+  threadId,
   onChange,
 }: {
   draft: Draft;
+  /** For "Insert form link" (Bookings): the link is tied to this conversation's customer. */
+  threadId: string;
   /** For a document draft: the document it carries. */
   document?: Doc;
   /** For a quote draft: the quote it carries. */
@@ -145,11 +151,15 @@ function DraftCard({
                 ? 'Payment reminder'
                 : draft.kind === 'compose'
                   ? 'New e-mail'
-                  : draft.kind === 'followup'
-                    ? 'Follow-up draft'
-                    : draft.kind === 'acknowledgement'
-                      ? 'Acknowledgement (sent automatically)'
-                      : 'Reply draft'}
+                  : draft.kind === 'booking'
+                    ? 'Booking e-mail (sent automatically)'
+                    : draft.kind === 'booking_offer'
+                      ? 'Reply with free times'
+                      : draft.kind === 'followup'
+                        ? 'Follow-up draft'
+                        : draft.kind === 'acknowledgement'
+                          ? 'Acknowledgement (sent automatically)'
+                          : 'Reply draft'}
         </span>
         <Badge tone={st.tone}>{st.text}</Badge>
         {draft.edited && <Badge>Edited</Badge>}
@@ -172,11 +182,20 @@ function DraftCard({
         </p>
       )}
       {editing ? (
-        <textarea
-          className={`${inputClass} min-h-56 text-sm`}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-        />
+        <>
+          <textarea
+            className={`${inputClass} min-h-56 text-sm`}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          <div className="mt-2">
+            <InsertFormLink
+              tenantId={tenantId}
+              threadId={threadId}
+              onInsert={(line) => setBody((b) => `${b.trimEnd()}\n\n${line}`)}
+            />
+          </div>
+        </>
       ) : (
         <div className="whitespace-pre-wrap rounded-lg bg-white p-3 text-sm ring-1 ring-neutral-200">
           {body || '(empty)'}
@@ -364,9 +383,12 @@ function ConversationView() {
             (x) => x.draft_id === d.id || x.reminder_draft_id === d.id,
           )}
           tenantId={tenantId}
+          threadId={t.id}
           onChange={() => void reload()}
         />
       ))}
+
+      <ConversationBookings tenantId={tenantId} threadId={t.id} />
 
       {(data.quotes ?? [])
         .filter((q) => !openDrafts.some((d) => d.id === q.draft_id))

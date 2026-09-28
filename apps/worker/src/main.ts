@@ -29,6 +29,14 @@ import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
+import { createFakeGoogleCalendar, createGoogleCalendar, signFormLink } from '@noctiv/bookings';
+import {
+  bookingCancelHandler,
+  bookingConfirmHandler,
+  calendarDisconnectHandler,
+  calendarSyncHandler,
+  scanCalendarSyncs,
+} from './jobs/bookings.ts';
 
 const config = loadWorkerConfig();
 const logger = createLogger({ service: 'worker', level: config.LOG_LEVEL });
@@ -54,6 +62,24 @@ if (providers.description.trainingPolicy === 'may_train_on_data') {
 const quotes = config.ACTION_LINK_SECRET
   ? { secret: config.ACTION_LINK_SECRET, publicApiUrl: config.PUBLIC_API_URL }
   : undefined;
+
+// Bookings (beta): Google Calendar (or the fake one in development).
+const google = config.CALENDAR_FAKE
+  ? createFakeGoogleCalendar()
+  : config.GOOGLE_OAUTH_CLIENT_ID && config.GOOGLE_OAUTH_CLIENT_SECRET
+    ? createGoogleCalendar({
+        clientId: config.GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: config.GOOGLE_OAUTH_CLIENT_SECRET,
+      })
+    : undefined;
+const bookings = {
+  sql: db.sql,
+  keys,
+  appUrl: config.PUBLIC_APP_URL,
+  logger,
+  ...(google ? { google } : {}),
+  ...(config.ACTION_LINK_SECRET ? { secret: config.ACTION_LINK_SECRET } : {}),
+};
 
 // The health check, also run on request by the assistant's mailbox_check tool.
 const mailboxHealth = healthCheckHandler({
@@ -89,6 +115,7 @@ const runner = new JobRunner({
       embeddings: providers.embeddings,
       logger,
       ...(quotes ? { quotes } : {}),
+      bookings,
     }),
     [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsPrefill]: documentsPrefillHandler({ sql: db.sql, llm: providers.llm }),
@@ -102,6 +129,13 @@ const runner = new JobRunner({
       sql: db.sql,
       logger,
       llm: providers.llm,
+      appUrl: config.PUBLIC_APP_URL,
+      ...(config.ACTION_LINK_SECRET
+        ? {
+            formLink: (tenantId: string, formId: string, leadId: string | null) =>
+              `${config.PUBLIC_APP_URL.replace(/\/+$/, '')}/f/${signFormLink({ tenantId, formId, leadId }, config.ACTION_LINK_SECRET!)}`,
+          }
+        : {}),
       checkMailbox: async (tenantId, connectionId) => {
         const r = (await mailboxHealth({
           id: randomUUID(),
@@ -115,6 +149,10 @@ const runner = new JobRunner({
       },
     }),
     [QUEUES.tenantDelete]: tenantDeleteHandler({ sql: db.sql }),
+    [QUEUES.calendarSync]: calendarSyncHandler(bookings),
+    [QUEUES.calendarDisconnect]: calendarDisconnectHandler(bookings),
+    [QUEUES.bookingsConfirm]: bookingConfirmHandler(bookings),
+    [QUEUES.bookingsCancel]: bookingCancelHandler(bookings),
     [QUEUES.healthCheck]: mailboxHealth,
     [QUEUES.followup]: followupHandler({
       sql: db.sql,
@@ -197,6 +235,12 @@ const healthScan = () =>
   );
 void healthScan();
 const healthTimer = setInterval(() => void healthScan(), 30 * 60_000);
+// Bookings: calendars not refreshed in 10 minutes get a free/busy sync.
+const calendarScan = () =>
+  scanCalendarSyncs(db.sql).catch((e: unknown) =>
+    logger.error({ err: String(e) }, 'calendar sync scan failed'),
+  );
+const calendarTimer = setInterval(() => void calendarScan(), 2 * 60_000);
 // Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
 // old health checks removed, the
 // retention purge (idempotent; content past retention_days is removed) and
@@ -336,6 +380,7 @@ const shutdown = async (signal: string) => {
   clearInterval(followupTimer);
   clearInterval(heartbeatTimer);
   clearInterval(healthTimer);
+  clearInterval(calendarTimer);
   if (digestTimer) clearInterval(digestTimer);
   clearInterval(quotaTimer);
   clearInterval(weeklyTimer);

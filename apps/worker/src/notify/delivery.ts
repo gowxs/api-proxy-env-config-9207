@@ -180,6 +180,17 @@ function links(
             ? `${app}/documents/${p.documentId}`
             : `${app}/documents`,
       };
+    case 'booking_created':
+    case 'booking_rescheduled':
+    case 'booking_cancelled':
+      return { dashboard: `${app}/bookings` };
+    case 'intake_submitted':
+      return {
+        dashboard:
+          typeof p.threadId === 'string' ? `${app}/conversations/${p.threadId}` : `${app}/leads`,
+      };
+    case 'calendar_disconnected':
+      return { dashboard: `${app}/bookings?tab=setup` };
     case 'quote_accepted':
     case 'quote_needs_you':
       return {

@@ -150,6 +150,8 @@ async function main() {
     ACTION_LINK_SECRET: 'dev-only-action-link-secret-not-for-production',
     PUBLIC_API_URL: 'http://localhost:4000',
     PUBLIC_APP_URL: 'http://localhost:3000',
+    // Bookings (beta): a fake Google Calendar, so "Connect" works without Google credentials.
+    CALENDAR_FAKE: '1',
   };
   start('api', 'apps/api', process.execPath, ['src/main.ts'], {
     ...common,

@@ -30,6 +30,7 @@ import { LogoError, logoDataUrl, processLogo } from '../brand-logo.ts';
 import { HttpError } from './http-error.ts';
 import { loadStoredLogo } from '@noctiv/quotes';
 import { checkPrefixChanges, documentSettingsColumns, documentSettingsShape } from './documents.ts';
+import { ensureBookingSetup } from '../bookings-data.ts';
 import { quoteSettingsColumns, quoteSettingsShape, selectQuotes } from './quotes.ts';
 
 /** Queue names shared with the worker (apps/worker/src/queues.ts). */
@@ -56,6 +57,7 @@ const LEAD_STAGES = [
   'replied',
   'quoted',
   'accepted',
+  'booked',
   'converted',
   'escalated',
 ] as const;
@@ -141,6 +143,8 @@ const settingsBody = z
     valueMinutesPerReply: z.number().int().min(1).max(60),
     valueMinutesPerFollowup: z.number().int().min(0).max(60),
     weeklyReportEnabled: z.boolean(),
+    /** Bookings (beta), PLAN.md §29: the switch; setup lives under /bookings/setup. */
+    bookingsEnabled: z.boolean(),
   })
   .partial()
   .strict();
@@ -212,7 +216,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                seller_country, invoice_due_days,
                doc_prefix_invoice, doc_prefix_delivery_note, doc_prefix_cmr, integrations_notify,
                auto_invoice_on_accept, auto_delivery_note_after_payment,
-               value_minutes_per_reply, value_minutes_per_followup, weekly_report_enabled
+               value_minutes_per_reply, value_minutes_per_followup, weekly_report_enabled,
+               bookings_enabled, booking_slug
         from public.tenants`;
       return { ...t, doc_prefix_locks: await prefixLocks(tx) };
     }),
@@ -249,6 +254,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       if (b.valueMinutesPerFollowup !== undefined)
         cols.value_minutes_per_followup = b.valueMinutesPerFollowup;
       if (b.weeklyReportEnabled !== undefined) cols.weekly_report_enabled = b.weeklyReportEnabled;
+      if (b.bookingsEnabled !== undefined) {
+        cols.bookings_enabled = b.bookingsEnabled;
+        if (b.bookingsEnabled) await ensureBookingSetup(tx, tenantId);
+      }
       if (b.integrationsNotify !== undefined)
         cols.integrations_notify = WAITLIST_INTEGRATIONS.filter((i) =>
           b.integrationsNotify!.includes(i),
@@ -404,6 +413,8 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           mode: string;
           quotes_enabled: boolean;
           documents_enabled: boolean;
+          bookings_enabled: boolean;
+          bookings_today: number;
           drafts: number;
           escalations: number;
           unpaid: number;
@@ -411,7 +422,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
           delayed: boolean;
         }[]
       >`
-        select t.name, t.mode, t.quotes_enabled, t.documents_enabled,
+        select t.name, t.mode, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
+               (select count(*) from public.bookings
+                where status = 'confirmed' and ends_at > now()
+                  and (starts_at at time zone t.timezone)::date = (now() at time zone t.timezone)::date)::int as bookings_today,
                -- D5: customer e-mails waiting on the AI quota (no technical detail for the owner).
                exists (select 1 from public.jobs
                        where queue = 'mail.process' and status in ('queued', 'running')
@@ -424,13 +438,18 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       return {
         name: n!.name,
         mode: n!.mode,
-        modules: { quotes: n!.quotes_enabled, documents: n!.documents_enabled },
+        modules: {
+          quotes: n!.quotes_enabled,
+          documents: n!.documents_enabled,
+          bookings: n!.bookings_enabled,
+        },
         repliesDelayed: n!.delayed,
         counts: {
           drafts: n!.drafts,
           escalations: n!.escalations,
           unpaid: n!.unpaid,
           payments: n!.payments,
+          bookingsToday: n!.bookings_today,
         },
       };
     }),

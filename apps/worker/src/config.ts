@@ -44,6 +44,18 @@ export const workerEnvSchema = z
     /** Shared with the API: signs Approve / Reject links. */
     ACTION_LINK_SECRET: z.string().min(32).optional(),
     NOTIFY_POLL_MS: z.coerce.number().int().min(1_000).default(15_000),
+    /** Google Calendar for Bookings (PLAN.md §29.2): the same OAuth client as the API. */
+    GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
+    /** Development and tests only: a fake Google Calendar (no network). */
+    CALENDAR_FAKE: z
+      .enum(['0', '1'])
+      .default('0')
+      .transform((v) => v === '1'),
+  })
+  .refine((e) => !(e.NODE_ENV === 'production' && e.CALENDAR_FAKE), {
+    path: ['CALENDAR_FAKE'],
+    message: 'must not be set in production',
   })
   .refine((e) => !(e.NODE_ENV === 'production' && e.MAIL_ALLOW_INSECURE), {
     path: ['MAIL_ALLOW_INSECURE'],

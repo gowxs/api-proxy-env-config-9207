@@ -1036,3 +1036,91 @@ QA.md lists the findings; these are the decisions and how they were built.
   - **E-mail designs 3–5 (logo, branded, card):** the uploaded logo travels inside the e-mail (`multipart/related`, `Content-ID: <brand-logo@noctiv>`), so there is no remote image for mail apps to block and no allowlist check is needed. Without a logo, the company name is shown in the brand colour. The preview shows it from the page.
   - **The customer's Accept page:** the logo is embedded in the page as a data URI (CSP `img-src data:` only), or the company name in the brand colour.
   - **Unsubscribe page:** there is no customer-facing unsubscribe page. The only one is the owner's weekly-summary page, which now shows the business's logo or name the same way.
+
+## 29. Bookings (beta) (founder request 2026-10-03)
+
+A per-tenant module, off by default (like Quotes and Documents: the Bookings page shows "Turn on", Settings has the switch). A customer can book a meeting, appointment or call on a public page; replies to "can we meet?" offer the next free times; intake forms collect details before a visit.
+
+### 29.1 Data (migration `20261003000100_bookings.sql`)
+
+| Table / column | Contents |
+| --- | --- |
+| `tenants.bookings_enabled` | boolean, default false (API update grant). |
+| `tenants.booking_slug` | unique, `^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$`, set from the business name when Bookings is first turned on (suffix `-2`, `-3` on a clash), editable; a short reserved list (`api`, `admin`, `noctiv`, …). |
+| `booking_settings` (1 row per tenant) | `hours` jsonb: per weekday (1 = Mon … 7 = Sun) a list of `{from, to}` in the tenant's time zone (default Mon–Fri 09:00–17:00); `slot_minutes` 15–240 (30); `buffer_minutes` 0–120 (15) before and after every busy time; `notice_hours` 0–336 (12): earliest bookable time; `horizon_days` 1–90 (30); `location_kind` `in_person` / `phone` / `online_link` / `google_meet`; `location_text` (address, "we call you", or the fixed meeting URL, https only); `meeting_title` ("Meeting with {business}"); `form_id` (an intake form asked on the booking page, optional). |
+| `calendar_connections` | `provider` `google` (Microsoft 365 later), `account_email`, `credentials_ciphertext` / `credentials_key_id` (the refresh token, sealed like mailbox passwords with its own associated data `noctiv:calendar_credentials:v1:<tenant>:<connection>`), `scopes`, `status` `connected` / `error` / `revoking`, `last_error`, `synced_at`. One per tenant. |
+| `calendar_busy` | `starts_at`, `ends_at`: busy intervals from the calendar (no titles, no attendees), replaced on every sync. |
+| `bookings` | `lead_id`, `thread_id`, `name`, `email`, `phone`, `note` (≤ 1000), `starts_at`, `ends_at`, `language`, `status` `pending` / `confirmed` / `taken` / `cancelled` / `rescheduled`, `cancelled_by` `customer` / `owner`, `rescheduled_from`, `google_event_id`, `meet_url`, `source` `page` / `reply` / `assistant`, `answers` (intake answers when the form is asked on the booking page). Exclusion constraint (`btree_gist`): no two `pending`/`confirmed` bookings of a tenant overlap. |
+| `intake_forms` | `name`, `intro`, `fields` jsonb (≤ 10), `archived_at`. |
+| `intake_submissions` | `form_id`, `lead_id`, `thread_id`, `booking_id`, `name`, `email`, `answers` jsonb: `[{label, type, value}]` (labels copied, so an edited form keeps old answers readable). |
+| `leads.stage` | + `booked`. |
+| `drafts.kind` | + `booking` (confirmation, reschedule and cancellation e-mails to the customer) and `booking_offer` (a reply that offers times). |
+| `drafts.booking_offer`, `drafts.booking_id` | a `booking_offer` draft's times (block, language, link, start times), so the block can be refreshed at send time; a `booking` draft's booking. |
+
+All new tables have `tenant_id`, forced RLS and the two isolation policies, fixtures in `seedTenant`, and are counted in the tenant-isolation test.
+
+### 29.2 Calendar (Google; Microsoft 365 later)
+
+- **Connect:** Bookings → Setup → "Connect Google Calendar". The API returns Google's consent URL: scopes `openid email calendar.events.freebusy` (read availability) and `calendar.events.owned` (create, move and delete the events Noctiv books), the narrowest that allow this; `access_type=offline`, `prompt=consent`. `state` is an HMAC token (`c1`, `ACTION_LINK_SECRET`) with the tenant, the owner and a 10-minute expiry.
+- **Callback:** `app.noctiv.io/api/calendar/google/callback` exchanges the code (server-side, client secret), checks both calendar scopes were granted, reads the account e-mail from the ID token returned by Google's token endpoint, seals the refresh token with the credentials public key (the API can seal, only the worker can open) and redirects to Bookings → Setup. Refused or partial consent → back to Setup with the reason.
+- **All calendar calls run in the worker** (it alone can open the token): `calendar.sync` (free/busy of the primary calendar for the booking horizon → `calendar_busy`; every 10 minutes for tenants with Bookings on, and queued when the booking page is opened and the data is older than 2 minutes), `bookings.confirm`, `bookings.cancel`, and `calendar.disconnect` (revokes the token at Google, then deletes the row).
+- **Errors:** an invalid or revoked token sets `status = error`, the owner gets `calendar_disconnected`, and the booking page keeps working from Noctiv's own bookings with a note in Setup.
+- **Env:** `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (API and worker). Without them "Connect Google Calendar" is disabled with a note. `CALENDAR_FAKE=1` (development and tests only; refused in production) uses a fake calendar with a few busy times.
+- **Without a calendar:** Bookings works from Noctiv's own bookings only; Setup says other appointments are not seen.
+
+### 29.3 Free times (code, `packages/bookings`)
+
+- Weekly hours in the tenant's time zone (DST-safe with the existing `zonedTimeToUtc`), cut into slots of `slot_minutes` from each window's start.
+- A slot is free when it starts after now + `notice_hours`, lies within `horizon_days`, and neither it nor its buffer overlaps a busy interval or another pending or confirmed booking.
+- The same function serves the booking page, the reply offer and the assistant; unit-tested around DST changes, buffers, notice, midnight and overlapping busy times.
+
+### 29.4 Public booking page (`app.noctiv.io/book/<slug>`)
+
+- Served by the API like the quote page (no script, phone-first, inline styles, the same CSP, brand bar and logo, `noindex`), proxied by a new `/book/:path*` rewrite; rate-limited with the customer links (30 per 10 minutes per IP).
+- **Language:** `?lang=`, else the reply link's language, else the browser's; en, de, lv, nl, fr, es. Times are shown in the business's time zone, named on the page ("Times in Riga time").
+- **Pages:** the next 7 days with free times as links, "Later dates" for the next week up to the horizon → the chosen time with the form: name, e-mail (required), phone and a note (optional), the intake form's fields if one is set, and a hidden honeypot field → **Book**.
+- **Book (POST):** checks the fields and that the time is still free, inserts the booking as `pending` (the exclusion constraint stops two people taking the same time) and queues `bookings.confirm`. The page waits up to 8 s: confirmed → "You're booked" with the time, place or link and "Add to calendar" (.ics download); taken → "That time was just taken" with the next free times; still working → "We're confirming your booking; you'll get an e-mail in a minute".
+- **`bookings.confirm` (worker):** re-reads free/busy for that time from Google (fresh, not the cache); busy → `taken`. Otherwise creates the event in the owner's primary calendar (title, customer as attendee with `sendUpdates=none` so Google sends no second invitation, description with the note and answers, location or a Google Meet link with `conferenceDataVersion=1`), sets `confirmed`, and then in one transaction: the lead (from the reply link, else by e-mail; created if new) → stage `booked` and its pending follow-ups stop; the intake answers as a submission; the customer's confirmation e-mail; the owner's `booking_created` notification.
+- **Manage link** (`/book/<slug>/manage/<token>`, HMAC `b1`, valid until the meeting ends): shows the booking with **Cancel** (POST, confirm step) and **Choose another time**. Rescheduling books the new time as a new `pending` row with `rescheduled_from`; on confirm the Google event is moved and the old row becomes `rescheduled`. Cancelling deletes the event. The customer gets a fixed e-mail for each, the owner `booking_rescheduled` / `booking_cancelled`. Past meetings can't be changed.
+
+### 29.5 E-mails
+
+- **To the customer:** fixed texts per language (booked, moved, cancelled), filled in by code: the time with weekday and time zone, place or link, the manage link, the business's signature and e-mail design, and an `.ics` attachment (`METHOD:REQUEST`, cancellations `METHOD:CANCEL`, one UID per booking). Sent from the business's own mailbox as a `booking` draft: in the reply's thread when the booking came from a reply link, else as a new conversation. **Sent automatically in every mode** (decision needed, see 29.10): the customer has just asked for it on the page, the text is fixed and holds no model output. Per-sender and per-hour caps don't hold them back; the send-time checks (mailbox connected, not paused) still apply.
+- **To the owner:** notifications `booking_created`, `booking_rescheduled`, `booking_cancelled` (time, name, the customer's domain; the note and answers only with "full text in notifications" on), plus the event in their own calendar. The owner cancelling from the app sends the customer the cancellation e-mail.
+
+### 29.6 Replies that offer times
+
+- **Classifier:** a new category `meeting_request` ("asks to meet, book an appointment, a call or a visit, or asks when they can come by"). With Bookings off it is handled like `sales_inquiry`.
+- **With Bookings on** and at least one free time: a `booking_offer` draft. A fixed cover per language ("Happy to find a time. The next free times are: • Tuesday 7 October, 10:00 • … (Riga time). Book one here: <link>. If none of them suits you, just reply with a time that works."), with the grounded reply for anything else the customer asked below it (the D4 pattern from Quotes: only when it passes every check). The link carries a signed reference (`r1`: lead, thread, language, 30 days), so the booking lands on the same lead and thread.
+- **Mode rules:** mode 1 waits for approval; modes 2 and 3 send automatically unless a guard holds it (budget, caps, injection signs, reply-to mismatch, unsupported language, or a grounded part that needs checking). The times are computed by code and are not model claims.
+- **Fresh times:** `drafts.booking_offer` keeps the block and its times; at send time (after an approval hours later, say) the worker recomputes it and replaces it if any time has gone.
+- **No free time** in the horizon, or no mailbox: normal handling (grounded reply or the owner).
+- **Lead stage:** `booked` when the booking is confirmed (not over `accepted` or `converted`).
+
+### 29.7 Intake forms (v1)
+
+- **Editor:** Bookings → Forms: name, intro text, up to 10 fields, each with a label (≤ 100), a type (short text, long text, e-mail, phone, number, date, choice with up to 20 options, yes/no) and required or not. Name and e-mail are always asked (filled in when the link is tied to a customer).
+- **Link:** `app.noctiv.io/f/<token>` (HMAC `f1`: tenant, form, and optionally lead and thread). The owner copies a general link for the website; links sent to a customer are tied to their lead.
+- **Where a link comes from:** "Insert form link" on a reply draft; the assistant (`send_email` card with a form attached: the link for that customer is added to the text); or the booking page, when a form is set in Setup.
+- **Page:** no script, like the booking page; field errors inline; the owner's labels as written, the page chrome in the customer's language. A honeypot and the same rate limit.
+- **Submission:** stored with the lead (from the link, else by e-mail; created if new), shown on the lead and the conversation, and the owner gets `intake_submitted`. Answers are the customer's words: they are never put into a model prompt as instructions (fenced like e-mail text if the assistant reads them).
+
+### 29.8 App
+
+- **Bookings** in the navigation (after Documents): Turn on / off bar, tabs **Upcoming** (by day: time, customer, status, link to the conversation, Cancel), **Forms** (list, editor, copy link), **Setup** (calendar connection, booking page address with Copy and Open, hours per weekday, slot length, buffer, notice, how far ahead, location, meeting title, form asked when booking).
+- **Lead and conversation pages:** the booking and form answers.
+- **Assistant:** `bookingsEnabled` joins the settings it can propose; read-only tools `bookings` (upcoming, free times) and `forms`; `send_email` can attach a form link; help text section BOOKINGS (beta).
+- **Site:** a "Bookings (beta)" line on Pricing and How it works and a help article, marked for review; the privacy notice gains Google Calendar (the business's own account; only free/busy times and the events Noctiv books) and the Google API Limited Use statement.
+
+### 29.9 Tests
+
+- **Unit:** free-time computation (DST, buffers, notice, horizon, overlapping busy), slug rules, form schema and answer validation, tokens (`c1`, `b1`, `r1`, `f1`: tampered, expired, wrong tenant), fixed texts complete in six languages, `.ics` output, the offer block and its refresh.
+- **API (db):** module switch and slug, settings validation, OAuth start and callback (fake Google token endpoint: scopes missing, error, success sealed), booking page (language, free times, book → confirmed / taken / waiting, honeypot, double booking), manage (cancel, reschedule, expired link), forms CRUD and submission, owner cancel, other tenants see nothing.
+- **Worker (db):** `calendar.sync` with the fake calendar, `bookings.confirm` (event created, taken when busy, lead booked and follow-ups stopped, confirmation e-mail with `.ics` sent through the local mail server), cancel and reschedule, `meeting_request` → `booking_offer` draft in mode 1 and auto-sent in mode 2, the block refreshed at send.
+
+### 29.10 Open points for the founder
+
+1. **Google verification:** the calendar scopes are "sensitive". Until the OAuth app is verified by Google (privacy policy, domain verification, a short demo video; a few days to weeks), only up to 100 test users added in the Google Cloud console can connect, and refresh tokens of an app in "Testing" status expire after 7 days. The OAuth client (Web application, redirect URI `https://app.noctiv.io/api/calendar/google/callback`) is created by the founder; its ID and secret go into `.env` and Northflank.
+2. **Confirmation e-mails send in every mode** (29.5). Alternative: in mode 1 they wait for approval like everything else — but then a customer who just booked waits for the owner.
+3. **Retention:** bookings and form answers are kept with the lead (business records, like documents) until the lead or the account is deleted, not purged with e-mail text after 90 days. The privacy notice says so.
+4. **Privacy notice (not published yet):** the notice promises customers an e-mail before a change applies, so this text waits for the founder: *"Bookings (beta): if you connect Google Calendar, Noctiv reads only the times you are busy in your primary calendar and creates, moves and deletes the events it books. It does not read event titles, descriptions or attendees. Noctiv's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. You can disconnect at any time in Bookings → Setup or in your Google Account."* Google's verification requires this statement on the privacy page.

@@ -35,6 +35,10 @@ export interface AssistantDeps {
   logger?: Logger;
   /** MX lookup for the mailbox tool and card (DNS by default; a stub in tests). */
   resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
+  /** Bookings (beta): signs intake form links for send_email cards. */
+  formLink?: (tenantId: string, formId: string, leadId: string | null) => string;
+  /** app.noctiv.io (booking page addresses in the bookings tool). */
+  appUrl?: string;
 }
 
 export type AssistantTurnResult =
@@ -125,7 +129,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
                quotes_validity_days, quotes_auto_send_limit_cents, documents_enabled, auto_invoice_on_accept,
                auto_delivery_note_after_payment, seller_legal_name, seller_legal_address, seller_reg_no,
                seller_vat_no, seller_country, invoice_due_days, weekly_report_enabled,
-               value_minutes_per_reply, value_minutes_per_followup
+               value_minutes_per_reply, value_minutes_per_followup, bookings_enabled
         from public.tenants where id = ${tenantId}`;
       const [conv] = await tx<{ locale: AssistantLanguage; purpose: 'app' | 'onboarding' }[]>`
         select locale, purpose from public.assistant_conversations where id = ${conversationId}`;
@@ -282,6 +286,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
             nonce,
             checkMailbox: (id) => deps.checkMailbox(tenantId, id),
             ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}),
+            ...(deps.appUrl ? { appUrl: deps.appUrl } : {}),
           }),
         );
         toolsUsed.push(s.tool);
@@ -302,7 +307,18 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       const actions = await withTenant(deps.sql, tenantId, (tx) =>
         normalizeActions(
           s.proposals.filter((p) => ACTION_TYPES.has(p.type)),
-          { tx, evidence, ownerText, ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}) },
+          {
+            tx,
+            evidence,
+            ownerText,
+            ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}),
+            ...(deps.formLink
+              ? {
+                  formLink: (formId: string, leadId: string | null) =>
+                    deps.formLink!(tenantId, formId, leadId),
+                }
+              : {}),
+          },
         ),
       );
       actionCards = actions.cards;
@@ -426,6 +442,7 @@ const SHOWN_SETTINGS = [
   'quotesEnabled',
   'documentsEnabled',
   'weeklyReportEnabled',
+  'bookingsEnabled',
 ];
 
 function currentSettings(t: Record<string, unknown>): Record<string, unknown> {
@@ -456,6 +473,7 @@ function currentSettings(t: Record<string, unknown>): Record<string, unknown> {
     sellerCountry: t.seller_country ?? undefined,
     invoiceDueDays: t.invoice_due_days,
     weeklyReportEnabled: t.weekly_report_enabled,
+    bookingsEnabled: t.bookings_enabled,
     valueMinutesPerReply: t.value_minutes_per_reply,
     valueMinutesPerFollowup: t.value_minutes_per_followup,
   };

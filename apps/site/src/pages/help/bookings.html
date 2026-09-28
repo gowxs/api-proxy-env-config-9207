@@ -1,0 +1,72 @@
+<script type="application/json" id="page">
+  {
+    "title": "Bookings (beta) · Noctiv Help",
+    "description": "How Noctiv Bookings works: your booking page, bookable hours, Google Calendar, free times offered in replies, confirmation e-mails with a calendar invite, and intake forms.",
+    "crumb": "Bookings"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Bookings (beta).</h1>
+    <p class="lead">
+      Customers book a meeting, a call or a visit on your own booking page. Switch it on in the app
+      under Bookings.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Your booking page</h2>
+    <p>
+      Each business gets a page at app.noctiv.io/book/ followed by an address you choose. It shows
+      your free times in your time zone and works on any phone, in the customer's language. The
+      customer picks a time, gives a name and an e-mail address (and a phone number and a note if
+      they like), and books.
+    </p>
+
+    <h2>Setup</h2>
+    <ul>
+      <li>
+        Bookable hours per weekday, the length of a meeting, a buffer between meetings, how much
+        notice you need and how far ahead customers can book.
+      </li>
+      <li>Where it happens: your own meeting link, Google Meet, a phone call, or your address.</li>
+      <li>Optionally, an intake form asked when booking.</li>
+    </ul>
+
+    <h2>Google Calendar</h2>
+    <p>
+      Connect it in Bookings → Setup. Noctiv reads when you are busy, so those times are never
+      offered, and adds each booking to your calendar (with a Google Meet link if you chose Meet).
+      It sees busy times and the events it books, nothing else. Without a calendar, only bookings
+      made in Noctiv are taken into account. Microsoft 365 comes later.
+    </p>
+
+    <h2>E-mails</h2>
+    <p>
+      The customer gets a confirmation from your own mailbox with a calendar invite and a link to
+      change or cancel. Moves and cancellations get an e-mail too. These are sent automatically in
+      every reply mode, because the customer has just asked for them; you get a notification each
+      time.
+    </p>
+
+    <h2>Replies that offer times</h2>
+    <p>
+      When a customer asks to meet, call or come by, the reply offers your next three free times and
+      the booking link. It follows your reply mode: in mode 1 it waits for your approval. If a time
+      is taken before the reply goes out, it is replaced with the next free one.
+    </p>
+
+    <h2>Intake forms</h2>
+    <p>
+      Up to 10 questions per form (short or long text, e-mail, phone, number, date, a choice, yes or
+      no). Copy a general link for your website, insert a link for the customer into a reply, or ask
+      the Noctiv Assistant to send it. Answers are saved with the customer's lead and you are
+      notified.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

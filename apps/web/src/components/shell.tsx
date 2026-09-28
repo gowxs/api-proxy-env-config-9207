@@ -44,6 +44,12 @@ const DOCUMENTS: Item = {
   icon: 'documents',
   badges: (c) => [{ n: c.unpaid, tone: 'blue', label: 'unpaid invoices' }],
 };
+const BOOKINGS: Item = {
+  href: '/bookings',
+  label: 'Bookings',
+  icon: 'bookings',
+  badges: (c) => [{ n: c.bookingsToday ?? 0, tone: 'blue', label: 'bookings today' }],
+};
 const PAYMENTS: Item = {
   href: '/payments',
   label: 'Payments',
@@ -55,12 +61,12 @@ const INTEGRATIONS: Item = { href: '/integrations', label: 'Integrations', icon:
 const SETTINGS: Item = { href: '/settings', label: 'Settings', icon: 'settings' };
 
 const SECTIONS: { title: string; items: Item[] }[] = [
-  { title: 'Work', items: [HOME, INBOX, LEADS, QUOTES, DOCUMENTS, PAYMENTS] },
+  { title: 'Work', items: [HOME, INBOX, LEADS, QUOTES, DOCUMENTS, BOOKINGS, PAYMENTS] },
   { title: 'Setup', items: [KNOWLEDGE, INTEGRATIONS, SETTINGS] },
 ];
 /** Phone: four items and More. */
 const BAR: Item[] = [HOME, INBOX, LEADS, QUOTES];
-const MORE: Item[] = [DOCUMENTS, PAYMENTS, KNOWLEDGE, INTEGRATIONS, SETTINGS];
+const MORE: Item[] = [DOCUMENTS, BOOKINGS, PAYMENTS, KNOWLEDGE, INTEGRATIONS, SETTINGS];
 
 // Pages that belong to an item without sharing its path.
 const ALIASES: Record<string, string> = {

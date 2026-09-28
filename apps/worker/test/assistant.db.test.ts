@@ -39,6 +39,7 @@ const card = (p: Record<string, unknown>) => ({
   attach: [],
   document_number: '',
   mailbox: '',
+  form: '',
   ...p,
 });
 const settings = (pairs: [string, string][]) =>

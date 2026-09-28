@@ -1,3 +1,5 @@
+import type { BookingDeps } from '../bookings/data.ts';
+import { draftBookingOffer } from './booking.ts';
 import {
   addUsage,
   buildClassificationPrompt,
@@ -44,6 +46,8 @@ export interface PipelineDeps {
   logger?: Logger;
   /** Quotes (beta): signs the customer's accept link. Without it quote requests get normal replies. */
   quotes?: { secret: string; publicApiUrl: string };
+  /** Bookings (beta): the booking page and link secret. Without it meeting requests get normal replies. */
+  bookings?: BookingDeps;
 }
 
 export type ProcessOutcome =
@@ -77,6 +81,7 @@ export interface Loaded {
     maxPerHour: number;
     quotesEnabled: boolean;
     documentsEnabled: boolean;
+    bookingsEnabled: boolean;
   };
   thread: { status: string };
   /** Sender domains the owner confirmed as their bank's notifications. */
@@ -111,6 +116,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       max_replies_per_hour: number;
       quotes_enabled: boolean;
       documents_enabled: boolean;
+      bookings_enabled: boolean;
       thread_status: string;
       entitled: boolean;
       backlog: boolean;
@@ -119,7 +125,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
-           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled,
+           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
            th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
@@ -162,6 +168,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       maxPerHour: row.max_replies_per_hour,
       quotesEnabled: row.quotes_enabled,
       documentsEnabled: row.documents_enabled,
+      bookingsEnabled: row.bookings_enabled,
     },
     bankDomains: banks.map((b) => b.domain),
     thread: { status: row.thread_status },
@@ -371,6 +378,23 @@ export async function processMessage(
     llmCalls = q.llmCalls;
   }
 
+  // 4c. Bookings (beta): a request to meet gets the next free times and the booking link.
+  //     With Bookings off, meeting_request is handled exactly like sales_inquiry.
+  if (classification.category === 'meeting_request' && l.tenant.bookingsEnabled && deps.bookings) {
+    const b = await draftBookingOffer(deps, tenantId, l, leadId, {
+      classification,
+      body,
+      origin,
+      budgetState: budget.state,
+      usage,
+      llmCalls,
+      embedTokens,
+    });
+    if (b.outcome) return b.outcome;
+    usage = b.usage;
+    llmCalls = b.llmCalls;
+  }
+
   // 5–6. Retrieve, generate, guard, verify.
   const g = await generateGrounded(deps, tenantId, l, {
     body,
@@ -528,7 +552,9 @@ export async function generateGrounded(
     const [caps] = await tx<{ sender: number; hour: number }[]>`
       select count(*) filter (where to_address = ${recipient.to} and created_at > now() - interval '24 hours')::int as sender,
              count(*) filter (where created_at > now() - interval '1 hour')::int as hour
-      from public.outbound_emails where sent_via = 'auto'`;
+      from public.outbound_emails o where sent_via = 'auto'
+        -- Booking confirmations (customer-initiated) do not count against reply caps.
+        and not exists (select 1 from public.drafts bd where bd.id = o.draft_id and bd.kind = 'booking')`;
     return { caps: caps!, allowlist: await loadAllowlist(tx) };
   });
   const guardInput = {

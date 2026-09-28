@@ -25,6 +25,9 @@ From a confirmed price list, Noctiv answers price requests with a quote (PDF and
 DOCUMENTS (beta)
 Invoices, delivery notes and CMR consignment notes as PDFs, numbered per year. Optionally an invoice is made when a quote is accepted, and a delivery note after payment. Payments are recognised from the bank's notification e-mails. Documents are made by the owner, by these automations, or by the assistant after the owner confirms its card.
 
+BOOKINGS (beta)
+A public booking page per business (app.noctiv.io/book/<address>): customers pick a free time from the owner's bookable hours (slot length, buffer, notice, how far ahead) and book with name and e-mail; confirmation, move and cancel e-mails with a calendar invite go out from the business mailbox automatically. Google Calendar can be connected in Bookings → Setup (free/busy is read so busy times are not offered, and booked meetings are added as events, with a Google Meet link if chosen); Microsoft 365 later. When a customer asks for a meeting, a call or an appointment, the reply offers the next 3 free times and the booking link (mode rules apply). A booked customer's lead becomes "booked" and follow-ups stop. Intake forms (Bookings → Forms): up to 10 questions; a link can go into a reply, an e-mail card, or be asked on the booking page; answers are saved with the lead and the owner is told.
+
 VALUE AND REPORTS
 The dashboard shows "This month": e-mails answered, average reply time compared with answering only in business hours, follow-ups, replies won back, quotes, invoices paid and an estimate of hours saved (the owner's own minutes per reply and follow-up). A summary e-mail arrives every Monday at 08:00 local time (can be switched off).
 

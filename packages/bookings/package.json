@@ -1,0 +1,17 @@
+{
+  "name": "@noctiv/bookings",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bookings (beta): free times, links, fixed texts, .ics, intake forms and the public pages.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/core": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

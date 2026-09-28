@@ -37,6 +37,8 @@ export const GREENMAIL_USERS = {
   autoCustomer: { address: 'edgars@example-mail.test', password: 'edgars-pass' },
   composeShop: { address: 'team@lumen-studio.test', password: 'app-pass-t' },
   composeCustomer: { address: 'ruta@example-mail.test', password: 'ruta-pass' },
+  bookShop: { address: 'meet@lumen-studio.test', password: 'app-pass-m' },
+  bookCustomer: { address: 'dace@example-mail.test', password: 'dace-pass' },
   /** Owner login email for notification tests. */
   owner: { address: 'owner@lumen-studio.test', password: 'owner-pass' },
   admin: { address: 'admin@noctiv.test', password: 'admin-pass' },
@@ -176,7 +178,23 @@ export async function seedTenant(
       insert into public.assistant_messages (tenant_id, conversation_id, role, text)
       values (${tenantId}, ${conv!.id}, 'assistant', ${`Hello ${label}`}) returning id`;
     await tx`insert into public.assistant_proposals (tenant_id, conversation_id, message_id, type, title, payload)
-             values (${tenantId}, ${conv!.id}, ${said!.id}, 'settings', 'Change', ${tx.json({ changes: {} })})`;
+             values (${tenantId}, ${conv!.id}, ${said!.id}, 'settings', 'Change', ${tx.json({ changes: {} })})`; // Bookings (PLAN.md §29).
+    const formId = randomUUID();
+    const bookingId = randomUUID();
+    await tx`insert into public.intake_forms (id, tenant_id, name, fields)
+             values (${formId}, ${tenantId}, ${`Intake ${label}`},
+                     ${tx.json([{ key: 'f1', label: 'Company', type: 'text', required: true }])})`;
+    await tx`insert into public.booking_settings (tenant_id, form_id) values (${tenantId}, ${formId})`;
+    await tx`insert into public.calendar_connections (tenant_id, provider, account_email, credentials_ciphertext, credentials_key_id)
+             values (${tenantId}, 'google', ${`calendar-${label}@example.test`}, ${Buffer.from(`sealed-cal-${label}`)}, 'k1')`;
+    await tx`insert into public.calendar_busy (tenant_id, starts_at, ends_at)
+             values (${tenantId}, now() + interval '2 days', now() + interval '2 days 1 hour')`;
+    await tx`insert into public.bookings (id, tenant_id, lead_id, thread_id, name, email, starts_at, ends_at, status)
+             values (${bookingId}, ${tenantId}, ${leadId}, ${threadId}, ${`Customer ${label}`}, ${customer},
+                     now() + interval '3 days', now() + interval '3 days 30 minutes', 'confirmed')`;
+    await tx`insert into public.intake_submissions (tenant_id, form_id, lead_id, booking_id, form_name, name, email, answers)
+             values (${tenantId}, ${formId}, ${leadId}, ${bookingId}, ${`Intake ${label}`}, ${`Customer ${label}`},
+                     ${customer}, ${tx.json([{ key: 'f1', label: 'Company', type: 'text', value: `Private ${label}` }])})`;
   });
 
   return {

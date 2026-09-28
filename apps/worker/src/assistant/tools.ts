@@ -22,6 +22,8 @@ import {
   type DetectedMailbox,
 } from '@noctiv/mail';
 import { describeReason } from '../notify/templates.ts';
+import { nextFreeSlots } from '../bookings/data.ts';
+import { formatWhen, zoneName } from '@noctiv/bookings';
 
 /**
  * Noctiv Assistant's read-only tools (PLAN.md §27). Each runs inside the
@@ -92,6 +94,8 @@ export interface ToolContext {
   checkMailbox: (connectionId: string) => Promise<{ ok: boolean; code?: string | null }>;
   /** MX lookup for mailbox_setup (DNS; a stub in tests). */
   resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
+  /** Bookings (beta): app.noctiv.io, for the booking page address. */
+  appUrl?: string;
 }
 
 /** DNS MX lookup with a short timeout: an unknown or slow domain is simply "unknown". */
@@ -272,6 +276,46 @@ export async function runTool(
           (d) =>
             `${d.number}: ${d.type === 'invoice' ? 'invoice' : 'delivery note'}; ${STATUS_TEXT[d.status] ?? d.status}${d.payable && (d.status === 'issued' || d.status === 'sent') ? ', unpaid' : ''}; ${money(d.total_cents, d.currency)}; customer ${customerText(nonce, d.counterparty_name ?? '—', 100)}${d.due_date ? `; due ${localDay(d.due_date, 'UTC')}` : ''}`,
         ),
+      ];
+    }
+    case 'bookings': {
+      const [t] = await tx<{ bookings_enabled: boolean; booking_slug: string | null }[]>`
+        select bookings_enabled, booking_slug from public.tenants`;
+      if (!t!.bookings_enabled)
+        return [
+          'Bookings (beta): off. It can be turned on in Settings or with a settings card (bookingsEnabled).',
+        ];
+      const [cal] = await tx<{ account_email: string; status: string }[]>`
+        select account_email, status from public.calendar_connections`;
+      const { slots } = await nextFreeSlots(tx, tz, 3);
+      const upcoming = await tx<{ name: string; starts_at: Date; ends_at: Date; status: string }[]>`
+        select name, starts_at, ends_at, status from public.bookings
+        where status in ('pending', 'confirmed') and ends_at > now() order by starts_at limit 10`;
+      const forms = await tx<{ name: string; n: number }[]>`
+        select name, jsonb_array_length(fields)::int as n from public.intake_forms
+        where archived_at is null order by name limit 20`;
+      const base = (c.appUrl ?? 'https://app.noctiv.io').replace(/\/+$/, '');
+      return [
+        'Bookings (beta): on.',
+        t!.booking_slug
+          ? `Booking page: ${base}/book/${t!.booking_slug}`
+          : 'Booking page: not set up yet.',
+        cal
+          ? `Calendar: Google (${cal.account_email}), ${cal.status === 'connected' ? 'connected' : 'not working (connect it again in Bookings → Setup)'}`
+          : 'Calendar: none connected (only bookings made in Noctiv are seen).',
+        slots.length
+          ? `Next free times (${zoneName('en', tz)}): ${slots.map((s) => formatWhen(s.start, s.end, 'en', tz)).join('; ')}`
+          : 'Next free times: none in the booking window.',
+        upcoming.length
+          ? `Upcoming bookings: ${upcoming.length}${upcoming.length === 10 ? ' (the next 10)' : ''}`
+          : 'Upcoming bookings: none.',
+        ...upcoming.map(
+          (b) =>
+            `${formatWhen(b.starts_at, b.ends_at, 'en', tz)}: ${customerText(nonce, b.name, 100)}${b.status === 'pending' ? ' (being confirmed)' : ''}`,
+        ),
+        forms.length
+          ? `Intake forms: ${forms.map((f) => `"${f.name}" (${f.n} questions)`).join(', ')}`
+          : 'Intake forms: none yet (created in Bookings → Forms).',
       ];
     }
     case 'open_quotes': {

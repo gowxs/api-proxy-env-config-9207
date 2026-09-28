@@ -39,7 +39,11 @@ type DraftKind =
   | 'document'
   | 'payment_reminder'
   /** A new e-mail written in the Inbox (may carry ready documents). */
-  | 'compose';
+  | 'compose'
+  /** Bookings (beta): confirmation, move or cancellation for the customer (an .ics is attached). */
+  | 'booking'
+  /** Bookings (beta): a reply that offers free times and the booking link. */
+  | 'booking_offer';
 import { JobError, withTenant, type Job } from '@noctiv/db';
 import {
   appendToFolder,
@@ -57,6 +61,7 @@ import {
 import type { Sql, TransactionSql } from 'postgres';
 import { DISCONNECT_CODES, loadConnection, markDisconnected } from '../mailbox/connection-repo.ts';
 import { setLeadStage } from '../pipeline/leads.ts';
+import { bookingIcsFor, refreshOffer, type BookingOffer } from '../bookings/send.ts';
 
 export interface MailSendDeps {
   sql: Sql;
@@ -126,6 +131,8 @@ interface SendPlan {
   storedLogo: Buffer | null;
   /** The HTML shows the uploaded logo (Content-ID LOGO_CID). */
   inlineLogo: boolean;
+  /** A 'booking' e-mail: the calendar entry to attach. */
+  bookingIcs: string | null;
 }
 
 type PlanResult =
@@ -246,6 +253,13 @@ export function mailSendHandler(deps: MailSendDeps) {
       }
     }
 
+    if (plan.bookingIcs)
+      attachments.push({
+        filename: 'invite.ics',
+        content: Buffer.from(plan.bookingIcs, 'utf8'),
+        contentType: `text/calendar; charset=utf-8; method=${/METHOD:CANCEL/.test(plan.bookingIcs) ? 'CANCEL' : 'REQUEST'}`,
+      });
+
     const raw = await buildOutboundMessage({
       from: { address: c.settings.emailAddress, name: c.displayName },
       to: plan.draft.to,
@@ -357,6 +371,9 @@ async function planSend(
       brand_social_links: string[];
       tenant_name: string;
       timezone: string;
+      booking_id: string | null;
+      booking_offer: BookingOffer | null;
+      bookings_enabled: boolean;
       followup_after_days: number;
       followup_max: number;
       followup_stop_reason: string | null;
@@ -365,6 +382,7 @@ async function planSend(
     }[]
   >`
     select d.id, d.status, d.kind, d.to_address, d.subject, d.body, d.decided_by, d.thread_id, d.source_message_id,
+           d.booking_id, d.booking_offer, t.bookings_enabled,
            th.connection_id, th.lead_id, th.followups_sent, th.followup_stop_reason, th.status as thread_status, th.last_outbound_at,
            t.status as tenant_status, app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled, t.mode, t.reply_signature, t.name as tenant_name, t.timezone,
            t.email_template, t.brand_company_name, t.brand_logo_url, t.brand_color, t.brand_website,
@@ -509,13 +527,37 @@ async function planSend(
     attachLogos = logoUrl ? logoAllowed(logoUrl, await loadAllowlist(tx)) : false;
   }
 
-  if (!existing && outbound.sentVia === 'auto') {
+  // Bookings (beta): the calendar entry for the customer, and fresh times in an offer.
+  let bookingIcsText: string | null = null;
+  if (d.kind === 'booking') {
+    if (!d.booking_id)
+      return { fail: { code: 'BOOKING_MISSING', outboundId: existing?.id ?? null } };
+    bookingIcsText = await bookingIcsFor(tx, d.booking_id);
+  }
+  if (d.kind === 'booking_offer' && !existing) {
+    if (!d.bookings_enabled) quoteHold.push('bookings_disabled');
+    else if (d.booking_offer) {
+      const refreshed = await refreshOffer(tx, d.id, d.body, d.booking_offer, d.timezone);
+      if (refreshed) d.body = refreshed;
+    }
+  }
+
+  if (!existing && outbound.sentVia === 'auto' && d.kind === 'booking') {
+    // Customer-initiated, fixed text: sent in every mode and not counted against
+    // the reply caps (PLAN.md §29.5). A lapsed subscription still stops it.
+    if (!d.entitled) {
+      await downgradeToApproval(tx, tenantId, d.id, null, ['billing_inactive']);
+      return { done: { status: 'downgraded', reasons: ['billing_inactive'] } };
+    }
+  } else if (!existing && outbound.sentVia === 'auto') {
     // Serialise auto-sends per tenant so two jobs cannot both pass the caps.
     await tx`select 1 from public.tenants where id = ${tenantId} for update`;
     const [caps] = await tx<{ sender: number; hour: number }[]>`
       select count(*) filter (where to_address = ${d.to_address} and created_at > now() - interval '24 hours')::int as sender,
              count(*) filter (where created_at > now() - interval '1 hour')::int as hour
-      from public.outbound_emails where sent_via = 'auto' and status <> 'failed'`;
+      from public.outbound_emails o where sent_via = 'auto'
+        -- Booking confirmations (customer-initiated) do not count against reply caps.
+        and not exists (select 1 from public.drafts bd where bd.id = o.draft_id and bd.kind = 'booking') and status <> 'failed'`;
     const reasons: string[] = [];
     const isAck = d.kind === 'acknowledgement';
     // Acknowledgements are a mode-3 feature; replies go out in either automatic mode.
@@ -614,6 +656,7 @@ async function planSend(
       attachLogos,
       storedLogo,
       inlineLogo: rendered.inlineLogo,
+      bookingIcs: bookingIcsText,
     },
   };
 }
@@ -706,6 +749,14 @@ async function finalizeSent(
     await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
              values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
                      ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'document', number: plan.document?.doc.number ?? null })})`;
+    return;
+  }
+  if (plan.draft.kind === 'booking') {
+    // A confirmation is not a question: no follow-up, the conversation keeps its state.
+    await tx`update public.threads set last_outbound_at = ${now} where id = ${plan.threadId}`;
+    await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
+             values (${tenantId}, 'system', 'email.sent', 'draft', ${plan.draft.id},
+                     ${tx.json({ sentVia: plan.outbound.sentVia, outboundId: plan.outbound.id, kind: 'booking' })})`;
     return;
   }
   if (plan.draft.kind === 'compose' && plan.attachedDocuments.length) {

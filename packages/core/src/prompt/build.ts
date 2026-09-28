@@ -85,6 +85,7 @@ export function buildClassificationPrompt(
     untrustedEmailRule(nonce),
     `category: one of ${CATEGORIES.join(', ')}.`,
     '- quote_request: asks what specific products or services would cost, often with quantities ("price for 20 candles and gift wrapping?").',
+    '- meeting_request: mainly asks to meet, book an appointment, a call or a visit, or when they can come by ("can we have a call next week?").',
     '- complaint: dissatisfaction with a product, service or experience.',
     '- refund: asks for money back, a return or a chargeback.',
     '- legal_contract: contracts, terms, legal threats, GDPR/data requests, lawyers.',

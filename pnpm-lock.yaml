@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@noctiv/bookings':
+        specifier: workspace:*
+        version: link:../../packages/bookings
       '@noctiv/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -120,6 +123,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@noctiv/bookings':
+        specifier: workspace:*
+        version: link:../../packages/bookings
       '@noctiv/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -163,6 +169,15 @@ importers:
       mailparser:
         specifier: ^3.9.28
         version: 3.9.28
+
+  packages/bookings:
+    dependencies:
+      '@noctiv/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
   packages/brand:
     devDependencies:

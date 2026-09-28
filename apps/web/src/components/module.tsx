@@ -9,7 +9,7 @@ import { Badge, Button, cx, ErrorText, useAction } from './ui';
 /** Turns a module on or off (PATCH tenant), then refreshes the page's data and the navigation. */
 export function useModuleToggle(
   tenantId: string,
-  field: 'quotesEnabled' | 'documentsEnabled',
+  field: 'quotesEnabled' | 'documentsEnabled' | 'bookingsEnabled',
   reload: () => Promise<void>,
 ) {
   const { reload: reloadNav } = useNav();

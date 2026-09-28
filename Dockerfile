@@ -6,6 +6,7 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
+COPY packages/bookings/package.json packages/bookings/
 COPY packages/core/package.json packages/core/
 COPY packages/db/package.json packages/db/
 COPY packages/documents/package.json packages/documents/
@@ -21,6 +22,7 @@ ENV NODE_ENV=production
 COPY --from=deps /app /app
 COPY apps/api/src apps/api/src
 COPY apps/worker/src apps/worker/src
+COPY packages/bookings/src packages/bookings/src
 COPY packages/core/src packages/core/src
 COPY packages/db/src packages/db/src
 COPY packages/db/scripts packages/db/scripts
