@@ -40,6 +40,17 @@ const GMAIL_GENERATED: Shot = {
 };
 
 /** App Password guides, with screenshots from the founder (Q13). */
+/** Step-by-step articles on noctiv.io/help, per provider. */
+const HELP_URL = 'https://noctiv.io/help/';
+const HELP: Record<Provider, string> = {
+  gmail: `${HELP_URL}gmail-app-password/`,
+  google_workspace: `${HELP_URL}gmail-app-password/`,
+  yahoo: HELP_URL,
+  hostinger: `${HELP_URL}hostinger-mailbox/`,
+  generic: `${HELP_URL}hostinger-mailbox/`,
+  outlook: `${HELP_URL}outlook/`,
+};
+
 const GUIDES: Partial<Record<Provider, { steps: string[]; shots: Shot[] }>> = {
   gmail: {
     steps: [
@@ -233,7 +244,10 @@ export function MailboxForm({
       {provider === 'outlook' ? (
         <Notice>
           Microsoft no longer allows password sign-in for Outlook and Microsoft 365 mailboxes, so
-          they can&apos;t be connected in this version. Support is planned.
+          they can&apos;t be connected in this version. Support is planned.{' '}
+          <a className="underline" href={HELP.outlook} target="_blank" rel="noreferrer">
+            Read more
+          </a>
         </Notice>
       ) : (
         <>
@@ -276,6 +290,16 @@ export function MailboxForm({
                   ))}
                 </div>
               )}
+              <p className="mt-2 text-sm">
+                <a
+                  className="text-indigo-700 underline"
+                  href={HELP[provider]}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Step-by-step help
+                </a>
+              </p>
               <p className="mt-2 text-xs text-neutral-500">
                 Noctiv reads your inbox without marking anything as read, and sends only replies you
                 approve (or, in mode 2 or 3, replies that pass every safety check).

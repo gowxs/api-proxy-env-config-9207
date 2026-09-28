@@ -1,0 +1,153 @@
+<script type="application/json" id="page">
+  {
+    "title": "E-mail assistant for clinics and practices · Noctiv",
+    "description": "Noctiv answers clinic e-mails about treatments, prices, opening hours and booking from your own website and notes, hands everything clinical to you, and keeps data in the EU. $79/month.",
+    "crumb": "Clinics"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>The front-desk questions, answered. The clinical ones, left to you.</h1>
+    <p class="lead">
+      Dental, physiotherapy, beauty or veterinary practices get the same questions every day: what
+      it costs, when you're open, how to book. Noctiv drafts those replies from your own website and
+      notes, and passes everything else to your team.
+    </p>
+    <div class="actions">
+      <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
+      <a class="btn btn--secondary" href="/how-it-works/">How it works</a>
+    </div>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section" data-new>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The e-mails a clinic gets.</h2>
+      <p class="lead">
+        Most arrive outside opening hours, from people comparing practices. A clear answer the next
+        morning, rather than the next afternoon, is often what books the appointment.
+      </p>
+    </div>
+    <div class="rows rows--3">
+      <div class="row">
+        <h3>Treatment prices</h3>
+        <p>
+          "How much is a first consultation?" Answered from your published prices, with what's
+          included. A price that isn't in your knowledge base is never guessed.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Opening hours and location</h3>
+        <p>
+          Hours, holidays, parking, which entrance, whether there's step-free access. Written once
+          in your notes, answered every time.
+        </p>
+      </div>
+      <div class="row">
+        <h3>How to book</h3>
+        <p>
+          Noctiv doesn't book appointments or see your calendar. It sends people to your online
+          booking page or phone number, exactly as your notes say.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Preparing for a visit</h3>
+        <p>
+          What to bring, how early to arrive, how long a session takes, your cancellation policy.
+          The practical questions your reception answers by heart.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Payment and insurance</h3>
+        <p>
+          Which payment methods you accept, and what your notes say about insurers or receipts.
+          Anything about a specific claim goes to you.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Anything about health</h3>
+        <p>
+          Symptoms, results, medication, "is this normal?": for these, keep mode 1 so every reply
+          waits for a person. Urgent messages always come straight to you.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>An example reply.</h2>
+      <p class="lead">
+        A new patient writes late in the evening. The draft uses only the practice's price list and
+        notes, and waits for the team's approval in the morning.
+      </p>
+      <p class="muted" style="margin-top: var(--s-4)">
+        Example practice and prices. In mode 1, which every account starts in, nothing is sent
+        without a click.
+      </p>
+    </div>
+    <div class="example">
+      <div class="msg msg--in">
+        <div class="msg-meta"><span>Emma L. · new patient</span><time>Wed 22:14</time></div>
+        Hello, I'd like to start physiotherapy for my knee. How much is the first appointment, how
+        long is it, and can I come on a Saturday?
+      </div>
+      <div class="msg msg--draft">
+        <div class="msg-meta"><span>Noctiv · draft reply</span><time>Wed 22:15</time></div>
+        Hello Emma, thank you for your message. The first appointment is a 60-minute assessment and
+        treatment and costs €75. We're open on Saturdays from 9:00 to 13:00. You can choose a time
+        online at physio.example/book, or call us on weekdays from 8:00 to 18:00. Please bring any
+        scans or letters from your doctor.
+        <div class="msg-src">
+          {{> sourced}}<span
+            ><b>Sourced:</b> Prices page, Notes: hours and booking · no prices invented</span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>What stays with you.</h2>
+      <p class="lead">These are never answered automatically, whatever mode you choose.</p>
+    </div>
+    <ul class="checklist">
+      <li>{{> check}}<span>Urgent messages, complaints and anything legal</span></li>
+      <li>{{> check}}<span>Refund requests and requests for a discount</span></li>
+      <li>{{> check}}<span>Questions your website and notes don't answer</span></li>
+      <li>{{> check}}<span>Each arrives as a short summary with a link to reply yourself</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap prose">
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">
+      Patient e-mails need care with data.
+    </h2>
+    <p>
+      E-mails to a clinic can contain health information. Noctiv stores its data in the EU
+      (Frankfurt, Germany), keeps e-mail text for 90 days by default (you can shorten this), never
+      uses your e-mails to train AI, and deletes everything with one button. Notifications show only
+      the sender's domain and a summary unless you switch on full text. You remain the controller
+      for your patients' data and Noctiv processes it on your behalf under a data processing
+      agreement; read <a href="/help/data-and-gdpr/">data and GDPR</a> and check it against your own
+      rules before you connect a mailbox that receives medical records.
+    </p>
+    <p>
+      Many practices connect a general enquiries address (info@ or hello@) rather than a clinician's
+      own mailbox. That keeps the routine questions with Noctiv and the clinical correspondence
+      where it already is.
+    </p>
+  </div>
+</section>
+
+{{> usecase-end}}

@@ -1,0 +1,157 @@
+<script type="application/json" id="page">
+  {
+    "title": "E-mail assistant for Shopify stores · Noctiv",
+    "description": "Noctiv answers Shopify customer e-mails at night from your own shipping, returns and product pages, follows up on unanswered pre-sale questions, and hands you refunds and complaints. $79/month.",
+    "crumb": "Shopify stores"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Customer e-mail for Shopify stores, answered overnight.</h1>
+    <p class="lead">
+      Noctiv reads the inbox your store's contact address goes to, drafts replies from your own
+      shipping, returns and product pages, and nudges the shoppers who asked a question and went
+      quiet. You approve from your phone.
+    </p>
+    <div class="actions">
+      <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
+      <a class="btn btn--secondary" href="/how-it-works/">How it works</a>
+    </div>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section" data-new>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The e-mails a Shopify store gets every day.</h2>
+      <p class="lead">
+        Most of them are the same few questions, asked at 23:00 by someone deciding whether to check
+        out. Noctiv answers from what your store already says, in the shopper's language.
+      </p>
+    </div>
+    <div class="rows rows--3">
+      <div class="row">
+        <h3>Shipping times and costs</h3>
+        <p>
+          "Do you ship to Austria? How long does it take?" Answered from your shipping page: zones,
+          prices, dispatch times and carriers, exactly as you wrote them.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Product questions before buying</h3>
+        <p>
+          Sizes, materials, care, what's in the box, whether two items fit together. If your product
+          pages or notes don't say it, Noctiv asks you instead of guessing.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Returns and exchanges</h3>
+        <p>
+          How many days, who pays the return label, how to start one. The policy question is
+          answered; an actual refund request always comes to you.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Payment and discount codes</h3>
+        <p>
+          Which payment methods you accept, whether a code can be combined. Requests for a discount
+          are never answered automatically: they are yours to decide.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Wholesale and bulk orders</h3>
+        <p>
+          A café wants 40 mugs? With Quotes (beta) switched on, Noctiv prepares a quote from your
+          price list as a PDF with an Accept link, and waits for your approval.
+        </p>
+      </div>
+      <div class="row">
+        <h3>"Where is my order?"</h3>
+        <p>
+          Noctiv can't look up Shopify orders yet (the integration is marked
+          <a href="/integrations/">coming soon</a>). General delivery times are answered from your
+          policy; a question about one specific order is passed to you with a short summary.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>An example reply.</h2>
+      <p class="lead">
+        A shopper writes late on a Sunday. The draft is ready a minute later, built only from the
+        store's shipping and returns pages, and waits for the owner's click in the morning.
+      </p>
+      <p class="muted" style="margin-top: var(--s-4)">
+        Example store and numbers. Noctiv uses your own, and checks every number in a draft against
+        your knowledge base.
+      </p>
+    </div>
+    <div class="example">
+      <div class="msg msg--in">
+        <div class="msg-meta"><span>Lena K. · customer</span><time>Sun 23:08</time></div>
+        Hi! Do you ship the stoneware mug set to Austria, and how long would it take? And if my
+        sister doesn't like the colour, can I send it back?
+      </div>
+      <div class="msg msg--draft">
+        <div class="msg-meta"><span>Noctiv · draft reply</span><time>Sun 23:09</time></div>
+        Hi Lena, yes, we ship to Austria. Orders leave our workshop within 2 business days and
+        usually arrive 3–5 business days later; shipping is €7.50. Unused items can be returned
+        within 30 days of delivery, so your sister has time to decide. Would you like the link to
+        the mug set?
+        <div class="msg-src">
+          {{> sourced}}<span
+            ><b>Sourced:</b> Shipping policy, Returns policy · no prices invented</span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>What stays with you.</h2>
+      <p class="lead">
+        A shop's reputation is made in the difficult e-mails. Those are never sent on their own, in
+        any mode.
+      </p>
+    </div>
+    <ul class="checklist">
+      <li>{{> check}}<span>Complaints, damaged items and refund requests</span></li>
+      <li>{{> check}}<span>Angry or urgent messages, and anything legal</span></li>
+      <li>{{> check}}<span>Requests for a discount or a special deal</span></li>
+      <li>{{> check}}<span>Questions your pages and notes don't answer</span></li>
+      <li>
+        {{> check}}<span
+          >Each arrives on your phone as a two-line summary with a link to reply</span
+        >
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap prose">
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">No Shopify app to install.</h2>
+    <p>
+      Noctiv works on the mailbox, not inside Shopify. You connect the address customers write to
+      (the one on your contact page and in your order e-mails) with an App Password, and add your
+      store's URL: Noctiv reads the shipping, returns, FAQ and product pages and keeps them fresh.
+      Add notes for anything the site doesn't say.
+    </p>
+    <p>
+      Shoppers who asked a question and didn't reply get a short, personal follow-up after three
+      days, sent during business hours, at most twice. It stops the moment they answer. Every
+      conversation lands in a simple lead list with its stage: received, replied, followed up, won.
+    </p>
+  </div>
+</section>
+
+{{> usecase-end}}

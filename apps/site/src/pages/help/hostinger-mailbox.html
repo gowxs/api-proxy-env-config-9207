@@ -1,0 +1,62 @@
+<script type="application/json" id="page">
+  {
+    "title": "Connect a Hostinger mailbox · Noctiv Help",
+    "description": "How to connect a Hostinger business e-mail to Noctiv: your full address and mailbox password from hPanel; servers imap.hostinger.com and smtp.hostinger.com are filled in for you.",
+    "crumb": "Hostinger"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Connect a Hostinger mailbox.</h1>
+    <p class="lead">
+      Hostinger mailboxes connect with your full e-mail address and the mailbox password. Choose
+      Hostinger in Noctiv and the servers are filled in for you.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Steps</h2>
+    <ol>
+      <li>
+        In Hostinger's <b>hPanel</b>, open <b>Emails</b> and find the mailbox you want to connect.
+        Under <b>Connect apps &amp; devices</b> you'll see the sign-in details.
+      </li>
+      <li>
+        In Noctiv, go to Settings → Mailboxes (or the onboarding step), choose <b>Hostinger</b> and
+        enter your full e-mail address.
+      </li>
+      <li>
+        Enter the mailbox password. If you don't know it, you can reset it in hPanel → Emails.
+      </li>
+      <li>Press <b>Test connection</b>. When both checks pass, save.</li>
+    </ol>
+
+    <h2>Server settings</h2>
+    <p>
+      Noctiv uses these for Hostinger; you only need them if you connect as "Other (IMAP/SMTP)".
+    </p>
+    <ul>
+      <li><b>Incoming (IMAP):</b> imap.hostinger.com, port 993, SSL</li>
+      <li><b>Outgoing (SMTP):</b> smtp.hostinger.com, port 465, SSL</li>
+    </ul>
+
+    <h2>If you use two-factor sign-in for webmail</h2>
+    <p>
+      Create a separate password for apps if your account offers one, and use that instead of your
+      webmail password.
+    </p>
+
+    <h2>Other hosts</h2>
+    <p>
+      IONOS, STRATO, one.com, OVHcloud, GoDaddy and most web hosts work the same way: the mailbox
+      password from your hosting control panel, with the servers your host lists. Noctiv only
+      accepts encrypted connections (IMAP 993, SMTP 465 or 587). If you type your address into the
+      Noctiv Assistant, it often recognises the host and fills in the servers.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

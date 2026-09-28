@@ -1,0 +1,153 @@
+<script type="application/json" id="page">
+  {
+    "title": "E-mail assistant for repair shops · Noctiv",
+    "description": "Noctiv answers repair price, turnaround and opening-hours e-mails from your own price list, sends quotes with an Accept link, invoices the finished job and follows up. $79/month.",
+    "crumb": "Repair shops"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>"How much to fix it?" answered before you open the shop.</h1>
+    <p class="lead">
+      Phone, laptop, bike or appliance repair: most e-mails ask for a price, a turnaround time or
+      your opening hours. Noctiv answers them from your own price list and notes, and leaves the
+      workbench to you.
+    </p>
+    <div class="actions">
+      <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
+      <a class="btn btn--secondary" href="/how-it-works/">How it works</a>
+    </div>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section" data-new>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The e-mails a repair shop gets.</h2>
+      <p class="lead">
+        Customers write when the thing breaks, which is often in the evening. The first shop that
+        answers with a clear price usually gets the job.
+      </p>
+    </div>
+    <div class="rows rows--3">
+      <div class="row">
+        <h3>Price requests</h3>
+        <p>
+          "How much is a new screen for my phone?" Answered from your price list. With Quotes
+          (beta), the price comes as a PDF quote with an Accept link.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Turnaround times</h3>
+        <p>
+          Same day, two days, a week if parts must be ordered: whatever your notes say, stated
+          plainly, never promised beyond it.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Opening hours and drop-off</h3>
+        <p>
+          Where to bring it, when you're open, whether they need an appointment, whether you
+          collect. The questions that interrupt you most.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Warranty questions</h3>
+        <p>
+          How long your repairs are guaranteed and what it covers, from your own terms. A claim that
+          something broke again comes to you.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Invoices for business customers</h3>
+        <p>
+          With Documents (beta), a finished job becomes a numbered invoice with your logo and bank
+          details, and the payment is matched when your bank's e-mail arrives.
+        </p>
+      </div>
+      <div class="row">
+        <h3>"Is my repair ready?"</h3>
+        <p>
+          Noctiv doesn't see your workbench or repair system, so a question about one customer's
+          device is passed to you with a short summary, ready for your answer.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>An example reply.</h2>
+      <p class="lead">
+        A customer drops a phone on Sunday evening. On Monday morning, the answer is drafted from
+        the price list and notes, and waits for your click.
+      </p>
+      <p class="muted" style="margin-top: var(--s-4)">
+        Example shop and prices. Every price in a draft is checked against your price list and
+        notes; if the model you ask about isn't listed, Noctiv asks you.
+      </p>
+    </div>
+    <div class="example">
+      <div class="msg msg--in">
+        <div class="msg-meta"><span>Jonas P. · customer</span><time>Sun 20:36</time></div>
+        Hi, my iPhone 13 screen cracked. How much would a new screen cost and how long do I have to
+        leave the phone with you?
+      </div>
+      <div class="msg msg--draft">
+        <div class="msg-meta"><span>Noctiv · draft reply</span><time>Sun 20:37</time></div>
+        Hi Jonas, sorry about the screen. Replacing an iPhone 13 screen costs €139, including a
+        6-month warranty on the part and the work. If you bring it in before 12:00, it's usually
+        ready the same afternoon. We're open Monday to Friday 10:00–18:00 and Saturday 10:00–14:00;
+        no appointment needed.
+        <div class="msg-src">
+          {{> sourced}}<span
+            ><b>Sourced:</b> Price list, Notes: hours and warranty · no prices invented</span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>What stays with you.</h2>
+      <p class="lead">
+        The e-mails that need a person are never answered automatically, in any mode.
+      </p>
+    </div>
+    <ul class="checklist">
+      <li>{{> check}}<span>Complaints, warranty claims and refund requests</span></li>
+      <li>{{> check}}<span>Angry or urgent messages, and anything legal</span></li>
+      <li>{{> check}}<span>Requests for a discount</span></li>
+      <li>{{> check}}<span>Devices or repairs that aren't on your price list</span></li>
+      <li>{{> check}}<span>Questions about a specific repair in progress</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap prose">
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">
+      Your price list, doing the talking.
+    </h2>
+    <p>
+      Add your repairs to the price list by hand, import a CSV, or upload the PDF or Word list you
+      already have: Noctiv reads it, and you confirm each line before it's used. Only confirmed
+      prices are ever quoted, and a quote above your automatic-send limit always waits for you.
+    </p>
+    <p>
+      Customers who asked for a price and didn't book get a short follow-up after three days, during
+      your business hours, at most twice. Every conversation lands in a lead list, so you see which
+      price requests turned into repairs, and the Monday summary tells you how many e-mails were
+      answered while the shop was closed.
+    </p>
+  </div>
+</section>
+
+{{> usecase-end}}

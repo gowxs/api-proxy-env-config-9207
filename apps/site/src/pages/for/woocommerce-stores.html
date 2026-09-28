@@ -1,0 +1,155 @@
+<script type="application/json" id="page">
+  {
+    "title": "E-mail assistant for WooCommerce stores · Noctiv",
+    "description": "Noctiv answers WooCommerce customer e-mails from your WordPress pages and notes, works with the mailbox your host gives you, prepares quotes and invoices for trade customers, and follows up. $79/month.",
+    "crumb": "WooCommerce stores"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Customer e-mail for WooCommerce stores, without another plugin.</h1>
+    <p class="lead">
+      Your store runs on WordPress and your mail runs at your host. Noctiv connects to that mailbox,
+      learns from your own pages, and drafts every reply for you to approve from your phone.
+    </p>
+    <div class="actions">
+      <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
+      <a class="btn btn--secondary" href="/how-it-works/">How it works</a>
+    </div>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section" data-new>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The e-mails a WooCommerce store gets.</h2>
+      <p class="lead">
+        Independent stores often sell to both shoppers and businesses. Noctiv handles the routine
+        questions from both, in the language each customer wrote in.
+      </p>
+    </div>
+    <div class="rows rows--3">
+      <div class="row">
+        <h3>Shipping and delivery</h3>
+        <p>
+          Zones, costs, free-shipping thresholds and dispatch days, answered from the shipping page
+          on your WordPress site, word for word where it matters.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Product and stock questions</h3>
+        <p>
+          Dimensions, materials, compatibility, when something is back. Noctiv uses your product
+          pages and notes; if the answer isn't there, you're asked, not guessed for.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Payment methods</h3>
+        <p>
+          "Can I pay by bank transfer?" Answered from your checkout and payment pages. When a
+          customer pays an invoice by transfer, Noctiv can match the bank's notification e-mail to
+          it.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Trade and bulk requests</h3>
+        <p>
+          A shop wants 60 units at a trade price. With Quotes (beta), Noctiv drafts a quote from
+          your price list as a PDF with an Accept link; you approve it before it goes.
+        </p>
+      </div>
+      <div class="row">
+        <h3>Invoices for business buyers</h3>
+        <p>
+          With Documents (beta), an accepted quote can become a numbered invoice with the buyer's
+          company and VAT details, and a delivery note once it's paid.
+        </p>
+      </div>
+      <div class="row">
+        <h3>"Where is my order?"</h3>
+        <p>
+          Noctiv can't read WooCommerce orders yet (the integration is marked
+          <a href="/integrations/">coming soon</a>). Your usual delivery times are answered; a
+          question about one specific order comes to you with a summary.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>An example reply.</h2>
+      <p class="lead">
+        A trade customer asks two things at once. Noctiv answers the one your pages cover and says
+        plainly what it found.
+      </p>
+      <p class="muted" style="margin-top: var(--s-4)">
+        Example store and numbers. In mode 1, which every account starts in, this draft waits for
+        your click; nothing is sent on its own.
+      </p>
+    </div>
+    <div class="example">
+      <div class="msg msg--in">
+        <div class="msg-meta"><span>Tomás R. · customer</span><time>Tue 21:47</time></div>
+        Hello, we run a small shop in Lisbon. Do you offer trade prices, and can we pay by bank
+        transfer against an invoice?
+      </div>
+      <div class="msg msg--draft">
+        <div class="msg-meta"><span>Noctiv · draft reply</span><time>Tue 21:48</time></div>
+        Hello Tomás, thank you for getting in touch. Yes, we offer trade prices from 24 units per
+        product, as listed on our wholesale page. Business customers can pay by bank transfer: we
+        send an invoice with our bank details, payable within 14 days. Which products are you
+        interested in? I can prepare a quote.
+        <div class="msg-src">
+          {{> sourced}}<span
+            ><b>Sourced:</b> Wholesale page, Payment terms · no prices invented</span
+          >
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap split">
+    <div>
+      <h2>What stays with you.</h2>
+      <p class="lead">
+        In every mode, the e-mails that need judgement are held for you, never sent automatically.
+      </p>
+    </div>
+    <ul class="checklist">
+      <li>{{> check}}<span>Refunds, returns disputes and complaints</span></li>
+      <li>{{> check}}<span>Angry, urgent or legal messages</span></li>
+      <li>{{> check}}<span>Discount requests and special deals</span></li>
+      <li>{{> check}}<span>Quotes above your automatic-send limit</span></li>
+      <li>{{> check}}<span>Anything your website and notes don't answer</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" data-new>
+  <div class="wrap prose">
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">
+      Works with the mail your host gives you.
+    </h2>
+    <p>
+      Many WooCommerce stores get their e-mail from the same company that hosts WordPress:
+      Hostinger, IONOS, a local provider. That's fine. Noctiv connects to any mailbox with IMAP and
+      SMTP, reads new messages without marking them as read, and sends from your own address, so
+      replies appear in your Sent folder like any other e-mail. Nothing is installed in WordPress
+      and nothing touches your store's database.
+    </p>
+    <p>
+      Add your store's URL and Noctiv reads your pages as its knowledge base; add files (PDF, Word)
+      or short notes for what the site doesn't say. When a customer goes quiet after a question or a
+      quote, Noctiv follows up after three days, during business hours, at most twice.
+    </p>
+  </div>
+</section>
+
+{{> usecase-end}}

@@ -831,3 +831,141 @@
   margin-top: var(--s-3);
   max-width: 62ch;
 }
+
+/* ---------- Breadcrumbs (inner pages below /for, /compare, /help) ---------- */
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-2);
+  list-style: none;
+  padding: 0;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.crumbs li + li::before {
+  content: '›';
+  margin-right: var(--s-2);
+  color: var(--text-3);
+}
+.crumbs a {
+  color: var(--text-2);
+}
+.crumbs [aria-current] {
+  color: var(--text);
+}
+.page-head .crumbs + h1 {
+  margin-top: var(--s-4);
+}
+.page-head .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-6);
+}
+
+/* ---------- Link lists (use cases, comparisons, help) ---------- */
+.links {
+  display: grid;
+  gap: var(--s-4);
+  list-style: none;
+  padding: 0;
+  margin-top: var(--s-6);
+}
+@media (min-width: 48rem) {
+  .links {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (min-width: 64rem) {
+  .links--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.links a {
+  display: block;
+  height: 100%;
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.links a:hover {
+  border-color: var(--line-strong);
+}
+.links b {
+  display: block;
+  font-weight: 700;
+}
+.links span {
+  display: block;
+  margin-top: var(--s-1);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.audience .more {
+  margin-top: var(--s-4);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.example {
+  display: grid;
+  gap: var(--s-3);
+  max-width: 36rem;
+}
+.facts {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.facts th,
+.facts td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--s-3) var(--s-3) var(--s-3) 0;
+  border-top: 1px solid var(--line);
+}
+.facts thead th {
+  border-top: 0;
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.facts td {
+  color: var(--text-2);
+}
+.table-scroll {
+  overflow-x: auto;
+}
+/* Phones: each comparison row becomes a small card, labels from data-label. */
+@media (max-width: 40rem) {
+  .facts thead {
+    display: none;
+  }
+  .table-scroll .facts {
+    min-width: 0;
+  }
+  .facts,
+  .facts tbody,
+  .facts tr,
+  .facts th,
+  .facts td {
+    display: block;
+  }
+  .facts tbody tr {
+    padding-block: var(--s-3);
+    border-top: 1px solid var(--line);
+  }
+  .facts th,
+  .facts td {
+    border-top: 0;
+    padding: var(--s-1) 0;
+  }
+  .facts td::before {
+    content: attr(data-label) ':\00a0';
+    font-weight: 700;
+    color: var(--text);
+  }
+}

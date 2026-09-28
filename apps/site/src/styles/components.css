@@ -777,11 +777,23 @@ textarea.input {
 }
 .footer-grid {
   display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--s-6);
+}
+.footer-grid > :first-child {
+  grid-column: 1 / -1;
 }
 @media (min-width: 48rem) {
   .footer-grid {
-    grid-template-columns: 1.4fr repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (min-width: 72rem) {
+  .footer-grid {
+    grid-template-columns: 1.4fr repeat(4, 1fr);
+  }
+  .footer-grid > :first-child {
+    grid-column: auto;
   }
 }
 .site-footer ul {

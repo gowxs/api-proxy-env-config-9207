@@ -1,0 +1,49 @@
+<script type="application/json" id="page">
+  {
+    "title": "Outlook and Microsoft 365: not supported yet · Noctiv Help",
+    "description": "Noctiv can't connect to Outlook.com or Microsoft 365 mailboxes yet, because Microsoft no longer allows password sign-in for them. What works instead, and how to ask for it.",
+    "crumb": "Outlook and Microsoft 365"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Outlook and Microsoft 365: not yet.</h1>
+    <p class="lead">
+      Noctiv can't connect to Outlook.com, Hotmail or Microsoft 365 mailboxes yet. Tell us if you
+      need it; the more businesses ask, the sooner it comes.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Why</h2>
+    <p>
+      Noctiv connects to mailboxes with IMAP and SMTP and a password made for it (an App Password or
+      the mailbox password). Microsoft no longer allows that kind of password sign-in for
+      Outlook.com and Microsoft 365 mailboxes; they need Microsoft's own sign-in instead, which
+      Noctiv doesn't support yet.
+    </p>
+    <p>
+      If you give the Noctiv Assistant your e-mail address and your domain's mail is hosted by
+      Microsoft, it recognises that and tells you straight away, rather than letting the connection
+      test fail.
+    </p>
+
+    <h2>What works today</h2>
+    <p>
+      Every other business mailbox with IMAP and SMTP: Gmail, Google Workspace, Yahoo, Hostinger,
+      Zoho, iCloud, GMX, IONOS and most web hosts. If you use the Outlook app to read mail from one
+      of those providers, that's fine: Noctiv connects to the mailbox, not the app.
+    </p>
+
+    <h2>Ask for it</h2>
+    <p>
+      Write to <a href="mailto:contact@noctiv.io">contact@noctiv.io</a> with "Outlook" in the
+      subject, and we'll let you know when it's ready.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

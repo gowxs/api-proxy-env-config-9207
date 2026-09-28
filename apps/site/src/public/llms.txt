@@ -1,0 +1,62 @@
+# Noctiv
+
+> Noctiv is an e-mail assistant for small businesses. It connects to the business's existing mailbox, reads every customer e-mail, drafts a reply from the business's own website, price list and notes, follows up with customers who went quiet, and prepares quotes, invoices, delivery notes and CMR consignment notes. The owner approves with one click from a phone, or lets fully grounded replies go out automatically.
+
+Website: https://noctiv.io
+App: https://app.noctiv.io
+Contact: contact@noctiv.io
+Operator: Noctiv, operated by Gvido Angarskis, Latvia (EU)
+
+## What it does
+
+- Replies within minutes, in the customer's language, built only from the business's knowledge base (website pages, PDF/Word/text files, notes). It never invents prices, dates or promises: every number in a draft must appear in the knowledge base, and a second check confirms it before anything is sent automatically. If the answer isn't there, the owner is asked instead.
+- Follow-ups: if a customer doesn't answer, a short personal follow-up after three days (default), sent Monday to Friday 09:00–17:00 in the business's time zone, at most twice; it stops when the customer replies.
+- Lead list: every conversation becomes a lead with a stage (received, replied, followed up, quoted, accepted, won).
+- Quotes (beta): price requests become numbered quotes from the business's confirmed price list, as a PDF with an online Accept link; totals and VAT are computed in code.
+- Invoices, delivery notes and CMR consignment notes (beta): numbered PDFs with the business's logo; an accepted quote can become an invoice automatically; bank payment notification e-mails are matched to invoices.
+- Noctiv Assistant: the owner asks questions or gives instructions in plain language ("Send Anna an invoice for €290, due in 7 days"); the assistant prepares cards (settings, notes, invoices, e-mails, marking paid) and nothing happens until the owner confirms.
+- Monday summary: a weekly e-mail with e-mails answered, reply times, follow-ups, quotes, invoices paid and estimated hours saved.
+
+## Reply modes
+
+1. Approve everything (every account starts here): every reply waits for the owner's approval.
+2. Auto-reply to grounded questions: replies fully backed by the knowledge base are sent automatically; the rest waits.
+3. Fully automatic: like mode 2, and unanswerable questions get a short acknowledgement while the owner is told.
+
+In every mode, complaints, refunds, legal questions, discount requests and angry or urgent e-mails always go to the owner with no automatic reply.
+
+## Mailboxes
+
+Works with any business mailbox over IMAP/SMTP: Gmail, Google Workspace, Yahoo, Hostinger, Zoho, iCloud, GMX, IONOS and most web hosts, connected with an App Password in about two minutes. Replies are sent from the business's own address. Outlook.com and Microsoft 365 are not supported yet.
+
+## Pricing
+
+- One plan: $79 per month per business, plus VAT where applicable.
+- 14-day free trial, no card required.
+- Includes one connected mailbox, unlimited conversations, all three reply modes, follow-ups, quotes and documents (beta), the assistant.
+- Billing by Paddle (merchant of record). Cancel any time; no minimum term.
+
+## Limits
+
+- One connected mailbox per plan (more on request).
+- E-mail only: no live chat, SMS or social messaging.
+- Shopify and WooCommerce order-status lookups are not available yet (coming soon); questions about a specific order go to the owner.
+- Noctiv does not book appointments or manage calendars.
+- Not accounting software: no ledger or bookkeeping export.
+
+## Data and privacy
+
+- Data stored in the EU (Frankfurt, Germany). AI processing by Google Cloud Vertex AI in the Netherlands. Application servers temporarily in the United Kingdom (EU adequacy decision).
+- E-mail text kept 90 days by default (can be shortened); one button deletes all data.
+- E-mails are never used to train AI models. No cookies or tracking on the website.
+
+## Pages
+
+- [How it works](https://noctiv.io/how-it-works/): from an e-mail at night to approval in the morning
+- [Pricing](https://noctiv.io/pricing/): the plan, the three modes, billing questions
+- [Integrations](https://noctiv.io/integrations/): what connects today and what is coming
+- [Use cases](https://noctiv.io/for/): Shopify stores, WooCommerce stores, agencies, repair shops, clinics
+- [Comparisons](https://noctiv.io/compare/): Noctiv vs Tidio, Gorgias, Gemini in Gmail
+- [Help centre](https://noctiv.io/help/): connecting mailboxes, modes, knowledge base, quotes, invoices, CMR, assistant, billing, data
+- [Privacy](https://noctiv.io/privacy/), [Terms](https://noctiv.io/terms/), [Refund policy](https://noctiv.io/refunds/)
+- [Full text of every page](https://noctiv.io/llms-full.txt)

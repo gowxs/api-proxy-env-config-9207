@@ -35,7 +35,57 @@ interface PageMeta {
   noindex?: boolean;
   /** Inline scripts from src/scripts, e.g. ["demo.js"]. */
   scripts?: string[];
+  /** Short name in breadcrumbs (default: the title up to " · "). */
+  crumb?: string;
+  /** Adds the SoftwareApplication structured data (home and pricing). */
+  product?: boolean;
 }
+
+/** Facts shared by the structured data and llms.txt: keep in step with Pricing. */
+const ORGANIZATION = {
+  '@type': 'Organization',
+  '@id': `${ORIGIN}/#organization`,
+  name: 'Noctiv',
+  url: `${ORIGIN}/`,
+  logo: `${ORIGIN}/brand/avatar-400.png`,
+  email: 'contact@noctiv.io',
+  address: { '@type': 'PostalAddress', addressCountry: 'LV' },
+  contactPoint: {
+    '@type': 'ContactPoint',
+    contactType: 'customer support',
+    email: 'contact@noctiv.io',
+    availableLanguage: ['en'],
+  },
+};
+const SOFTWARE = {
+  '@type': 'SoftwareApplication',
+  '@id': `${ORIGIN}/#software`,
+  name: 'Noctiv',
+  url: `${ORIGIN}/`,
+  description:
+    "An e-mail assistant for small businesses: it reads the business mailbox, drafts replies from the business's own prices and policies, follows up with customers who went quiet, and makes quotes, invoices and delivery notes. The owner approves with one click.",
+  applicationCategory: 'BusinessApplication',
+  applicationSubCategory: 'E-mail assistant',
+  operatingSystem: 'Web',
+  publisher: { '@id': `${ORIGIN}/#organization` },
+  offers: {
+    '@type': 'Offer',
+    price: '79',
+    priceCurrency: 'USD',
+    url: `${ORIGIN}/pricing/`,
+    description:
+      'Per business, per month, plus VAT where applicable. 14 days free, no card to start.',
+    priceSpecification: {
+      '@type': 'UnitPriceSpecification',
+      price: '79',
+      priceCurrency: 'USD',
+      unitText: 'month',
+      referenceQuantity: { '@type': 'QuantitativeValue', value: 1, unitCode: 'MON' },
+    },
+  },
+};
+/** Names of the section index pages, for breadcrumbs of the pages below them. */
+const SECTIONS: Record<string, string> = { for: 'Use cases', compare: 'Compare', help: 'Help' };
 
 const read = (p: string) => readFileSync(p, 'utf8');
 
@@ -151,6 +201,84 @@ function headers(scripts: string[]): string {
 const escapeAttr = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
+const decode = (s: string) =>
+  s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+const oneLine = (html: string) =>
+  decode(html.replace(/<[^>]+>/g, ''))
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** JSON-LD for the head; "<" escaped so text can never close the script element. */
+const jsonLd = (data: object) =>
+  `<script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...data }).replace(/</g, '\\u003c')}</script>`;
+
+/** FAQPage from the page's .faq block (summary = question, the rest = answer). */
+function faqSchema(content: string): object | null {
+  const faq = /<div class="faq"[^>]*>([\s\S]*?)<\/div>/.exec(content)?.[1];
+  if (!faq) return null;
+  const items = [...faq.matchAll(/<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/g)].map(
+    ([, q, a]) => ({
+      '@type': 'Question',
+      name: oneLine(q!),
+      acceptedAnswer: { '@type': 'Answer', text: oneLine(a!) },
+    }),
+  );
+  return items.length ? { '@type': 'FAQPage', mainEntity: items } : null;
+}
+
+/** Page text for llms-full.txt: headings, paragraphs and lists as plain Markdown. */
+function pageText(content: string): string {
+  return decode(
+    content
+      .replace(/\s+/g, ' ')
+      .replace(/<(script|style|svg|form|picture|template)\b[\s\S]*?<\/\1>/g, '')
+      .replace(/<time\b[^>]*>/g, ' · ')
+      .replace(/<\/b>\s*<span>/g, '</b>: <span>')
+      .replace(/<p\b[^>]*>/g, '\n\n')
+      .replace(/<nav class="crumbs"[\s\S]*?<\/nav>/g, '')
+      .replace(/<(img|input|hr)\b[^>]*>/g, '')
+      .replace(/<a class="btn[^"]*"[^>]*>[\s\S]*?<\/a>/g, '')
+      .replace(/<h1[^>]*>/g, '\n\n# ')
+      .replace(/<h2[^>]*>/g, '\n\n## ')
+      .replace(/<(h3|summary)[^>]*>/g, '\n\n### ')
+      .replace(/<\/(h[1-6]|summary)>/g, '\n')
+      .replace(/<li[^>]*>/g, '\n- ')
+      .replace(
+        /<(p|div|section|article|ol|ul|dl|dt|tr|details|blockquote|figure|figcaption|br)\b[^>]*>/g,
+        '\n',
+      )
+      .replace(/<[^>]+>/g, ''),
+  )
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/(^- .*)\n\n(?=- )/gm, '$1\n')
+    .trim();
+}
+
+/** All pages under src/pages, nested folders included ("help/billing.html"). */
+function pageFiles(dir = join(SRC, 'pages'), prefix = ''): string[] {
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) =>
+      e.isDirectory()
+        ? pageFiles(join(dir, e.name), `${prefix}${e.name}/`)
+        : e.name.endsWith('.html')
+          ? [prefix + e.name]
+          : [],
+    )
+    .sort();
+}
+
+/** robots.txt: everyone may crawl; the AI crawlers are named so the intent is explicit. */
+const AI_CRAWLERS = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended'];
+
 export function build(): { pages: string[] } {
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
@@ -204,16 +332,78 @@ export function build(): { pages: string[] } {
   const pages: string[] = [];
   const sitemap: string[] = [];
 
-  for (const file of readdirSync(join(SRC, 'pages')).filter((f) => f.endsWith('.html'))) {
+  // First pass: every page's meta and path, so breadcrumbs can name their parents.
+  const entries = pageFiles().map((file) => {
     const raw = read(join(SRC, 'pages', file));
     const m = /^<script type="application\/json" id="page">([\s\S]*?)<\/script>\s*/.exec(raw);
     if (!m) throw new Error(`${file}: missing page header`);
     const meta = JSON.parse(m[1]!) as PageMeta;
     const slug = file.replace(/\.html$/, '');
-    const path = slug === 'index' ? '/' : slug === '404' ? '/404' : `/${slug}/`;
+    const path =
+      slug === 'index'
+        ? '/'
+        : slug === '404'
+          ? '/404'
+          : `/${slug.replace(/(^|\/)index$/, '')}/`.replace(/\/\/$/, '/');
+    const target = slug === '404' ? '404.html' : join(path.slice(1), 'index.html');
+    return { file, body: raw.slice(m[0].length), meta, path, target };
+  });
+  const crumbName = (meta: PageMeta) => meta.crumb ?? meta.title.split(' · ')[0]!;
+  const texts: { path: string; title: string; text: string }[] = [];
+
+  for (const { file, body, meta, path, target } of entries) {
     const scripts = (meta.scripts ?? [])
       .map((s) => `<script>${minifyJs(read(join(SRC, 'scripts', s)))}</script>`)
       .join('');
+
+    // Breadcrumbs: Home › section › page (inner pages only).
+    const trail: { name: string; path: string }[] = [];
+    if (path !== '/' && path !== '/404') {
+      trail.push({ name: 'Home', path: '/' });
+      const section = /^\/([^/]+)\/[^/]+\/$/.exec(path)?.[1];
+      if (section) trail.push({ name: SECTIONS[section] ?? section, path: `/${section}/` });
+      trail.push({ name: crumbName(meta), path });
+    }
+    const crumbs = trail.length
+      ? `<nav class="crumbs" aria-label="Breadcrumb"><ol>${trail
+          .map((c, i) =>
+            i === trail.length - 1
+              ? `<li aria-current="page">${c.name}</li>`
+              : `<li><a href="${c.path}">${c.name}</a></li>`,
+          )
+          .join('')}</ol></nav>`
+      : '';
+
+    const content = render(body, { app: APP_URL, crumbs }, parts);
+    const graph: object[] = [];
+    if (path === '/') {
+      graph.push(ORGANIZATION, {
+        '@type': 'WebSite',
+        '@id': `${ORIGIN}/#website`,
+        name: 'Noctiv',
+        url: `${ORIGIN}/`,
+        publisher: { '@id': `${ORIGIN}/#organization` },
+      });
+    }
+    if (meta.product) graph.push(SOFTWARE);
+    const faq = faqSchema(content);
+    if (faq) graph.push(faq);
+    if (trail.length) {
+      graph.push({
+        '@type': 'BreadcrumbList',
+        itemListElement: trail.map((c, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: c.name,
+          item: ORIGIN + c.path,
+        })),
+      });
+    }
+    const head = [
+      meta.noindex ? '<meta name="robots" content="noindex" />' : '',
+      graph.length && !meta.noindex ? jsonLd({ '@graph': graph }) : '',
+    ].join('');
+
     const html = render(
       layout,
       {
@@ -221,10 +411,10 @@ export function build(): { pages: string[] } {
         description: escapeAttr(meta.description),
         url: ORIGIN + path,
         origin: ORIGIN,
-        head: meta.noindex ? '<meta name="robots" content="noindex" />' : '',
+        head,
         css,
         // Partials inside the page body are expanded before it goes into the layout.
-        content: render(raw.slice(m[0].length), { app: APP_URL }, parts),
+        content,
         scripts,
         nav: meta.nav ?? '',
         app: APP_URL,
@@ -232,8 +422,6 @@ export function build(): { pages: string[] } {
       },
       parts,
     );
-    const target =
-      slug === 'index' ? 'index.html' : slug === '404' ? '404.html' : join(slug, 'index.html');
     mkdirSync(dirname(join(DIST, target)), { recursive: true });
     const finalHtml = withFonts(minifyHtml(html));
     const leftover = /\{\{[^}]*\}\}/.exec(finalHtml);
@@ -241,7 +429,10 @@ export function build(): { pages: string[] } {
     for (const m of finalHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)) inlineScripts.add(m[1]!);
     writeFileSync(join(DIST, target), finalHtml);
     pages.push(path);
-    if (!meta.noindex && slug !== '404') sitemap.push(ORIGIN + path);
+    if (!meta.noindex && path !== '/404') {
+      sitemap.push(ORIGIN + path);
+      if (path !== '/') texts.push({ path, title: meta.title, text: pageText(content) });
+    }
   }
 
   if (existsSync(join(SRC, 'public'))) cpSync(join(SRC, 'public'), DIST, { recursive: true });
@@ -256,7 +447,20 @@ export function build(): { pages: string[] } {
   );
   writeFileSync(
     join(DIST, 'robots.txt'),
-    `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`,
+    `${['*', ...AI_CRAWLERS].map((a) => `User-agent: ${a}\nAllow: /\n`).join('\n')}\nSitemap: ${ORIGIN}/sitemap.xml\n`,
+  );
+
+  // llms-full.txt: the summary (src/public/llms.txt), then every page's text.
+  const order = (p: string) =>
+    ['/how-it-works/', '/pricing/', '/integrations/', '/for/', '/compare/', '/help/'].findIndex(
+      (x) => p.startsWith(x),
+    ) >>> 0;
+  writeFileSync(
+    join(DIST, 'llms-full.txt'),
+    `${read(join(SRC, 'public', 'llms.txt')).trim()}\n\n---\n\nThe full text of every page on ${ORIGIN} follows.\n\n${texts
+      .sort((a, b) => order(a.path) - order(b.path) || a.path.localeCompare(b.path))
+      .map((t) => `---\n\nSource: ${ORIGIN}${t.path}\n\n${t.text}`)
+      .join('\n\n')}\n`,
   );
   return { pages };
 }

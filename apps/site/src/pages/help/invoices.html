@@ -1,0 +1,73 @@
+<script type="application/json" id="page">
+  {
+    "title": "Invoices, delivery notes and payments (beta) · Noctiv Help",
+    "description": "How to issue invoices and delivery notes in Noctiv, send them with a reply, invoice automatically when a quote is accepted, and match bank payment e-mails to invoices.",
+    "crumb": "Invoices and payments"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Invoices, delivery notes and payments (beta).</h1>
+    <p class="lead">
+      Numbered PDFs with your logo, sent from your own mailbox, and payments recognised from your
+      bank's e-mails. Switch it on in Settings → Documents (beta).
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Set up once</h2>
+    <p>
+      Add your seller details (legal name, address, registration and VAT numbers, bank and IBAN) and
+      your default payment term. You can set your own number prefix per document type; numbers
+      restart every calendar year, with no gaps.
+    </p>
+
+    <h2>Invoices</h2>
+    <ul>
+      <li>Create one from an accepted quote in one click, or type the lines yourself.</li>
+      <li>
+        VAT follows your settings (added, included or none), with reverse charge for EU business
+        customers when both VAT numbers are known.
+      </li>
+      <li>
+        When it's ready it gets its number and PDF; you send it as an attachment on a reply, and
+        nothing is ever sent without your action.
+      </li>
+    </ul>
+
+    <h2>Delivery notes</h2>
+    <p>
+      Made from an invoice or by hand, with signature boxes. Optionally with prices, as a delivery
+      note and invoice in one.
+    </p>
+
+    <h2>Automations</h2>
+    <ul>
+      <li>
+        <b>Invoice when a quote is accepted</b> (on by default): the invoice is issued with the
+        billing details the customer entered, and the reply follows your reply mode.
+      </li>
+      <li><b>Delivery note after payment</b> (off by default).</li>
+      <li>
+        <b>Overdue reminder:</b> one polite reminder three days after the due date, with the PDF.
+      </li>
+    </ul>
+
+    <h2>Payments</h2>
+    <p>
+      Add your bank's domain under "Bank notification senders". When a payment notification arrives
+      and passes the sender checks, Noctiv reads the amount and reference and matches it to the open
+      invoice. An exact match is marked paid (in mode 1 you confirm with one click); anything less
+      certain waits in Payments for you.
+    </p>
+    <p>
+      Noctiv is not accounting software: there's no ledger or bookkeeping export yet. See also
+      <a href="/help/cmr/">CMR consignment notes</a>.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

@@ -1,0 +1,63 @@
+<script type="application/json" id="page">
+  {
+    "title": "Quotes (beta) · Noctiv Help",
+    "description": "How Noctiv answers price requests with a quote from your own price list: PDF, Accept link, totals and VAT computed in code, validity, automatic-send limit and what the customer sees.",
+    "crumb": "Quotes"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Quotes (beta).</h1>
+    <p class="lead">
+      When a customer asks what something costs, Noctiv can reply with a numbered quote from your
+      price list, as a PDF with an Accept link. Switch it on in Settings → Quotes (beta).
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Your price list</h2>
+    <p>
+      Add items by hand, import a CSV, or upload the PDF or Word price list you already have. Items
+      read from a file arrive as drafts: you check and confirm each one. Only confirmed items are
+      ever quoted.
+    </p>
+
+    <h2>How a quote is made</h2>
+    <ul>
+      <li>Noctiv matches what the customer asked for to items on your list.</li>
+      <li>
+        Quantities must come from the customer's e-mail; totals, VAT, the quote number and the
+        validity date are computed in code, never by the AI.
+      </li>
+      <li>
+        Parts it can't match are answered from your knowledge base or passed to you; if nothing
+        matches, it asks the customer one clarifying question.
+      </li>
+    </ul>
+
+    <h2>What the customer gets</h2>
+    <p>
+      A short reply with the quote attached as a PDF (with your logo and colour) and a link to
+      accept it online. On that page they enter their billing details and press Accept; you're told
+      straight away. The quote, the page and the PDF use the customer's language.
+    </p>
+
+    <h2>Sending rules</h2>
+    <p>
+      In mode 1 every quote waits for you, and you can change quantities, remove lines or add items
+      before sending. In modes 2 and 3 a quote is sent on its own only if every line matched, and
+      the total is at or under your automatic-send limit (€500 unless you change it).
+    </p>
+
+    <h2>After acceptance</h2>
+    <p>
+      With Documents (beta) on, an accepted quote can become an invoice automatically. See
+      <a href="/help/invoices/">invoices and payments</a>.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

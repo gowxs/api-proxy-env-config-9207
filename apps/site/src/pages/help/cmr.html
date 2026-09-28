@@ -1,0 +1,58 @@
+<script type="application/json" id="page">
+  {
+    "title": "CMR consignment notes (beta) · Noctiv Help",
+    "description": "Create a CMR consignment note in Noctiv: the standard form with boxes 1–24 in English and French, four copies in one PDF, and pre-fill from an order e-mail that you check before issuing.",
+    "crumb": "CMR"
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>CMR consignment notes (beta).</h1>
+    <p class="lead">
+      For businesses that ship goods by road: the standard CMR form, filled from your details and
+      the customer's order e-mail, as one PDF with four copies.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">The form</h2>
+    <p>
+      The standard layout with boxes 1–24 (sender, consignee, places and dates, goods, weights and
+      volumes, instructions, carrier, signatures), the vehicle registration and the convention
+      clause. Labels are in English and French, as on the usual form. The PDF has four copies, one
+      per page: sender, consignee, carrier and an extra copy.
+    </p>
+
+    <h2>Pre-fill from an order e-mail</h2>
+    <ol>
+      <li>Open the customer's e-mail in the Inbox and choose "Draft CMR from this e-mail".</li>
+      <li>
+        Noctiv fills the fields it can find in that e-mail. Each one is kept only if its exact text
+        appears in the e-mail, and numbers and dates are read from that text by code.
+      </li>
+      <li>
+        Pre-filled fields are highlighted with the text they came from. The sender is always your
+        own details.
+      </li>
+      <li>
+        Check every highlighted field and confirm; only then can the CMR be issued and the PDF made.
+      </li>
+    </ol>
+
+    <h2>After issuing</h2>
+    <p>
+      The CMR gets its number (CMR-2026-0001 by default, or your own prefix) and can be sent as an
+      attachment on a reply, then marked as delivered. The e-mail excerpts used for pre-fill are
+      removed once it's issued.
+    </p>
+    <p>
+      Documents (beta) must be switched on in Settings. See also
+      <a href="/help/invoices/">invoices and delivery notes</a>.
+    </p>
+    {{> help-end}}
+  </div>
+</section>

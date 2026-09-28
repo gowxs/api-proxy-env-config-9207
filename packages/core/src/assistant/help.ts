@@ -23,7 +23,7 @@ QUOTES (beta)
 From a confirmed price list, Noctiv answers price requests with a quote (PDF and an Accept link) with totals computed in code. Quotes above the automatic-send limit, or with items not on the price list, wait for the owner. The customer accepts on a page, entering billing details.
 
 DOCUMENTS (beta)
-Invoices, delivery notes and CMR consignment notes as PDFs, numbered per year. Optionally an invoice is made when a quote is accepted, and a delivery note after payment. Payments are recognised from the bank's notification e-mails. Documents are made by the owner or by these automations; the assistant never creates documents.
+Invoices, delivery notes and CMR consignment notes as PDFs, numbered per year. Optionally an invoice is made when a quote is accepted, and a delivery note after payment. Payments are recognised from the bank's notification e-mails. Documents are made by the owner, by these automations, or by the assistant after the owner confirms its card.
 
 VALUE AND REPORTS
 The dashboard shows "This month": e-mails answered, average reply time compared with answering only in business hours, follow-ups, replies won back, quotes, invoices paid and an estimate of hours saved (the owner's own minutes per reply and follow-up). A summary e-mail arrives every Monday at 08:00 local time (can be switched off).
