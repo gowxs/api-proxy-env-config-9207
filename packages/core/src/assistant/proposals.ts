@@ -44,6 +44,7 @@ export const ASSISTANT_PROPOSAL_TYPES = [
   'send_email',
   'mark_paid',
   'connect_mailbox',
+  'create_quote',
 ] as const;
 export type AssistantProposalType = (typeof ASSISTANT_PROPOSAL_TYPES)[number];
 

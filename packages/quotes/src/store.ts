@@ -272,8 +272,13 @@ export function quotePdfInput(
 }
 
 /** The cover reply for the quote draft (fixed text; every number from the document). */
-export const quoteCoverFor = (d: QuoteDocument, acceptUrl: string) =>
+export const quoteCoverFor = (
+  d: QuoteDocument,
+  acceptUrl: string,
+  opts: { unrequested?: boolean } = {},
+) =>
   quoteCoverText({
+    ...opts,
     language: d.language,
     customerName: greetingName(d.customerName),
     number: d.number,

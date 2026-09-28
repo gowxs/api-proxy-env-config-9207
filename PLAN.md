@@ -1029,6 +1029,11 @@ The owner asked (in Latvian) to send "our offer" to an address; the price list w
 - **Offer flow:** "send our offer / services / prices" → price_list, else knowledge_search → in one answer a `send_email` card listing the services and prices as the excerpts state them (the card shows "Prices from your note «…»") and a `price_items` card filling the price list. Never the "price list is empty" dead end when the knowledge base has prices. A formal quote card (PDF, Accept) is not offered from the assistant: quotes need a customer conversation (`quotes.thread_id`); open point.
 - **Tone:** at most three short sentences (or a list); look things up instead of asking; never repeat the previous request; say once what it cannot do and offer the nearest thing. Code backstop: an answer that asks the owner for services/prices (six languages) before any knowledge tool ran gets one instruction to search first.
 
+### 27.y Quote card (founder request after the Latvian session)
+- `create_quote` card: customer (an address the owner wrote, or a known customer), items by their price-list names, quantity 1 unless the owner said another. Prices, VAT and totals always from the confirmed price list (the model's prices are ignored); items not on it, or a quantity nobody said, give no card. Needs Quotes (beta) on. The card shows lines, totals and validity; confirming opens the send dialog.
+- Confirm → `POST /v1/tenants/:id/quotes/new`: lead, a new conversation (like Compose, from the connected mailbox), the next quote number, lines from the price list, the cover in the conversation's language without "thank you for your request", subject "Piedāvājums Q-…" (in that language), the draft approved and sent by the worker with the PDF and Accept link. Migration `20261005000100`: the card type, and insert/update(draft_id) on quotes for the API role.
+- Offer flow: with price-list items the assistant proposes a quote card; with an empty price list, the e-mail with knowledge-base prices plus the price-list card (27.x).
+
 ## 28. Your brand: logo and colour (founder request 2026-10-01)
 
 - **Where:**

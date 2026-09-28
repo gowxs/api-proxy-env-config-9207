@@ -25,6 +25,7 @@ import {
   type AssistantMessage,
   type AssistantProposal,
   type AssistantThread,
+  type QuoteLine,
 } from '@/lib/assistant';
 import { modeRank, type Mode } from '@/lib/modes';
 
@@ -165,8 +166,11 @@ function ProposalCard({
               ? a.paid
               : p.type === 'connect_mailbox'
                 ? a.mailbox
-                : null;
+                : p.type === 'create_quote'
+                  ? a.quote
+                  : null;
   const docLines = p.type === 'create_document' ? (pl.lines as unknown as DocLine[]) : [];
+  const quoteLines = p.type === 'create_quote' ? (pl.lines as unknown as QuoteLine[]) : [];
   const dialogText =
     p.type === 'send_email'
       ? {
@@ -178,7 +182,9 @@ function ProposalCard({
         }
       : p.type === 'mark_paid'
         ? { title: a.paidTitle, body: a.paidBody, check: w.sendingCheck, button: w.confirm }
-        : undefined;
+        : p.type === 'create_quote'
+          ? { title: a.quoteTitle, body: a.quoteBody, check: a.quoteCheck, button: a.send }
+          : undefined;
   const dialogLines: [string, string][] =
     p.type === 'send_email'
       ? [
@@ -187,7 +193,14 @@ function ProposalCard({
         ]
       : p.type === 'mark_paid'
         ? [['Document', pl.number ?? '']]
-        : (pl.lines ?? []);
+        : p.type === 'create_quote'
+          ? [
+              ['To', pl.name ? `${pl.name} <${pl.to}>` : (pl.to ?? '')],
+              ...(pl.totals
+                ? ([['Total', money(pl.totals.totalCents, cur, locale)]] as [string, string][])
+                : []),
+            ]
+          : (pl.lines ?? []);
   return (
     <div className="mt-2 rounded-xl border border-indigo-200 bg-white p-3 text-sm shadow-sm">
       <p className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">
@@ -274,6 +287,62 @@ function ProposalCard({
             <p className="text-neutral-600">
               Due{' '}
               {new Date(`${pl.dueDate}T12:00:00Z`).toLocaleDateString(INTL_LOCALE[locale], {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </p>
+          )}
+        </div>
+      )}
+      {p.type === 'create_quote' && (
+        <div className="mt-2 space-y-2">
+          <p className="text-neutral-700 break-all">
+            {pl.name ? (
+              <>
+                <span className="font-medium">{pl.name}</span> · {pl.to}
+              </>
+            ) : (
+              <span className="font-medium">{pl.to}</span>
+            )}
+          </p>
+          <ul className="divide-y divide-neutral-100">
+            {quoteLines.map((l) => (
+              <li key={l.priceItemId} className="flex justify-between gap-3 py-1">
+                <span>
+                  {l.name}
+                  {l.qty !== 1 ? ` × ${l.qty} ${l.unit}` : ''}
+                </span>
+                <span className="tabular-nums">{money(l.lineTotalCents, cur, locale)}</span>
+              </li>
+            ))}
+          </ul>
+          {pl.totals && (
+            <dl className="space-y-0.5 border-t border-neutral-200 pt-1 tabular-nums">
+              {pl.vatMode !== 'none' && (
+                <>
+                  <div className="flex justify-between text-neutral-500">
+                    <dt>Subtotal</dt>
+                    <dd>{money(pl.totals.subtotalCents, cur, locale)}</dd>
+                  </div>
+                  <div className="flex justify-between text-neutral-500">
+                    <dt>
+                      VAT {pl.vatRate}%{pl.vatMode === 'inclusive' ? ' (included)' : ''}
+                    </dt>
+                    <dd>{money(pl.totals.vatCents, cur, locale)}</dd>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between font-semibold">
+                <dt>Total</dt>
+                <dd>{money(pl.totals.totalCents, cur, locale)}</dd>
+              </div>
+            </dl>
+          )}
+          {pl.validUntil && (
+            <p className="text-neutral-600">
+              {a.validUntil}{' '}
+              {new Date(`${pl.validUntil}T12:00:00Z`).toLocaleDateString(INTL_LOCALE[locale], {
                 day: 'numeric',
                 month: 'long',
                 year: 'numeric',
@@ -375,6 +444,14 @@ function ProposalCard({
               href={`/conversations/${p.result.threadId}`}
             >
               {a.sent} → {a.open}
+            </Link>
+          )}
+          {p.type === 'create_quote' && p.result.threadId && (
+            <Link
+              className="font-medium text-indigo-700"
+              href={`/conversations/${p.result.threadId}`}
+            >
+              {a.sent}: {p.result.number} → {a.open}
             </Link>
           )}
           {p.type === 'mark_paid' && p.result.documentId && (

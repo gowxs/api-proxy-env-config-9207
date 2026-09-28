@@ -2,6 +2,7 @@ import {
   checkEmailText,
   documentNumberKey,
   draftDocument,
+  draftQuoteCard,
   ownerNamed,
   type AssistantCustomer,
   type AssistantEvidence,
@@ -9,7 +10,7 @@ import {
   type NormalizedProposal,
 } from '@noctiv/core';
 import { documentTotals } from '@noctiv/documents';
-import { formatMoney, type VatMode } from '@noctiv/quotes';
+import { computeTotals, formatMoney, lineTotalCents, type VatMode } from '@noctiv/quotes';
 import type { TransactionSql } from 'postgres';
 import { detectMailbox, EMAIL_ADDRESS, mailboxFromName } from '@noctiv/mail';
 import { customerOnFile, dnsResolveMx, findCustomers } from './tools.ts';
@@ -37,6 +38,8 @@ export interface ActionContext {
   resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
   /** Bookings (beta): the signed link to an intake form for this customer. */
   formLink?: (formId: string, leadId: string | null) => string;
+  /** The conversation's language (a quote's PDF and cover are written in it). */
+  language?: string;
 }
 
 const EMAIL = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[a-z]{2,}$/i;
@@ -48,6 +51,8 @@ interface TenantRow {
   quotes_vat_mode: VatMode;
   quotes_vat_rate: number;
   auto_delivery_note_after_payment: boolean;
+  quotes_enabled: boolean;
+  quote_valid_until: string;
 }
 
 /** One customer the owner named: exactly one match, or a new customer by name or address. */
@@ -92,7 +97,8 @@ export async function normalizeActions(
   const { tx, evidence, ownerText } = ctx;
   const [t] = await tx<TenantRow[]>`
     select (now() at time zone timezone)::date::text as today, invoice_due_days, quotes_currency,
-           quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate, auto_delivery_note_after_payment
+           quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate, auto_delivery_note_after_payment,
+           quotes_enabled, ((now() at time zone timezone)::date + quotes_validity_days)::text as quote_valid_until
     from public.tenants`;
   const money = (c: number) => formatMoney(c, t!.quotes_currency);
   const cards: ActionCard[] = [];
@@ -105,8 +111,91 @@ export async function normalizeActions(
     ...proposals.filter(
       (p) => p.type === 'send_email' || p.type === 'mark_paid' || p.type === 'connect_mailbox',
     ),
+    ...proposals.filter((p) => p.type === 'create_quote').slice(0, 1),
   ];
   for (const p of ordered) {
+    if (p.type === 'create_quote') {
+      // A formal quote (PDF, Accept link) in a new conversation: price-list items only.
+      if (!t!.quotes_enabled) {
+        dropped.push('create_quote: quotes off');
+        continue;
+      }
+      const priceList = await tx<
+        { id: string; name: string; unit: string; unit_price_cents: number }[]
+      >`
+        select id, name, unit, unit_price_cents from public.price_items where status = 'confirmed'
+        order by name limit 500`;
+      const r = draftQuoteCard(p, {
+        evidence,
+        priceList: priceList.map((i) => ({
+          id: i.id,
+          name: i.name,
+          unit: i.unit,
+          unitPriceCents: i.unit_price_cents,
+        })),
+      });
+      if (!r.ok) {
+        dropped.push(`create_quote: ${r.reason}`);
+        continue;
+      }
+      let to = '';
+      let name = '';
+      const typed = p.email_to.trim().toLowerCase();
+      if (typed) {
+        const known = EMAIL.test(typed) ? await findCustomers(tx, typed) : [];
+        if (known[0] || (EMAIL.test(typed) && ownerText.toLowerCase().includes(typed))) {
+          to = typed;
+          name = known[0]?.name ?? '';
+        }
+      } else if (p.customer.trim()) {
+        const c = await resolveCustomer(tx, p.customer, ownerText);
+        if (c?.email) ({ email: to, name } = c);
+      }
+      if (!to) {
+        dropped.push('create_quote: recipient');
+        continue;
+      }
+      const own =
+        await tx`select 1 from public.email_connections where lower(email_address) = ${to}`;
+      if (own.length) {
+        dropped.push('create_quote: own address');
+        continue;
+      }
+      const lines = r.value.map((l) => ({
+        ...l,
+        lineTotalCents: lineTotalCents(l.qty, l.unitPriceCents),
+      }));
+      const totals = computeTotals(
+        lines.map((l) => l.lineTotalCents),
+        { mode: t!.quotes_vat_mode, ratePercent: t!.quotes_vat_rate },
+      );
+      evidence.add(
+        `${money(totals.subtotalCents)} ${money(totals.vatCents)} ${money(totals.totalCents)} ${t!.quotes_vat_rate}% ${t!.quote_valid_until} ${dateWords(t!.quote_valid_until)}`,
+        'tool',
+      );
+      cards.push({
+        type: 'create_quote',
+        title: p.title.trim().slice(0, 120) || `Quote for ${name || to}`,
+        payload: {
+          to,
+          name,
+          language: ctx.language ?? 'en',
+          lines,
+          currency: t!.quotes_currency,
+          vatMode: t!.quotes_vat_mode,
+          vatRate: t!.quotes_vat_rate,
+          totals: {
+            subtotalCents: totals.subtotalCents,
+            vatCents: totals.vatCents,
+            totalCents: totals.totalCents,
+          },
+          validUntil: t!.quote_valid_until,
+        },
+        // Always the confirmation dialog: the quote goes out from the business mailbox.
+        requiresConfirmation: true,
+      });
+      continue;
+    }
     if (p.type === 'create_document') {
       const priceList = await tx<{ name: string; unit: string; unit_price_cents: number }[]>`
         select name, unit, unit_price_cents from public.price_items where status = 'confirmed'

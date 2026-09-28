@@ -50,6 +50,6 @@ DATA AND PRIVACY
 E-mail text is kept for the retention period set in Settings and then deleted. Notification e-mails show only the sender's domain and a summary unless the owner switches on full text. The owner can delete all data in Settings → Account.
 
 WHAT THE ASSISTANT DOES AND CANNOT DO
-It can search and read the business's knowledge base (notes, files and website pages) and quote it, and fill the price list from the prices stated there (the owner confirms). It proposes, the owner confirms: settings, knowledge notes, price-list items, invoices and delivery notes (created as Ready with a number and PDF), e-mails to a customer (sent from the business mailbox only after the owner presses Send in the confirmation dialog), and marking an invoice as paid. Nothing happens until the owner confirms.
+It can search and read the business's knowledge base (notes, files and website pages) and quote it, and fill the price list from the prices stated there (the owner confirms). It proposes, the owner confirms: settings, knowledge notes, price-list items, invoices and delivery notes (created as Ready with a number and PDF), quotes to a customer from the price list (sent as a new conversation with the PDF and Accept link after the owner confirms), e-mails to a customer (sent from the business mailbox only after the owner presses Send in the confirmation dialog), and marking an invoice as paid. Nothing happens until the owner confirms.
 It cannot approve or reject drafts, cancel or edit documents, or change billing.
 `.trim();

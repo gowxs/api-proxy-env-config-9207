@@ -338,3 +338,156 @@ describe('Noctiv Assistant: proposals are applied only when the owner confirms (
     });
   });
 });
+
+// The assistant's quote card: a new conversation for the customer (founder request after the Latvian session).
+describe('Noctiv Assistant: a quote card sends a quote in a new conversation', () => {
+  const SECRET = 'test-action-link-secret-0123456789abcdef';
+  let appQ: ReturnType<typeof buildApp>;
+  let Q: SeededTenant;
+  const items: Record<string, string> = {};
+
+  beforeAll(async () => {
+    appQ = buildApp({
+      logger: createLogger({ service: 'api-test', level: 'silent' }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: generateSealingKeyPair().publicKey,
+      connectionTestWaitMs: 1_000,
+      assistantWaitMs: 300,
+      actionSecret: SECRET,
+      publicApiUrl: 'https://api.noctiv.test',
+    });
+    Q = await seedTenant(owner, 'asst-api-quote', { embeddingAxis: 213 });
+    await owner`update public.tenants
+                set quotes_enabled = true, quotes_vat_mode = 'exclusive', quotes_vat_rate = 21,
+                    quotes_currency = 'EUR', quotes_validity_days = 14
+                where id = ${Q.tenantId}`;
+    await owner`update public.email_connections set status = 'connected' where tenant_id = ${Q.tenantId}`;
+    for (const [name, cents, status] of [
+      ['Business website (up to 6 pages)', 49000, 'confirmed'],
+      ['Landing page (one page)', 29000, 'confirmed'],
+      ['Draft item', 100, 'draft'],
+    ] as const) {
+      const [r] = await owner<{ id: string }[]>`
+        insert into public.price_items (tenant_id, name, unit, unit_price_cents, source, status)
+        values (${Q.tenantId}, ${name}, 'pcs', ${cents}, 'manual', ${status}) returning id`;
+      items[name] = r!.id;
+    }
+  });
+
+  const applyQ = async (id: string, body: object = {}) => {
+    const res = await appQ.inject({
+      method: 'POST',
+      url: `/v1/tenants/${Q.tenantId}/assistant/proposals/${id}/apply`,
+      headers: { authorization: `Bearer ${await auth.token(Q.userId)}` },
+      payload: body,
+    });
+    return { status: res.statusCode, json: res.json() };
+  };
+  const card = (lines: { priceItemId: string; qty: number }[], to = 'client@customer.test') =>
+    propose(
+      Q,
+      'create_quote',
+      { to, name: 'Anna Client', language: 'lv', lines, currency: 'EUR' },
+      true,
+    );
+
+  it('needs the dialog; then: lead, conversation, quote from the price list, cover with Accept link, send queued', async () => {
+    const id = await card([
+      { priceItemId: items['Business website (up to 6 pages)']!, qty: 1 },
+      { priceItemId: items['Landing page (one page)']!, qty: 2 },
+    ]);
+    expect((await applyQ(id)).json.needsConfirmation).toBe(true);
+    const r = await applyQ(id, { confirmSending: true });
+    expect(r.status).toBe(200);
+    expect(r.json.proposal.error ?? null).toBeNull();
+    expect(r.json.proposal).toMatchObject({
+      status: 'applied',
+      result: { number: expect.stringMatching(/^Q-\d{4}-\d{4,}$/), threadId: expect.any(String) },
+    });
+    const { quoteId, threadId, draftId, number } = r.json.proposal.result;
+    const [q] = await owner<
+      {
+        status: string;
+        thread_id: string;
+        source_message_id: string | null;
+        customer_email: string;
+        customer_name: string;
+        language: string;
+        subtotal_cents: number;
+        vat_cents: number;
+        total_cents: number;
+        draft_id: string;
+      }[]
+    >`select status, thread_id, source_message_id, customer_email, customer_name, language,
+             subtotal_cents, vat_cents, total_cents, draft_id from public.quotes where id = ${quoteId}`;
+    // 490 + 2 × 290 = 1070; VAT 21 % = 224.70.
+    expect(q).toMatchObject({
+      status: 'pending_approval',
+      thread_id: threadId,
+      source_message_id: null,
+      customer_email: 'client@customer.test',
+      customer_name: 'Anna Client',
+      language: 'lv',
+      subtotal_cents: 107000,
+      vat_cents: 22470,
+      total_cents: 129470,
+      draft_id: draftId,
+    });
+    const [d] = await owner<
+      { kind: string; status: string; subject: string; body: string; to_address: string }[]
+    >`
+      select kind, status, subject, body, to_address from public.drafts where id = ${draftId}`;
+    expect(d).toMatchObject({
+      kind: 'quote',
+      status: 'approved',
+      subject: `Piedāvājums ${number}`,
+      to_address: 'client@customer.test',
+    });
+    expect(d!.body).toContain('https://api.noctiv.test/');
+    // The business writes first: no "thank you for your request".
+    expect(d!.body).toMatch(/^Labdien, Anna!\n\nPielikumā ir mūsu piedāvājums Q-/);
+    expect(d!.body).not.toContain('Paldies par jūsu pieprasījumu');
+    const [th] = await owner<{ lead_email: string; subject: string }[]>`
+      select l.email::text as lead_email, t.subject from public.threads t join public.leads l on l.id = t.lead_id
+      where t.id = ${threadId}`;
+    expect(th).toEqual({ lead_email: 'client@customer.test', subject: `Piedāvājums ${number}` });
+    const jobs = await owner<{ payload: { draftId: string; sentVia: string } }[]>`
+      select payload from public.jobs where tenant_id = ${Q.tenantId} and queue = 'mail.send'
+        and payload->>'draftId' = ${draftId}`;
+    expect(jobs.map((j) => j.payload)).toEqual([{ draftId, sentVia: 'owner_approval' }]);
+  });
+
+  it('refuses items that are not confirmed, quotes switched off, or the own mailbox', async () => {
+    const draft = await applyQ(await card([{ priceItemId: items['Draft item']!, qty: 1 }]), {
+      confirmSending: true,
+    });
+    expect(draft.json.proposal).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('Only confirmed items'),
+    });
+    const [conn] = await owner<{ email_address: string }[]>`
+      select email_address from public.email_connections where tenant_id = ${Q.tenantId} limit 1`;
+    const own = await applyQ(
+      await card([{ priceItemId: items['Landing page (one page)']!, qty: 1 }], conn!.email_address),
+      { confirmSending: true },
+    );
+    expect(own.json.proposal).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('own mailbox'),
+    });
+    await owner`update public.tenants set quotes_enabled = false where id = ${Q.tenantId}`;
+    const off = await applyQ(
+      await card([{ priceItemId: items['Landing page (one page)']!, qty: 1 }]),
+      {
+        confirmSending: true,
+      },
+    );
+    expect(off.json.proposal).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('Quotes (beta)'),
+    });
+    await owner`update public.tenants set quotes_enabled = true where id = ${Q.tenantId}`;
+  });
+});

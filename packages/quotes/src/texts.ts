@@ -126,6 +126,8 @@ export interface CoverInput {
   vatMode: 'none' | 'exclusive' | 'inclusive';
   validUntil: Date;
   acceptUrl: string;
+  /** Sent by the business first (the assistant's quote card): no "thank you for your request". */
+  unrequested?: boolean;
 }
 
 /** The reply that carries the quote (the PDF is attached). */
@@ -137,7 +139,7 @@ export function quoteCoverText(i: CoverInput): string {
   return [
     t.hello(i.customerName),
     '',
-    `${t.thanks} ${t.attached(i.number, summary, total, i.vatMode === 'none' ? '' : t.inclVat, formatDate(i.validUntil, i.language ?? 'en'))}`,
+    `${i.unrequested ? '' : `${t.thanks} `}${t.attached(i.number, summary, total, i.vatMode === 'none' ? '' : t.inclVat, formatDate(i.validUntil, i.language ?? 'en'))}`,
     '',
     t.accept(i.acceptUrl),
   ].join('\n');

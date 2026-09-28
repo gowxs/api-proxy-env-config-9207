@@ -729,3 +729,92 @@ describe('Noctiv Assistant: the knowledge base', () => {
     expect(missing).toContain('Knowledge base: no source matches «nonexistent brochure»');
   });
 });
+
+describe('Noctiv Assistant: the quote card', () => {
+  let Q: SeededTenant;
+  beforeAll(async () => {
+    Q = await seedTenant(owner, 'assistant-quote', { embeddingAxis: 204 });
+    await owner`update public.email_connections set is_test_mailbox = true where tenant_id = ${Q.tenantId}`;
+    await owner`update public.tenants set quotes_enabled = true, quotes_vat_mode = 'exclusive',
+                quotes_vat_rate = 21, quotes_currency = 'EUR' where id = ${Q.tenantId}`;
+    await owner`insert into public.price_items (tenant_id, name, unit, unit_price_cents, source, status)
+                values (${Q.tenantId}, 'Business website (up to 6 pages)', 'pcs', 49000, 'manual', 'confirmed'),
+                       (${Q.tenantId}, 'Landing page (one page)', 'pcs', 29000, 'manual', 'confirmed')`;
+  });
+  const quoteStep = (items: { name: string; unit: string; qty: string; price: string }[]) =>
+    new FakeProvider({
+      responder: (_req, i) =>
+        i === 0
+          ? step({ language: 'lv', tool: 'price_list' })
+          : step({
+              language: 'lv',
+              reply: 'Sagatavoju piedāvājumu.',
+              proposals: [
+                card({
+                  type: 'create_quote',
+                  title: 'Piedāvājums',
+                  email_to: 'client@example.test',
+                  items,
+                }),
+              ],
+            }),
+    });
+  const cards = (conversationId: string) =>
+    owner<{ type: string; requires_confirmation: boolean; payload: Record<string, unknown> }[]>`
+      select type, requires_confirmation, payload from public.assistant_proposals where conversation_id = ${conversationId}`;
+
+  it('prices and totals from the price list only; the dialog is required', async () => {
+    const { conversationId } = await turn(
+      Q,
+      'Aizsūti piedāvājumu uz client@example.test: mājaslapa un 2 landing lapas',
+      quoteStep([
+        // The model's price is ignored: the price list's is used.
+        { name: 'Business website (up to 6 pages)', unit: '', qty: '', price: '400' },
+        { name: 'Landing page', unit: '', qty: '2', price: '' },
+      ]),
+    );
+    const [c] = await cards(conversationId);
+    expect(c).toMatchObject({ type: 'create_quote', requires_confirmation: true });
+    expect(c!.payload).toMatchObject({
+      to: 'client@example.test',
+      language: 'lv',
+      currency: 'EUR',
+      vatRate: 21,
+      totals: { subtotalCents: 107000, vatCents: 22470, totalCents: 129470 },
+      validUntil: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
+    expect(
+      (c!.payload.lines as { name: string; qty: number; unitPriceCents: number }[]).map((l) => [
+        l.name,
+        l.qty,
+        l.unitPriceCents,
+      ]),
+    ).toEqual([
+      ['Business website (up to 6 pages)', 1, 49000],
+      ['Landing page (one page)', 2, 29000],
+    ]);
+  });
+
+  it('no card for items not on the price list, a quantity nobody said, or an unknown address', async () => {
+    for (const [message, items] of [
+      [
+        'Send client@example.test a quote for a logo',
+        [{ name: 'Logo design', unit: '', qty: '', price: '' }],
+      ],
+      [
+        'Send client@example.test a quote for a website',
+        [{ name: 'Business website', unit: '', qty: '3', price: '' }],
+      ],
+    ] as const) {
+      const { conversationId } = await turn(Q, message, quoteStep([...items]));
+      expect(await cards(conversationId)).toEqual([]);
+      expect((await answer(conversationId)).text).toMatch(/not shown as a card|netiek rādīta/);
+    }
+    const { conversationId } = await turn(
+      Q,
+      'Send them a quote for a website',
+      quoteStep([{ name: 'Business website', unit: '', qty: '', price: '' }]),
+    );
+    expect(await cards(conversationId)).toEqual([]);
+  });
+});

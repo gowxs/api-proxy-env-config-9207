@@ -27,6 +27,8 @@ export interface AssistantCustomer {
 }
 
 export interface PriceListEntry {
+  /** The price item (quotes need it; documents copy name and price). */
+  id?: string;
   name: string;
   unit: string;
   unitPriceCents: number;
@@ -186,3 +188,43 @@ export function checkEmailText(
 
 /** "INV-2026-0003", "inv 2026 0003", "0003" → a comparable key. */
 export const documentNumberKey = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+export interface QuoteCardLine {
+  priceItemId: string;
+  name: string;
+  unit: string;
+  qty: number;
+  unitPriceCents: number;
+}
+
+/**
+ * A quote from the assistant (sent as a new conversation once the owner
+ * confirms). Every line is a confirmed price-list item, by name; prices
+ * always from the price list, never the model's; quantity 1 unless the owner
+ * said another.
+ */
+export function draftQuoteCard(
+  p: Proposal,
+  ctx: { evidence: AssistantEvidence; priceList: PriceListEntry[] },
+): DraftResult<QuoteCardLine[]> {
+  const lines: QuoteCardLine[] = [];
+  for (const i of p.items.slice(0, 30)) {
+    const name = i.name.trim();
+    if (!name) continue;
+    const listed = priceListMatch(name, ctx.priceList);
+    if (!listed?.id) return { ok: false, reason: `not on the price list: ${name.slice(0, 60)}` };
+    const qty = i.qty.trim() ? parseQty(i.qty) : 1;
+    if (qty === null || (qty !== 1 && !ctx.evidence.has(qty, true)))
+      return { ok: false, reason: `quantity ${i.qty}` };
+    if (lines.some((l) => l.priceItemId === listed.id))
+      return { ok: false, reason: `twice: ${listed.name}` };
+    lines.push({
+      priceItemId: listed.id,
+      name: listed.name,
+      unit: listed.unit,
+      qty,
+      unitPriceCents: listed.unitPriceCents,
+    });
+  }
+  return lines.length ? { ok: true, value: lines } : { ok: false, reason: 'no lines' };
+}

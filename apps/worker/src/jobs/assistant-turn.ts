@@ -77,7 +77,13 @@ const UNSURE: Record<AssistantLanguage, string> = {
   es: 'Lo siento, no pude responder con seguridad. ¿Puedes preguntarlo de otra forma?',
 };
 
-const ACTION_TYPES = new Set(['create_document', 'send_email', 'mark_paid', 'connect_mailbox']);
+const ACTION_TYPES = new Set([
+  'create_document',
+  'send_email',
+  'mark_paid',
+  'connect_mailbox',
+  'create_quote',
+]);
 
 const NO_CARD: Record<AssistantLanguage, string> = {
   en: '(Some of this is not shown as a card: it is already set, or I could not use the values as given.)',
@@ -111,7 +117,9 @@ function describeCard(c: {
               ? `e-mail to ${String(p.to)}, subject "${String(p.subject ?? '')}"`
               : c.type === 'connect_mailbox'
                 ? `connect form for ${String(p.email ?? p.label)}`
-                : `mark ${String(p.number)} as paid`;
+                : c.type === 'create_quote'
+                  ? `quote to ${String(p.to)} with ${((p.lines as unknown[] | undefined) ?? []).length} line(s)`
+                  : `mark ${String(p.number)} as paid`;
   const made =
     c.status === 'applied' && c.result?.number ? ` (created ${String(c.result.number)})` : '';
   const why = c.status === 'failed' && c.error ? ` (reason: ${c.error.slice(0, 200)})` : '';
@@ -339,6 +347,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
             tx,
             evidence,
             ownerText,
+            language: s.language,
             ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}),
             ...(deps.formLink
               ? {

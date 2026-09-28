@@ -1,6 +1,7 @@
 import { enqueue, withTenant } from '@noctiv/db';
 import { detectKbFile, extractFileText, UploadRejectedError } from '@noctiv/kb';
 import {
+  allocateQuoteNumber,
   loadConfirmedItems,
   loadQuoteDocument,
   parseMoney,
@@ -8,6 +9,7 @@ import {
   qtyHundredths,
   quoteAcceptUrl,
   quoteCoverFor,
+  quoteLabels,
   signQuoteToken,
   unitFor,
   writeQuoteLines,
@@ -75,6 +77,29 @@ const quotePatch = z
     validUntil: z.iso.date(),
   })
   .partial()
+  .strict();
+
+/** A quote the owner sends from scratch (the assistant's quote card): a new conversation. */
+const quoteNew = z
+  .object({
+    to: z
+      .email()
+      .max(254)
+      .transform((v) => v.toLowerCase()),
+    name: z.string().trim().max(200).optional(),
+    language: z.enum(['en', 'de', 'lv', 'nl', 'fr', 'es']).default('en'),
+    lines: z
+      .array(
+        z
+          .object({
+            priceItemId: z.uuid(),
+            qty: z.number().refine((n) => qtyHundredths(n) !== null, 'invalid quantity'),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(30),
+  })
   .strict();
 
 /** Quote settings in Quotes → Setup (merged into PATCH /v1/tenants/:id). */
@@ -353,6 +378,102 @@ export function quoteRoutes(app: FastifyInstance, deps: AppDeps & { publicApiUrl
   );
 
   // ---------------------------------------------------------------- quotes
+  /**
+   * A new quote to a customer, sent now (the assistant's quote card, after the
+   * owner confirms): a new conversation from the business mailbox, like
+   * Compose; lines and prices only from the confirmed price list, totals in
+   * code; the cover e-mail with the Accept link and the PDF go out through the
+   * worker's send (its send-time checks). Quotes (beta) must be on.
+   */
+  app.post('/v1/tenants/:tenantId/quotes/new', (req) =>
+    tenantTx(req, async (tx, tenantId) => {
+      const b = quoteNew.parse(req.body);
+      if (!deps.actionSecret) throw new HttpError(409, 'Quote links are not configured.');
+      const [t] = await tx<
+        {
+          quotes_enabled: boolean;
+          valid_until: string;
+          currency: string;
+          vat_mode: 'none' | 'exclusive' | 'inclusive';
+          vat_rate: number;
+        }[]
+      >`select quotes_enabled, ((now() at time zone timezone)::date + quotes_validity_days)::text as valid_until,
+               quotes_currency as currency, quotes_vat_mode as vat_mode, quotes_vat_rate::float8 as vat_rate
+        from public.tenants where id = ${tenantId}`;
+      if (!t!.quotes_enabled) throw new HttpError(409, 'Turn on Quotes (beta) first.');
+      const [conn] = await tx<{ id: string }[]>`
+        select id from public.email_connections where status = 'connected' order by created_at limit 1`;
+      if (!conn) throw new HttpError(409, 'Connect a mailbox first: quotes are sent from it.');
+      const own =
+        await tx`select 1 from public.email_connections where lower(email_address) = ${b.to}`;
+      if (own.length) throw new HttpError(400, 'That is your own mailbox address.');
+      const ids = [...new Set(b.lines.map((l) => l.priceItemId))];
+      if (ids.length !== b.lines.length)
+        throw new HttpError(400, 'Each item can appear only once; change its quantity instead.');
+      const items = new Map((await loadConfirmedItems(tx, ids)).map((i) => [i.id, i]));
+      if (ids.some((i) => !items.has(i)))
+        throw new HttpError(400, 'Only confirmed items from the price list can be quoted.');
+
+      const [lead] = await tx<{ id: string; created: boolean }[]>`
+        insert into public.leads (tenant_id, email, name) values (${tenantId}, ${b.to}, ${b.name || null})
+        on conflict (tenant_id, email) do update set stage = leads.stage
+        returning id, (xmax = 0) as created`;
+      if (lead!.created)
+        await tx`insert into public.lead_events (tenant_id, lead_id, to_stage, actor, actor_user_id, reason)
+                 values (${tenantId}, ${lead!.id}, 'received', 'owner', ${req.user!.userId}, 'quote from the assistant')`;
+      const number = await allocateQuoteNumber(tx, tenantId);
+      // "Piedāvājums Q-2026-0001": in the quote's language.
+      const subject = `${quoteLabels(b.language).quote} ${number}`;
+      const [thread] = await tx<{ id: string }[]>`
+        insert into public.threads (tenant_id, connection_id, lead_id, subject)
+        values (${tenantId}, ${conn.id}, ${lead!.id}, ${subject})
+        returning id`;
+      const [q] = await tx<{ id: string }[]>`
+        insert into public.quotes (tenant_id, number, thread_id, lead_id, status, language, customer_name,
+                                   customer_email, currency, vat_mode, vat_rate, subtotal_cents, vat_cents,
+                                   total_cents, valid_until)
+        values (${tenantId}, ${number}, ${thread!.id}, ${lead!.id}, 'pending_approval', ${b.language},
+                ${b.name || null}, ${b.to}, ${t!.currency}, ${t!.vat_mode}, ${t!.vat_rate}, 0, 0, 0, ${t!.valid_until})
+        returning id`;
+      await writeQuoteLines(
+        tx,
+        { tenantId, quoteId: q!.id, vatMode: t!.vat_mode, vatRate: t!.vat_rate },
+        b.lines.map((l) => ({ item: items.get(l.priceItemId)!, qty: l.qty, customerText: null })),
+      );
+      const doc = (await loadQuoteDocument(tx, q!.id))!;
+      const token = signQuoteToken(
+        { tenantId, quoteId: q!.id, validUntil: doc.validUntil },
+        deps.actionSecret,
+      );
+      const [draft] = await tx<{ id: string }[]>`
+        insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body,
+                                   status, decided_by, decided_at)
+        values (${tenantId}, ${thread!.id}, null, 'quote', ${b.to}, ${subject},
+                ${quoteCoverFor(doc, quoteAcceptUrl(deps.publicApiUrl, token), { unrequested: true })},
+                'approved', 'owner', now())
+        returning id`;
+      await tx`update public.quotes set draft_id = ${draft!.id} where id = ${q!.id}`;
+      await enqueue(tx, {
+        tenantId,
+        queue: 'mail.send',
+        payload: { draftId: draft!.id, sentVia: 'owner_approval' },
+        singletonKey: draft!.id,
+      });
+      await audit(tx, tenantId, req.user!.userId, 'quote.created', 'quote', q!.id, {
+        via: 'assistant',
+        lines: b.lines.length,
+        totalCents: doc.totalCents,
+      });
+      return {
+        quoteId: q!.id,
+        number,
+        threadId: thread!.id,
+        draftId: draft!.id,
+        totalCents: doc.totalCents,
+      };
+    }),
+  );
+
   app.get('/v1/tenants/:tenantId/quotes', (req) =>
     tenantTx(req, (tx) => selectQuotes(tx, tx`true`)),
   );

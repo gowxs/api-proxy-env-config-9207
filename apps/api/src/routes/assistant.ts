@@ -386,6 +386,22 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
       });
       if (sent.statusCode >= 400) error = errorText(sent.body);
       else result = sent.json() as { threadId: string; draftId: string };
+    } else if (p.type === 'create_quote') {
+      // Quotes' own path: a new conversation, price-list items only, sent by the worker.
+      const q = p.payload as {
+        to: string;
+        name: string;
+        language: string;
+        lines: { priceItemId: string; qty: number }[];
+      };
+      const made = await call('POST', `${base}/quotes/new`, {
+        to: q.to,
+        ...(q.name ? { name: q.name } : {}),
+        language: ['en', 'de', 'lv', 'nl', 'fr', 'es'].includes(q.language) ? q.language : 'en',
+        lines: q.lines.map((l) => ({ priceItemId: l.priceItemId, qty: l.qty })),
+      });
+      if (made.statusCode >= 400) error = errorText(made.body);
+      else result = made.json() as { quoteId: string; number: string; threadId: string };
     } else if (p.type === 'connect_mailbox') {
       // The form saved the mailbox (its own test and checks); the card records that it is done.
       const want = (p.payload.email as string | null) ?? null;

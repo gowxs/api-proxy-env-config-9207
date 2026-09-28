@@ -22,7 +22,8 @@ export interface AssistantProposal {
     | 'create_document'
     | 'send_email'
     | 'mark_paid'
-    | 'connect_mailbox';
+    | 'connect_mailbox'
+    | 'create_quote';
   title: string;
   payload: {
     /** settings: the fields for PATCH /v1/tenants/:id, and readable lines for the card. */
@@ -65,6 +66,9 @@ export interface AssistantProposal {
     source?: 'address' | 'mx' | 'name' | 'unknown';
     imap?: { host: string; port: number } | null;
     smtp?: { host: string; port: number } | null;
+    /** create_quote (lines: QuoteLine[]) */
+    validUntil?: string;
+    language?: string;
     /** mark_paid */
     number?: string;
     customer?: string | null;
@@ -147,6 +151,12 @@ interface Words {
     invoice: string;
     deliveryNote: string;
     email: string;
+    /** create_quote */
+    quote: string;
+    quoteTitle: string;
+    quoteBody: string;
+    quoteCheck: string;
+    validUntil: string;
     paid: string;
     send: string;
     sendTitle: string;
@@ -206,6 +216,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'New invoice',
       deliveryNote: 'New delivery note',
       email: 'E-mail to send',
+      quote: 'New quote',
+      quoteTitle: 'Send this quote now?',
+      quoteBody:
+        'The customer gets the quote as a PDF with an Accept button, from your mailbox, as a new conversation:',
+      quoteCheck: 'I have checked the items and prices and want the quote sent.',
+      validUntil: 'Valid until',
       paid: 'Mark as paid',
       send: 'Send',
       sendTitle: 'Send this e-mail now?',
@@ -269,6 +285,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'Neue Rechnung',
       deliveryNote: 'Neuer Lieferschein',
       email: 'E-Mail zum Senden',
+      quote: 'Neues Angebot',
+      quoteTitle: 'Dieses Angebot jetzt senden?',
+      quoteBody:
+        'Der Kunde erhält das Angebot als PDF mit einer Annehmen-Schaltfläche, aus Ihrem Postfach, als neue Unterhaltung:',
+      quoteCheck: 'Ich habe Positionen und Preise geprüft und möchte das Angebot senden.',
+      validUntil: 'Gültig bis',
       paid: 'Als bezahlt markieren',
       send: 'Senden',
       sendTitle: 'Diese E-Mail jetzt senden?',
@@ -331,6 +353,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'Jauns rēķins',
       deliveryNote: 'Jauna pavadzīme',
       email: 'E-pasts nosūtīšanai',
+      quote: 'Jauns piedāvājums',
+      quoteTitle: 'Nosūtīt šo piedāvājumu tagad?',
+      quoteBody:
+        'Klients saņems piedāvājumu kā PDF ar pogu «Pieņemt» no Jūsu pastkastes kā jaunu sarunu:',
+      quoteCheck: 'Esmu pārbaudījis pozīcijas un cenas un vēlos nosūtīt piedāvājumu.',
+      validUntil: 'Derīgs līdz',
       paid: 'Atzīmēt kā apmaksātu',
       send: 'Sūtīt',
       sendTitle: 'Sūtīt šo e-pastu tagad?',
@@ -388,6 +416,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'Nieuwe factuur',
       deliveryNote: 'Nieuwe pakbon',
       email: 'E-mail om te versturen',
+      quote: 'Nieuwe offerte',
+      quoteTitle: 'Deze offerte nu versturen?',
+      quoteBody:
+        'De klant krijgt de offerte als pdf met een knop Accepteren, vanuit je mailbox, als nieuw gesprek:',
+      quoteCheck: 'Ik heb de artikelen en prijzen gecontroleerd en wil de offerte versturen.',
+      validUntil: 'Geldig tot',
       paid: 'Markeren als betaald',
       send: 'Versturen',
       sendTitle: 'Deze e-mail nu versturen?',
@@ -450,6 +484,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'Nouvelle facture',
       deliveryNote: 'Nouveau bon de livraison',
       email: 'E-mail à envoyer',
+      quote: 'Nouveau devis',
+      quoteTitle: 'Envoyer ce devis maintenant ?',
+      quoteBody:
+        'Le client reçoit le devis en PDF avec un bouton Accepter, depuis votre boîte mail, dans une nouvelle conversation :',
+      quoteCheck: 'J’ai vérifié les articles et les prix et je veux envoyer le devis.',
+      validUntil: 'Valable jusqu’au',
       paid: 'Marquer comme payée',
       send: 'Envoyer',
       sendTitle: 'Envoyer cet e-mail maintenant ?',
@@ -512,6 +552,12 @@ export const WORDS: Record<AssistantLocale, Words> = {
       invoice: 'Nueva factura',
       deliveryNote: 'Nuevo albarán',
       email: 'Correo para enviar',
+      quote: 'Nuevo presupuesto',
+      quoteTitle: '¿Enviar este presupuesto ahora?',
+      quoteBody:
+        'El cliente recibe el presupuesto en PDF con un botón Aceptar, desde tu buzón, como conversación nueva:',
+      quoteCheck: 'He revisado los artículos y precios y quiero enviar el presupuesto.',
+      validUntil: 'Válido hasta',
       paid: 'Marcar como pagada',
       send: 'Enviar',
       sendTitle: '¿Enviar este correo ahora?',
@@ -546,4 +592,14 @@ export function describeKnowledgeSource(s: KnowledgeSource): string {
   if (s.type === 'note') return `your note «${s.title}»`;
   if (s.type === 'file') return `your file «${s.title}»`;
   return `your website ${(s.url ?? s.title).replace(/^https?:\/\//, '')}`;
+}
+
+/** One line of a quote card (create_quote): a price-list item. */
+export interface QuoteLine {
+  priceItemId: string;
+  name: string;
+  unit: string;
+  qty: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
 }
