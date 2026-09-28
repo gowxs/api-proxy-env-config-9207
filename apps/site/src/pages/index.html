@@ -46,10 +46,14 @@
           decoding="async"
         />
       </picture>
-      {{> demo}}
+      <div class="phone phone--hero" data-reveal-skip>
+        <div class="phone-screen">
+          <span class="phone-island" aria-hidden="true"></span>
+          {{> demo}}
+        </div>
+      </div>
     </div>
   </div>
-  <hr class="dawn-line" />
 </section>
 
 {{> jobs}} {{> flow}} {{> summary}}

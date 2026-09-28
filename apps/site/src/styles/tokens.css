@@ -51,18 +51,19 @@
   --dawn-2: #f2a97e;
   --morning: #fdf3e4;
 
-  /* Type: one family, six steps. Fluid between 360 px and 1200 px wide. */
+  /* Type: one family, six steps. Fluid between 360 px and 1440 px wide:
+     display 42 → 64 px, h2 32 → 48 px, tight tracking on the large sizes. */
   --font: 'Manrope', 'Manrope Fallback', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --fs-display: clamp(2.375rem, 1.55rem + 3.6vw, 4rem);
-  --fs-h2: clamp(1.75rem, 1.35rem + 1.75vw, 2.625rem);
-  --fs-h3: clamp(1.1875rem, 1.1rem + 0.35vw, 1.375rem);
+  --fs-display: clamp(2.625rem, 1.75rem + 3.9vw, 4rem);
+  --fs-h2: clamp(2rem, 1.5rem + 2.2vw, 3rem);
+  --fs-h3: clamp(1.125rem, 1.07rem + 0.25vw, 1.25rem);
   --fs-lead: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
   --fs-body: 1rem;
   --fs-small: 0.875rem;
   --fs-label: 0.75rem;
-  --lh-tight: 1.06;
+  --lh-tight: 1.02;
   --lh-snug: 1.2;
-  --lh-body: 1.6;
+  --lh-body: 1.7;
 
   /* Spacing: 4 px base. */
   --s-1: 0.25rem;
@@ -75,16 +76,19 @@
   --s-8: 4rem;
   --s-9: 6rem;
   --s-10: 8rem;
-  --section: clamp(4rem, 2.5rem + 7vw, 8rem);
+  /* Section rhythm: 72 px on phones, 120 px on desktops. */
+  --section: clamp(4.5rem, 1.5rem + 7vw, 7.5rem);
   --gutter: clamp(1rem, 0.5rem + 2.5vw, 2rem);
   --max: 72rem;
-  --measure: 62ch;
+  --measure: 65ch;
 
-  /* Shape. */
-  --r-sm: 0.625rem;
-  --r-md: 1rem;
-  --r-lg: 1.375rem;
+  /* Shape: 12 px for small surfaces, 16 px for cards; never heavy shadows. */
+  --r-sm: 0.5rem;
+  --r-md: 0.75rem;
+  --r-lg: 1rem;
   --r-pill: 999px;
+  --shadow-sm: 0 1px 2px rgb(7 11 28 / 0.05);
+  --shadow-md: 0 1px 2px rgb(7 11 28 / 0.04), 0 12px 32px -16px rgb(7 11 28 / 0.18);
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 }

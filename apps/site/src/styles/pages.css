@@ -173,11 +173,14 @@
   display: grid;
   gap: var(--s-4);
 }
+.section-head {
+  gap: var(--s-5);
+}
 .section-head h2 {
-  max-width: 22ch;
+  max-width: 20ch;
 }
 .section-head .lead {
-  max-width: 56ch;
+  max-width: 60ch;
 }
 
 /* ---------- Audiences ---------- */
@@ -202,6 +205,12 @@
   margin: calc(-1 * var(--panel-pad)) calc(-1 * var(--panel-pad)) var(--s-5);
   border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0;
   background: var(--night-900);
+}
+.audience {
+  transition: border-color 0.2s var(--ease);
+}
+.audience:hover {
+  border-color: var(--line-strong);
 }
 .audience h3 {
   font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.625rem);
@@ -256,64 +265,123 @@
   height: 1rem;
 }
 
-/* ---------- Steps ---------- */
+/* ---------- Steps: numbered cards ---------- */
 .steps {
   counter-reset: step;
 }
-.steps .row {
-  position: relative;
-  padding-left: 3.25rem;
-}
-.steps .row::before {
+.steps .tile::after {
   counter-increment: step;
-  content: counter(step);
+  content: counter(step, decimal-leading-zero);
   position: absolute;
-  left: 0;
-  top: var(--s-5);
-  display: grid;
-  place-items: center;
-  width: 2.125rem;
-  height: 2.125rem;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 800;
-  font-size: 0.9375rem;
+  top: 1.5rem;
+  right: 1.5rem;
+  color: var(--text-3);
+  font-weight: 700;
+  font-size: var(--fs-small);
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Price ---------- */
-.price {
+/* ---------- The plan card ---------- */
+.plan {
+  position: relative;
   display: grid;
   gap: var(--s-6);
   margin-top: var(--s-7);
+  padding: clamp(1.5rem, 1rem + 2.4vw, 3rem);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(
+      60% 80% at 0% 0%,
+      color-mix(in srgb, var(--accent) 7%, transparent),
+      transparent 70%
+    ),
+    var(--surface);
+  box-shadow: var(--shadow-md);
 }
-@media (min-width: 48rem) {
-  .price {
-    grid-template-columns: 1fr 1.25fr;
-    align-items: center;
+/* A 1 px highlight along the top edge. */
+.plan::before {
+  content: '';
+  position: absolute;
+  inset: -1px 12% auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 70%, transparent),
+    transparent
+  );
+}
+@media (min-width: 56rem) {
+  .plan {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
     gap: var(--s-8);
+    align-items: start;
   }
 }
+.plan-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+.plan-badge {
+  padding: 0.1875rem 0.625rem;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  color: var(--ok);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
 .amount {
-  font-size: clamp(3rem, 2.4rem + 3vw, 4.5rem);
+  margin-top: var(--s-4);
+  font-size: clamp(3.5rem, 2.6rem + 4vw, 5.5rem);
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .amount small {
+  margin-left: 0.25rem;
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: 0;
   color: var(--text-2);
 }
-.price .compare {
+.plan .compare {
   margin-top: var(--s-3);
   color: var(--text-2);
 }
-.price .btn {
+.plan .btn {
+  width: 100%;
+  margin-top: var(--s-6);
+}
+.trust {
+  display: grid;
+  gap: var(--s-2);
   margin-top: var(--s-5);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.trust li {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.trust .icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-3);
+}
+@media (min-width: 56rem) {
+  .plan-list {
+    padding-left: var(--s-8);
+    border-left: 1px solid var(--line);
+  }
 }
 .checklist {
   list-style: none;
@@ -329,23 +397,26 @@
 .checklist li:first-child {
   border-top: 0;
 }
-.checklist svg {
+.checklist .icon {
   width: 1.125rem;
   height: 1.125rem;
-  margin-top: 0.2rem;
+  margin-top: 0.25rem;
   color: var(--ok);
+  stroke-width: 2.25;
 }
 
 /* ---------- FAQ ---------- */
 .faq {
-  margin-top: var(--s-6);
-  max-width: 48rem;
+  margin-top: var(--s-7);
+  max-width: 50rem;
+  padding: 0 clamp(1.25rem, 0.8rem + 1.6vw, 2rem);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
-.faq details {
+.faq details + details {
   border-top: 1px solid var(--line);
-}
-.faq details:last-child {
-  border-bottom: 1px solid var(--line);
 }
 .faq summary {
   display: flex;
@@ -359,6 +430,10 @@
   line-height: 1.4;
   cursor: pointer;
   list-style: none;
+  transition: color 0.15s var(--ease);
+}
+.faq summary:hover {
+  color: var(--link);
 }
 .faq summary::-webkit-details-marker {
   display: none;
@@ -379,7 +454,7 @@
 .faq details p {
   padding-bottom: var(--s-5);
   color: var(--text-2);
-  max-width: 62ch;
+  max-width: var(--measure);
 }
 
 /* ---------- Inner page header ---------- */
@@ -432,7 +507,7 @@
 @media (min-width: 60rem) {
   .split {
     grid-template-columns: 1fr 1fr;
-    align-items: start;
+    align-items: center;
     gap: var(--s-8);
   }
 }
@@ -660,13 +735,14 @@
 }
 .flow-show {
   display: grid;
-  gap: var(--s-7);
-  margin-top: var(--s-8);
-  align-items: start;
+  gap: var(--s-8);
+  margin-top: var(--s-9);
+  align-items: center;
 }
 @media (min-width: 60rem) {
   .flow-show {
-    grid-template-columns: minmax(0, 26rem) 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-9);
   }
 }
 

@@ -19,29 +19,50 @@
         <li>{{> check}}<span>The same numbers live on your dashboard, for this month</span></li>
       </ul>
     </div>
-    <div class="phones">
-      <figure class="device">
+    <figure class="shot">
+      <div class="phone">
+        <div class="phone-screen">
+          <span class="phone-island" aria-hidden="true"></span>
+          <div class="phone-status phone-status--dark" aria-hidden="true">
+            <span>9:41</span
+            ><span class="phone-status-icons"
+              >{{icon:signal}}{{icon:wifi}}{{icon:battery-full}}</span
+            >
+          </div>
+          <img
+            src="/img/shot-weekly.webp"
+            alt="The Monday summary e-mail: e-mails answered, average reply time, follow-ups, quotes, invoices paid and hours saved."
+            width="360"
+            height="780"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      </div>
+      <figcaption>The Monday summary, in your inbox at 08:00.</figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <figure class="shot shot--wide">
+      <div class="browser">
+        <div class="browser-bar" aria-hidden="true">
+          <span class="browser-dots"><i></i><i></i><i></i></span>
+          <span class="browser-url">{{icon:lock}}app.noctiv.io</span>
+        </div>
         <img
-          src="/img/shot-weekly.webp"
-          alt="The Monday summary e-mail: e-mails answered, average reply time, follow-ups, quotes, invoices paid and hours saved."
-          width="360"
-          height="780"
+          src="/img/shot-desktop-1440.webp"
+          srcset="/img/shot-desktop-880.webp 880w, /img/shot-desktop-1440.webp 1440w"
+          sizes="(min-width: 72rem) 68rem, calc(100vw - 2rem)"
+          alt="The Noctiv dashboard on a computer: what needs you today, and this month's e-mails answered, follow-ups, replies won back and hours saved."
+          width="1440"
+          height="900"
           loading="lazy"
           decoding="async"
         />
-        <figcaption>The Monday summary</figcaption>
-      </figure>
-      <figure class="device">
-        <img
-          src="/img/shot-dashboard.webp"
-          alt="The Noctiv dashboard on a phone: this month's replies, reply time and hours saved."
-          width="360"
-          height="780"
-          loading="lazy"
-          decoding="async"
-        />
-        <figcaption>Your dashboard</figcaption>
-      </figure>
-    </div>
+      </div>
+      <figcaption>
+        Your dashboard: the same numbers for this month, and what needs you today.
+      </figcaption>
+    </figure>
   </div>
 </section>

@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -150,6 +151,43 @@ function partials(): Record<string, string> {
   return out;
 }
 
+const ICONS = join(ROOT, 'node_modules', 'lucide-static', 'icons');
+const iconCache = new Map<string, string>();
+/** The inner shapes of a Lucide icon, for the page's sprite. */
+function iconShapes(name: string): string {
+  let shapes = iconCache.get(name);
+  if (!shapes) {
+    const file = join(ICONS, `${name}.svg`);
+    if (!existsSync(file)) throw new Error(`unknown icon: ${name}`);
+    shapes = /<svg[^>]*>([\s\S]*)<\/svg>/
+      .exec(read(file))![1]!
+      .replace(/\s+/g, ' ')
+      .replace(/> </g, '><')
+      .replace(/ \/>/g, '/>')
+      .trim();
+    iconCache.set(name, shapes);
+  }
+  return shapes;
+}
+/**
+ * `{{icon:name}}`: a Lucide line icon. Each page carries the icons it uses
+ * once, as a sprite at the end of the body (see withIconSprite); every use is
+ * a short reference. Sized, stroked and coloured by CSS (.icon, currentColor);
+ * decorative, so hidden from screen readers.
+ */
+function icon(name: string): string {
+  iconShapes(name);
+  return `<svg class="icon icon-${name}" aria-hidden="true" focusable="false"><use href="#i-${name}"/></svg>`;
+}
+function withIconSprite(html: string): string {
+  const names = [...new Set([...html.matchAll(/<use href="#i-([\w-]+)"\/>/g)].map((m) => m[1]!))];
+  if (!names.length) return html;
+  const sprite = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${names
+    .map((n) => `<symbol id="i-${n}" viewBox="0 0 24 24">${iconShapes(n)}</symbol>`)
+    .join('')}</svg>`;
+  return html.replace('</body>', `${sprite}</body>`);
+}
+
 function render(tpl: string, vars: Record<string, string>, parts: Record<string, string>): string {
   let out = tpl;
   // Partials may include partials; three passes are plenty.
@@ -159,6 +197,7 @@ function render(tpl: string, vars: Record<string, string>, parts: Record<string,
       return parts[name]!;
     });
   }
+  out = out.replace(/\{\{icon:([\w-]+)\}\}/g, (_, name: string) => icon(name));
   out = out.replace(/\{\{current:(\w+)\}\}/g, (_, key: string) =>
     vars.nav === key ? ' aria-current="page"' : '',
   );
@@ -396,7 +435,8 @@ export function build({ drafts = false } = {}): { pages: string[] } {
   const texts: { path: string; title: string; text: string }[] = [];
 
   for (const { file, body, meta, path, target, post } of entries) {
-    const scripts = (meta.scripts ?? [])
+    // motion.js on every page: sections fade up as they scroll into view.
+    const scripts = ['motion.js', ...(meta.scripts ?? [])]
       .map((s) => `<script>${minifyJs(read(join(SRC, 'scripts', s)))}</script>`)
       .join('');
 
@@ -493,7 +533,7 @@ export function build({ drafts = false } = {}): { pages: string[] } {
       parts,
     );
     mkdirSync(dirname(join(DIST, target)), { recursive: true });
-    const finalHtml = withFonts(minifyHtml(html));
+    const finalHtml = withIconSprite(withFonts(minifyHtml(html)));
     const leftover = /\{\{[^}]*\}\}/.exec(finalHtml);
     if (leftover) throw new Error(`${file}: unresolved template tag ${leftover[0]}`);
     for (const m of finalHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)) inlineScripts.add(m[1]!);
@@ -574,7 +614,16 @@ export function serve(port = 4321): Promise<() => void> {
         }
       }
       res.setHeader('content-type', TYPES[extname(file)] ?? 'application/octet-stream');
-      res.end(readFileSync(file));
+      // Compressed like Cloudflare serves it, so local Lighthouse runs measure the same bytes.
+      const body = readFileSync(file);
+      if (
+        /\b(gzip)\b/.test(String(req.headers['accept-encoding'])) &&
+        /\.(html|css|js|svg|txt|xml)$/.test(file)
+      ) {
+        res.setHeader('content-encoding', 'gzip');
+        res.setHeader('vary', 'accept-encoding');
+        res.end(gzipSync(body));
+      } else res.end(body);
     });
     server.listen(port, '127.0.0.1', () => resolve(() => server.close()));
   });

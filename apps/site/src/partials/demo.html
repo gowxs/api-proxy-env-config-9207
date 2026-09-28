@@ -2,24 +2,7 @@
   <div class="demo-sky" aria-hidden="true">
     <span class="demo-day" data-day>Thursday morning</span>
     <span class="demo-clock">
-      <span class="icon">
-        <svg class="moon" viewBox="0 0 24 24">
-          <path fill="currentColor" d="M20.6 14.4A8.6 8.6 0 0 1 9.6 3.4a8.6 8.6 0 1 0 11 11Z" />
-        </svg>
-        <svg
-          class="sun"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none" />
-          <path
-            d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"
-          />
-        </svg>
-      </span>
+      <span class="demo-icon"> {{icon:moon}}{{icon:sun}} </span>
       <span data-clock>08:05</span>
     </span>
   </div>
@@ -33,12 +16,7 @@
       Hi Sarah, yes, the linen throw is in stock in sage. Delivery to Germany takes 3–5 business
       days and costs €9.90. Would you like me to hold one for you?
       <div class="msg-src">
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.2 5.3-3.8 4.2a.8.8 0 0 1-1.2 0L4.8 9a.8.8 0 1 1 1.2-1.1l.8.9 3.2-3.5a.8.8 0 0 1 1.2 1Z"
-          />
-        </svg>
+        {{icon:circle-check-big}}
         <span><b>Sourced:</b> Stock list, Shipping policy · no prices invented</span>
       </div>
       <div class="drafting" aria-hidden="true">
@@ -49,18 +27,7 @@
       <span>Sent to you for approval</span>
       <span class="approval-state">
         <span class="pill pill--wait" aria-hidden="true">Waiting for you</span>
-        <span class="pill pill--ok"
-          ><svg viewBox="0 0 16 16" aria-hidden="true">
-            <path
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="m3.5 8.5 3 3 6-6.5"
-            /></svg
-          >Approved 08:05</span
-        >
+        <span class="pill pill--ok">{{icon:check}}Approved 08:05</span>
       </span>
     </div>
   </div>

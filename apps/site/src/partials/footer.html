@@ -1,58 +1,57 @@
 <footer class="site-footer night">
   <div class="wrap">
-    <div class="footer-grid">
-      <div>
+    <div class="footer-top">
+      <div class="footer-brand">
         <a class="logo" href="/" aria-label="Noctiv, home">{{> logo}}</a>
-        <p class="muted" style="margin-top: var(--s-3); max-width: 30ch">
-          The e-mail assistant that works while you sleep.
-        </p>
+        <p>The e-mail assistant that works while you sleep.</p>
+        <a class="btn btn--light btn--sm" href="{{app}}signup">Start free trial</a>
       </div>
-      <div>
-        <p class="label" style="margin-bottom: var(--s-3)">Product</p>
-        <ul>
-          <li><a href="/how-it-works/">How it works</a></li>
-          <li><a href="/pricing/">Pricing</a></li>
-          <li><a href="/integrations/">Integrations</a></li>
-          <li><a href="{{app}}">Sign in</a></li>
-        </ul>
-      </div>
-      <div data-new>
-        <p class="label" style="margin-bottom: var(--s-3)">Use cases</p>
-        <ul>
-          <li><a href="/for/shopify-stores/">Shopify stores</a></li>
-          <li><a href="/for/woocommerce-stores/">WooCommerce stores</a></li>
-          <li><a href="/for/agencies/">Agencies</a></li>
-          <li><a href="/for/repair-shops/">Repair shops</a></li>
-          <li><a href="/for/clinics/">Clinics</a></li>
-        </ul>
-      </div>
-      <div data-new>
-        <p class="label" style="margin-bottom: var(--s-3)">Compare</p>
-        <ul>
-          <li><a href="/compare/tidio/">Noctiv vs Tidio</a></li>
-          <li><a href="/compare/gorgias/">Noctiv vs Gorgias</a></li>
-          <li><a href="/compare/gemini-in-gmail/">Noctiv vs Gemini in Gmail</a></li>
-        </ul>
-        <p class="label" style="margin: var(--s-5) 0 var(--s-3)">Help</p>
-        <ul>
-          <li><a href="/help/">Help centre</a></li>
-          <li><a href="/help/gmail-app-password/">Connect Gmail</a></li>
-          <li><a href="/help/reply-modes/">Reply modes</a></li>
-        </ul>
-      </div>
-      <div>
-        <p class="label" style="margin-bottom: var(--s-3)">Company</p>
-        <ul>
-          <li><a href="/contact/">Contact</a></li>
-          <li><a href="/privacy/">Privacy</a></li>
-          <li><a href="/terms/">Terms</a></li>
-          <li><a href="/refunds/">Refund policy</a></li>
-        </ul>
-      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div>
+          <p class="footer-label">Product</p>
+          <ul>
+            <li><a href="/how-it-works/">How it works</a></li>
+            <li><a href="/pricing/">Pricing</a></li>
+            <li><a href="/integrations/">Integrations</a></li>
+            <li><a href="{{app}}">Sign in</a></li>
+          </ul>
+        </div>
+        <div data-new>
+          <p class="footer-label">Use cases</p>
+          <ul>
+            <li><a href="/for/shopify-stores/">Shopify stores</a></li>
+            <li><a href="/for/woocommerce-stores/">WooCommerce stores</a></li>
+            <li><a href="/for/agencies/">Agencies</a></li>
+            <li><a href="/for/repair-shops/">Repair shops</a></li>
+            <li><a href="/for/clinics/">Clinics</a></li>
+          </ul>
+        </div>
+        <div data-new>
+          <p class="footer-label">Resources</p>
+          <ul>
+            <li><a href="/help/">Help centre</a></li>
+            <li><a href="/help/gmail-app-password/">Connect Gmail</a></li>
+            <li><a href="/help/reply-modes/">Reply modes</a></li>
+            <li><a href="/compare/tidio/">Noctiv vs Tidio</a></li>
+            <li><a href="/compare/gorgias/">Noctiv vs Gorgias</a></li>
+            <li><a href="/compare/gemini-in-gmail/">Noctiv vs Gemini in Gmail</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="footer-label">Company</p>
+          <ul>
+            <li><a href="/contact/">Contact</a></li>
+            <li><a href="/privacy/">Privacy</a></li>
+            <li><a href="/terms/">Terms</a></li>
+            <li><a href="/refunds/">Refund policy</a></li>
+          </ul>
+        </div>
+      </nav>
     </div>
     <div class="footer-base">
-      <span>© {{year}} Noctiv</span>
+      <span>© {{year}} Noctiv · Data stored in the EU (Frankfurt)</span>
       <a href="mailto:contact@noctiv.io">contact@noctiv.io</a>
     </div>
   </div>
+  <p class="footer-wordmark" aria-hidden="true">Noctiv</p>
 </footer>
