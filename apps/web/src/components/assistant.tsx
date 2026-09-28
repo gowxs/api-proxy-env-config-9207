@@ -564,7 +564,9 @@ export function AssistantChat({
   const load = useCallback(async () => {
     const t = await api<AssistantThread>(`/v1/tenants/${tenantId}/assistant?purpose=${purpose}`);
     setThread(t);
-    setLocale(t.conversation?.locale ?? browserLocale());
+    // The greeting is in the browser's language; once the owner has written, the
+    // conversation's language (the worker sets it from the owner's messages).
+    setLocale(t.messages.length && t.conversation ? t.conversation.locale : browserLocale());
   }, [tenantId, purpose]);
   useEffect(() => {
     void load().catch((e: Error) => setError(e.message));
@@ -628,12 +630,15 @@ export function AssistantChat({
         }
         if (!done) throw new Error(w.errors.model_error);
         messages = done.messages ?? [];
+        if (done.conversation) setLocale(done.conversation.locale);
         setThread((t) => ({
           conversation: done.conversation ?? conversation,
           messages: [...(t?.messages ?? []), ...messages],
         }));
         return;
       }
+      if (conversation && messages.some((m) => m.role === 'assistant'))
+        setLocale(conversation.locale);
       setThread((t) => ({
         conversation,
         messages: [...(t?.messages ?? []).filter((m) => m.id !== optimistic.id), ...messages],
@@ -678,9 +683,12 @@ export function AssistantChat({
         className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
         aria-live="polite"
       >
-        <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-neutral-100 px-3 py-2 text-sm">
-          {purpose === 'onboarding' ? w.onboardingIntro : w.intro}
-        </div>
+        {/* Shown once the language is known: no English greeting before a Latvian one. */}
+        {thread && (
+          <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-neutral-100 px-3 py-2 text-sm">
+            {purpose === 'onboarding' ? w.onboardingIntro : w.intro}
+          </div>
+        )}
         {messages.map((m) =>
           m.role === 'owner' ? (
             <div
@@ -819,7 +827,7 @@ export function AssistantLauncher({
               onClick={() =>
                 void api(`/v1/tenants/${tenantId}/assistant/new`, {
                   method: 'POST',
-                  body: { purpose: 'app' },
+                  body: { purpose: 'app', locale: browserLocale() },
                 }).then(() => setKey((k) => k + 1))
               }
             >

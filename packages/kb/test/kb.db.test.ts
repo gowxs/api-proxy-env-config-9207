@@ -419,6 +419,78 @@ describe('retrieval: owner notes and repeated website text', () => {
     expect(chunks.some((c) => c.content.startsWith('Our work'))).toBe(true);
   });
 
+  // Production case 2026-09-28 (Latvian, tenant Wxs): "send an offer" in Latvian,
+  // the prices in an English note, other notes closer to the words of the question.
+  it('a price question in another language always gets the priced note', async () => {
+    const D = await seedTenant(owner, 'kb-d', { embeddingAxis: 13 });
+    const priced = await addSource(D, {
+      type: 'note',
+      title: 'WXS — services, prices and policies',
+      note_text:
+        'Services and prices (EUR, excl. VAT):\n- Landing page: €290\n- Business website (up to 6 pages): €490\n- Shopify online store: €690',
+    });
+    await ingestSource(deps(), D.tenantId, priced);
+    for (const text of [
+      'Biznesa mājaslapa: mēs izstrādājam biznesa mājaslapa un landing page ar jūsu saturu.',
+      'Landing page un biznesa mājaslapa: teksti un attēli no klienta, piedāvājumu nosūtām e-pastā.',
+      'Nosūti klientam piedāvājumu tikai pēc tam, kad saturs ir saņemts.',
+    ]) {
+      const id = await addSource(D, { type: 'note', title: 'Par mums', note_text: text });
+      await ingestSource(deps(), D.tenantId, id);
+    }
+    // The website: many different pages, all closer to the words of the question.
+    const site = await addSource(D, {
+      type: 'website',
+      title: 'wxs.test',
+      url: 'https://wxs.test/',
+      status: 'ready',
+    });
+    const topics = [
+      'frizētava',
+      'zobārsts',
+      'kafejnīca',
+      'sporta zāle',
+      'ceptuve',
+      'viesnīca',
+      'autoserviss',
+      'skola',
+    ];
+    const texts = topics.map(
+      (t, i) =>
+        `Darbi › ${t} Biznesa mājaslapa un landing page uzņēmumam ${t}: landing page, biznesa mājaslapa, ` +
+        `piedāvājumu sagatavojām ${i + 2} dienās. Nosūti mums ziņu par savu landing page vai biznesa mājaslapa.`,
+    );
+    const vectors = await provider.embed(texts, 'document', 'test_fixture');
+    for (const [i, content] of texts.entries()) {
+      await owner`
+        insert into public.kb_chunks (tenant_id, source_id, chunk_index, content, token_count, metadata, embedding, embedding_model)
+        values (${D.tenantId}, ${site}, ${i}, ${content}, 40, ${owner.json({ url: `https://wxs.test/darbi/${i}/` })},
+                ${`[${vectors.vectors[i]!.join(',')}]`}, ${provider.model})`;
+    }
+    const { chunks } = await retrieveKnowledge(
+      { sql: worker, embeddings: provider },
+      {
+        tenantId: D.tenantId,
+        query: 'Nosūti uz klients@example.test piedāvājumu: 1 biznesa mājaslapa un 1 landing page',
+        origin: 'customer_data',
+      },
+    );
+    expect(chunks.some((c) => c.content.includes('Business website (up to 6 pages): €490'))).toBe(
+      true,
+    );
+    // The model's own search words ("biznesa mājaslapa") with the owner's price question.
+    const byModel = await retrieveKnowledge(
+      { sql: worker, embeddings: provider },
+      {
+        tenantId: D.tenantId,
+        query: 'biznesa mājaslapa',
+        origin: 'customer_data',
+        priceQuestion: true,
+      },
+    );
+    expect(byModel.chunks.some((c) => c.content.includes('€490'))).toBe(true);
+  });
+
   it('a tenant with notes only gets them as before', async () => {
     const { chunks } = await retrieveKnowledge(
       { sql: worker, embeddings: provider },

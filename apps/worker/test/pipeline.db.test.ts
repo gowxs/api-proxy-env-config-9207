@@ -705,7 +705,8 @@ describe('pipeline: price questions and sources that disagree', () => {
     ]);
     expect(r.guard_report.price).toEqual({
       asked: true,
-      inExcerpts: ['€290', '€490'],
+      // A price question also gets the tenant's other priced note (the seeded price list).
+      inExcerpts: ['€290', '€490', '100 eur'],
       inReply: [],
       omitted: true,
     });

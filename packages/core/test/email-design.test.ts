@@ -6,6 +6,7 @@ import {
   logoAllowed,
   MAX_HTML_BYTES,
   renderReplyEmail,
+  stripSignOff,
   type EmailBrand,
   type EmailTemplate,
 } from '../src/index.ts';
@@ -142,7 +143,9 @@ describe('brand colour', () => {
   it('Branded has a thin top bar in the brand colour and the address in the footer', () => {
     const html = render('branded').html!;
     expect(html).toContain('height:4px;line-height:4px;font-size:4px;background:#B4532A');
-    expect(html).toContain('Nordlicht Candles · Brīvības iela 1, Rīga, Latvia');
+    // The signature already names the company: the footer has only the address.
+    expect(html).toContain('>Brīvības iela 1, Rīga, Latvia</p>');
+    expect(html).not.toContain('Nordlicht Candles · Brīvības');
   });
 
   it('Card turns every link in the signature into a button', () => {
@@ -156,5 +159,70 @@ describe('brand colour', () => {
     expect(r.html).toMatch(
       /<a href="https:\/\/nordlicht.test\/contact" style="display:inline-block[^"]*border-radius:999px;background:#B4532A/,
     );
+  });
+});
+
+// Production case 2026-09-28 (Latvian, tenant Wxs, Card design): "Ar cieņu,\nWxs" from the model,
+// then the signature, then the company name again from the contact block.
+describe('exactly one sign-off', () => {
+  const wxs: EmailBrand = { ...EMPTY_BRAND, companyName: 'Wxs', website: 'https://gowxs.com/en/' };
+  const body =
+    'Labdien!\n\nNosūtām mūsu pakalpojumu piedāvājumu:\n- Landing page: no 390 EUR\n- Uzņēmuma mājaslapa: no 590 EUR\n\nLabprāt atbildēsim uz jautājumiem vai vienosimies par detaļām!\n\nAr cieņu,\nWxs';
+  const signature = 'Gvido Angarskis\nWXS · Web eXpert Solutions';
+
+  it.each(['plain', 'clean', 'logo', 'branded', 'card'] as const)(
+    '%s: the text ends with the signature once',
+    (template) => {
+      const r = renderReplyEmail({
+        template,
+        body,
+        signature,
+        brand: wxs,
+        allowlist: buildAllowlist([]),
+      });
+      expect(r.text).not.toContain('Ar cieņu');
+      expect(r.text.match(/\bwxs\b/gi)).toHaveLength(1); // only "WXS · Web eXpert Solutions"
+      expect(r.text).toContain(
+        'vienosimies par detaļām!\n\nGvido Angarskis\nWXS · Web eXpert Solutions',
+      );
+      if (r.html) {
+        expect(r.html).not.toContain('Ar cieņu');
+        // The name may head the design (in place of a logo), but nothing after the signature repeats it.
+        const afterSignature = r.html.slice(r.html.indexOf('Gvido Angarskis'));
+        expect(afterSignature).not.toMatch(/>Wxs</);
+      }
+    },
+  );
+
+  it('without a signature the text keeps its own closing', () => {
+    const r = renderReplyEmail({
+      template: 'plain',
+      body,
+      signature: null,
+      brand: wxs,
+      allowlist: buildAllowlist([]),
+    });
+    expect(r.text).toContain('Ar cieņu,\nWxs');
+  });
+});
+
+describe('stripSignOff in six languages', () => {
+  it.each([
+    ['Hello,\n\nSee you soon.\n\nBest regards,\nAnna', 'Hello,\n\nSee you soon.'],
+    ['Hallo,\n\nDanke.\n\nMit freundlichen Grüßen\nMax Muster\nNordlicht GmbH', 'Hallo,\n\nDanke.'],
+    ['Labdien!\n\nPaldies.\n\nAr cieņu,\nWxs', 'Labdien!\n\nPaldies.'],
+    ['Hallo,\n\nTot snel.\n\nMet vriendelijke groet,\nSanne', 'Hallo,\n\nTot snel.'],
+    ['Bonjour,\n\nÀ bientôt.\n\nCordialement,\nMarie', 'Bonjour,\n\nÀ bientôt.'],
+    ['Hola,\n\nHasta pronto.\n\nUn saludo,\nLucía', 'Hola,\n\nHasta pronto.'],
+    ['Hi,\n\nThanks!', 'Hi,'],
+    ['Thanks!', 'Thanks!'],
+  ])('%j', (input, out) => expect(stripSignOff(input)).toBe(out));
+
+  it('leaves sentences and text after a closing alone', () => {
+    const sentence = 'Hi,\n\nThanks for asking, the candle costs 24 EUR.';
+    expect(stripSignOff(sentence)).toBe(sentence);
+    const more =
+      'Hi,\n\nBest regards,\nAnna\n\nP.S. The shop opens at 10:00 on Saturday, see you there.';
+    expect(stripSignOff(more)).toBe(more);
   });
 });

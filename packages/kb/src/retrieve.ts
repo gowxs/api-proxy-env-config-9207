@@ -1,5 +1,7 @@
 import {
+  asksForPrice,
   dropNearDuplicates,
+  PRICE_KEYWORDS,
   reciprocalRankFusion,
   type DataOrigin,
   type EmbeddingProvider,
@@ -9,6 +11,7 @@ import { withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
 import {
   noteSearch,
+  pricedNoteChunks,
   sourceInfo,
   textSearch,
   vectorSearch,
@@ -20,6 +23,8 @@ const CANDIDATES = 20;
 const MAX_QUERY_TERMS = 30;
 /** Places kept for the owner's notes, whatever the website ranking says. */
 const NOTE_SLOTS = 2;
+/** Chunks of priced notes added to a price question's excerpts. */
+const PRICED_NOTE_SLOTS = 3;
 
 /**
  * Full-text query for Postgres websearch_to_tsquery: distinct words joined
@@ -44,10 +49,22 @@ export function buildFtsQuery(text: string): string {
  * excerpts (production case 2026-09-28). Each chunk carries its source's
  * type and date, so the prompt and the conflict check can prefer the newest
  * note over the website.
+ *
+ * A price question (in any of the six languages, or flagged by the caller)
+ * also searches the notes with price words in every language and always gets
+ * the notes that state amounts: an English price list must answer a Latvian
+ * "send an offer" (production case 2026-09-28).
  */
 export async function retrieveKnowledge(
   deps: { sql: Sql; embeddings: EmbeddingProvider },
-  args: { tenantId: string; query: string; origin: DataOrigin; limit?: number },
+  args: {
+    tenantId: string;
+    query: string;
+    origin: DataOrigin;
+    limit?: number;
+    /** The conversation asks about prices, whatever this query says. */
+    priceQuestion?: boolean;
+  },
 ): Promise<{
   chunks: (RetrievedChunk & { score: number; source: ChunkSource })[];
   usage: TokenUsage;
@@ -56,8 +73,12 @@ export async function retrieveKnowledge(
   const embedded = await deps.embeddings.embed([args.query.slice(0, 8_000)], 'query', args.origin);
   const embedding = embedded.vectors[0]!;
   const ftsQuery = buildFtsQuery(args.query);
+  const priceQuestion = args.priceQuestion === true || asksForPrice(args.query);
+  const noteQuery = priceQuestion
+    ? [ftsQuery, ...PRICE_KEYWORDS].filter(Boolean).join(' or ')
+    : ftsQuery;
   return withTenant(deps.sql, args.tenantId, async (tx) => {
-    const [vector, text, notes] = await Promise.all([
+    const [vector, text, notes, priced] = await Promise.all([
       vectorSearch(tx, {
         tenantId: args.tenantId,
         model: deps.embeddings.model,
@@ -69,11 +90,18 @@ export async function retrieveKnowledge(
         tenantId: args.tenantId,
         model: deps.embeddings.model,
         embedding,
-        query: ftsQuery,
+        query: noteQuery,
         limit: NOTE_SLOTS * 2,
       }),
+      priceQuestion
+        ? pricedNoteChunks(tx, { tenantId: args.tenantId, limit: PRICED_NOTE_SLOTS })
+        : Promise.resolve([]),
     ]);
-    const bestNotes = reciprocalRankFusion(notes, NOTE_SLOTS);
+    const ranked = reciprocalRankFusion(notes, NOTE_SLOTS);
+    const bestNotes = [
+      ...ranked,
+      ...priced.filter((p) => !ranked.some((n) => n.id === p.id)).map((p) => ({ ...p, score: 0 })),
+    ];
     const general = dropNearDuplicates(
       reciprocalRankFusion([vector, text], CANDIDATES * 2).filter(
         (c) => !bestNotes.some((n) => n.id === c.id),

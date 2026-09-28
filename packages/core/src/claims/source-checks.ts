@@ -61,6 +61,8 @@ const PRICE_QUESTION_RE = wordRegex(
     'maksā',
     'izmaksas',
     'izmaksā',
+    // "piedāvājums" is the Latvian word for a quote or an offer (production case 2026-09-28).
+    'piedāvājum\\p{L}*',
   ].join('|'),
 );
 
@@ -70,6 +72,35 @@ export function asksForPrice(inboundText: string, category?: string): boolean {
   PRICE_QUESTION_RE.lastIndex = 0;
   return PRICE_QUESTION_RE.test(foldForMatching(inboundText));
 }
+
+/**
+ * Words a price list is written with, in the six supported languages: added to
+ * the keyword search of the owner's notes for a price question, so a note in
+ * English is found for a question in Latvian (production case 2026-09-28).
+ */
+export const PRICE_KEYWORDS = [
+  'price',
+  'prices',
+  'pricing',
+  'cost',
+  'costs',
+  'eur',
+  'preis',
+  'preise',
+  'kosten',
+  'cena',
+  'cenas',
+  'cenrādis',
+  'prijs',
+  'prijzen',
+  'tarief',
+  'prix',
+  'tarif',
+  'tarifs',
+  'precio',
+  'precios',
+  'tarifa',
+];
 
 /** Amounts of money stated in the excerpts the model was shown. */
 export function pricesInExcerpts(excerpts: string[]): string[] {

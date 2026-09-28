@@ -38,6 +38,7 @@ export * from './notify/report-token.ts';
 export * from './notify/channel.ts';
 export * from './ops/data-region.ts';
 export * from './email-design/render.ts';
+export * from './email-design/sign-off.ts';
 export * from './value/report.ts';
 export * from './assistant/locale-defaults.ts';
 export * from './assistant/help.ts';

@@ -47,7 +47,7 @@ async function makeDraft(opts: {
   body?: string;
   to?: string;
   subject?: string;
-  kind?: 'reply' | 'followup' | 'acknowledgement';
+  kind?: 'reply' | 'followup' | 'acknowledgement' | 'compose';
 }) {
   const tenantId = opts.tenantId ?? T.tenantId;
   const conn = opts.connectionId ?? connectionId;
@@ -343,6 +343,50 @@ describe('e-mail design', () => {
     expect(m!.raw).not.toMatch(/multipart|text\/html/);
     expect((await simpleParser(m!.raw)).text?.trimEnd()).toBe(
       'Yes, lavender candles are in stock.\n\nLiga — Lumen Studio',
+    );
+  });
+
+  // Production case 2026-09-28 (Latvian, Card design): the assistant's offer e-mail
+  // had three sign-offs and landed in the recipient's spam folder.
+  it('a first e-mail (Compose, the assistant) goes out as plain text with one sign-off', async () => {
+    const t = await seedTenant(owner, 'send-compose', { embeddingAxis: 77 });
+    await owner`update public.tenants set email_template = 'card', brand_website = 'https://wxs.test/en/',
+                reply_signature = ${'Gvido Angarskis\nWXS · Web eXpert Solutions'}, name = 'Wxs'
+                where id = ${t.tenantId}`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const body =
+      'Labdien!\n\nNosūtām mūsu pakalpojumu piedāvājumu:\n- Landing page: no 390 EUR\n- Uzņēmuma mājaslapa: no 590 EUR\n\nAr cieņu,\nWxs';
+    const d = await makeDraft({ tenantId: t.tenantId, connectionId: conn, kind: 'compose', body });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    const [m] = await inboxWith(d.tag);
+    expect(m!.raw).not.toMatch(/multipart|text\/html/);
+    expect(m!.raw).not.toMatch(/^(List-Unsubscribe|List-Id|Precedence|Auto-Submitted):/im);
+    expect((await simpleParser(m!.raw)).text?.trimEnd()).toBe(
+      'Labdien!\n\nNosūtām mūsu pakalpojumu piedāvājumu:\n- Landing page: no 390 EUR\n- Uzņēmuma mājaslapa: no 590 EUR\n\nGvido Angarskis\nWXS · Web eXpert Solutions',
+    );
+  });
+
+  it('without a signature, the business name signs once', async () => {
+    const t = await seedTenant(owner, 'send-nosig', { embeddingAxis: 78 });
+    await owner`update public.tenants set reply_signature = null, name = 'Lumen Studio' where id = ${t.tenantId}`;
+    const conn = await addGreenmailConnection(owner, gm, {
+      tenantId: t.tenantId,
+      address: shop.address,
+      password: shop.password,
+    });
+    const d = await makeDraft({
+      tenantId: t.tenantId,
+      connectionId: conn,
+      body: 'Yes, lavender candles are in stock.\n\nBest regards,\nLumen Studio',
+    });
+    expect(await send(job(t.tenantId, d.draftId))).toEqual({ status: 'sent' });
+    const [m] = await inboxWith(d.tag);
+    expect((await simpleParser(m!.raw)).text?.trimEnd()).toBe(
+      'Yes, lavender candles are in stock.\n\nLumen Studio',
     );
   });
 });

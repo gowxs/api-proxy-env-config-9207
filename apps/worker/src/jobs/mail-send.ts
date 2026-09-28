@@ -601,13 +601,20 @@ async function planSend(
   }
 
   const storedLogo = await loadStoredLogo(tx);
+  // A first e-mail to someone (Compose, the assistant's send_email, a quote the owner
+  // starts) goes out as plain text: a designed HTML e-mail from a new sender reads as
+  // a newsletter to spam filters (production case 2026-09-28). Replies keep the design.
+  const firstContact = d.kind === 'compose' || (d.kind === 'quote' && !d.source_message_id);
+  const template: EmailTemplate = firstContact ? 'plain' : d.email_template;
+  // Exactly one sign-off: the tenant's signature, else the business name.
+  const companyName = d.brand_company_name ?? d.tenant_name;
   // The tenant's e-mail design frames the reply; the reply text is unchanged.
   const rendered = renderReplyEmail({
-    template: d.email_template,
+    template,
     body: d.body,
-    signature: d.reply_signature,
+    signature: d.reply_signature?.trim() || companyName,
     brand: {
-      companyName: d.brand_company_name ?? d.tenant_name,
+      companyName,
       logoUrl: d.brand_logo_url,
       color: d.brand_color,
       website: d.brand_website,
@@ -616,7 +623,7 @@ async function planSend(
       socialLinks: d.brand_social_links,
       logoInline: storedLogo !== null,
     },
-    allowlist: d.email_template === 'plain' ? emptyAllowlist() : await loadAllowlist(tx),
+    allowlist: template === 'plain' ? emptyAllowlist() : await loadAllowlist(tx),
   });
   return {
     plan: {

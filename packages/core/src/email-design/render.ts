@@ -1,3 +1,4 @@
+import { signatureMentions, stripSignOff } from './sign-off.ts';
 import type { Allowlist } from '../safety/allowlist.ts';
 import { findLinks, hostOfUrl, normalizeUrl } from '../safety/links.ts';
 
@@ -180,10 +181,13 @@ interface ContactLink {
   label: string;
   href: string;
 }
-function contactLinks(b: EmailBrand): ContactLink[] {
+function contactLinks(b: EmailBrand, signature: string | null): ContactLink[] {
   const out: ContactLink[] = [];
-  if (safeHttp(b.website)) out.push({ label: displayHost(b.website), href: b.website });
-  if (b.phone?.trim()) out.push({ label: b.phone.trim(), href: telHref(b.phone) });
+  // Nothing the signature already says (its website or phone) is repeated below it.
+  if (safeHttp(b.website) && !signatureMentions(signature, b.website))
+    out.push({ label: displayHost(b.website), href: b.website });
+  if (b.phone?.trim() && !signatureMentions(signature, b.phone))
+    out.push({ label: b.phone.trim(), href: telHref(b.phone) });
   for (const s of b.socialLinks.slice(0, 3)) {
     if (safeHttp(s)) out.push({ label: socialLabel(s), href: s });
   }
@@ -193,10 +197,11 @@ function contactLinks(b: EmailBrand): ContactLink[] {
 /** The text/plain version of templates 2–5: the reply, the signature, then the contact lines. */
 function fullText(body: string, signature: string | null, b: EmailBrand): string {
   const lines: string[] = [];
-  if (b.companyName?.trim() && !signature?.includes(b.companyName.trim()))
+  // Case- and punctuation-insensitive: "Wxs" is already in "WXS · Web eXpert Solutions".
+  if (b.companyName?.trim() && !signatureMentions(signature, b.companyName))
     lines.push(b.companyName.trim());
-  if (safeHttp(b.website)) lines.push(b.website);
-  if (b.phone?.trim()) lines.push(b.phone.trim());
+  if (safeHttp(b.website) && !signatureMentions(signature, b.website)) lines.push(b.website);
+  if (b.phone?.trim() && !signatureMentions(signature, b.phone)) lines.push(b.phone.trim());
   for (const s of b.socialLinks.slice(0, 3)) if (safeHttp(s)) lines.push(`${socialLabel(s)}: ${s}`);
   if (b.address?.trim()) lines.push(b.address.trim());
   return [
@@ -209,8 +214,10 @@ function fullText(body: string, signature: string | null, b: EmailBrand): string
 }
 
 // ---------------------------------------------------------------- templates
-export function renderReplyEmail(i: RenderInput): RenderedReply {
-  const signature = i.signature?.trim() || null;
+export function renderReplyEmail(input: RenderInput): RenderedReply {
+  const signature = input.signature?.trim() || null;
+  // Exactly one sign-off: a closing written into the text goes when the signature follows.
+  const i = signature ? { ...input, body: stripSignOff(input.body) } : input;
   // 1. Plain: exactly what Noctiv has always sent.
   if (i.template === 'plain') {
     return {
@@ -250,7 +257,7 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
           `<p style="margin:0;font-family:${FONT};font-size:18px;font-weight:700;color:${link}">${esc(company)}</p>`
         : '';
 
-  const contacts = contactLinks(b);
+  const contacts = contactLinks(b, signature);
   const contactInline = contacts.length
     ? `<p style="${small};margin-top:8px">${contacts
         .map(
@@ -301,9 +308,11 @@ export function renderReplyEmail(i: RenderInput): RenderedReply {
         `<tr><td style="height:4px;line-height:4px;font-size:4px;background:${brand}">&nbsp;</td></tr>` +
           `${top ? `<tr><td style="padding:20px 4px 4px">${top}</td></tr>` : ''}` +
           `<tr><td style="padding:18px 4px 8px">${bodyHtml}${sigBlock}</td></tr>` +
-          (b.address?.trim() || company
+          (b.address?.trim() || (company && !signatureMentions(signature, company))
             ? `<tr><td style="padding:14px 4px 8px;border-top:1px solid ${RULE}"><p style="${small}">${esc(
-                [company, b.address?.trim()].filter(Boolean).join(' · '),
+                [signatureMentions(signature, company) ? '' : company, b.address?.trim()]
+                  .filter(Boolean)
+                  .join(' · '),
               )}</p></td></tr>`
             : ''),
       );

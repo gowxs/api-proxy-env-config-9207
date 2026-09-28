@@ -61,6 +61,8 @@ describe('asksForPrice', () => {
     'Combien coûte un site ?',
     '¿Cuánto cuesta una página web?',
     'Cik maksā mājaslapa?',
+    // Production case 2026-09-28: "send … an offer" in Latvian.
+    'Nosūti uz klients@example.test piedāvājumu: 1 biznesa mājaslapa un 1 landing page',
   ])('%s', (text) => expect(asksForPrice(text)).toBe(true));
 
   it('not for other questions, unless classified as a quote request', () => {

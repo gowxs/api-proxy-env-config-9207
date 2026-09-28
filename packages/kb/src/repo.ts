@@ -1,4 +1,9 @@
-import { buildAllowlist, type Allowlist, type AllowlistEntry } from '@noctiv/core';
+import {
+  buildAllowlist,
+  pricesInExcerpts,
+  type Allowlist,
+  type AllowlistEntry,
+} from '@noctiv/core';
 import type { TransactionSql } from 'postgres';
 
 export interface KbSourceRow {
@@ -181,6 +186,35 @@ export async function noteSearch(
         limit ${args.limit}`
     : [];
   return [vector.map(toChunk), text.map(toChunk)];
+}
+
+/**
+ * Chunks of the owner's notes that state an amount of money, newest note
+ * first: added to the excerpts of every price question, whatever its language
+ * (production case 2026-09-28: a Latvian question, the prices in an English note).
+ */
+export async function pricedNoteChunks(
+  tx: TransactionSql,
+  args: { tenantId: string; limit: number },
+): Promise<RetrievedChunk[]> {
+  const rows = await tx<
+    { chunk_id: string; source_id: string; content: string; metadata: Record<string, unknown> }[]
+  >`
+    select c.id as chunk_id, c.source_id, c.content, c.metadata
+    from public.kb_chunks c join public.kb_sources s on s.id = c.source_id
+    where c.tenant_id = ${args.tenantId} and s.type = 'note'
+      and c.content ~ '[0-9]'
+    order by s.updated_at desc, c.chunk_index
+    limit 200`;
+  return rows
+    .filter((r) => pricesInExcerpts([r.content]).length > 0)
+    .slice(0, args.limit)
+    .map((r) => ({
+      id: r.chunk_id,
+      sourceId: r.source_id,
+      content: r.content,
+      metadata: r.metadata,
+    }));
 }
 
 export async function vectorSearch(

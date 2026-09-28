@@ -1034,6 +1034,12 @@ The owner asked (in Latvian) to send "our offer" to an address; the price list w
 - Confirm → `POST /v1/tenants/:id/quotes/new`: lead, a new conversation (like Compose, from the connected mailbox), the next quote number, lines from the price list, the cover in the conversation's language without "thank you for your request", subject "Piedāvājums Q-…" (in that language), the draft approved and sent by the worker with the PDF and Accept link. Migration `20261005000100`: the card type, and insert/update(draft_id) on quotes for the API role.
 - Offer flow: with price-list items the assistant proposes a quote card; with an empty price list, the e-mail with knowledge-base prices plus the price-list card (27.x).
 
+### 27.z Fixes after the second Latvian session (founder, 2026-09-28 evening)
+- **Prices in any language:** a price question (the six languages' price words, now also Latvian "piedāvājums") searches the owner's notes with price words in all six languages as well, and always gets up to three note chunks that state amounts, newest note first. In the assistant this follows the owner's latest message, whatever words the model searches with. (In the production case the owner had deleted the price note 13 s before asking; the assistant was right that day.)
+- **Greeting language:** the chat's greeting is in the browser's language and is shown only once that is known (no English flash); "New chat" passes it; after the first answer the chat follows the conversation's language, which the worker sets from the owner's messages.
+- **One sign-off:** with a signature (the tenant's, else the business name) any closing the model or the owner wrote ("Ar cieņu,\nWxs", six languages, up to three name lines) is removed first; the design's contact block and footer leave out the company, website and phone the signature already has. The assistant's e-mail prompt no longer asks for a sign-off. Replies, follow-ups, Compose, quotes and assistant e-mails all go through the same renderer.
+- **Deliverability:** a first e-mail to someone (Compose, the assistant's `send_email`, a quote the owner starts) always goes out as plain text, whatever the design; replies keep it. 1:1 mail never has List-Unsubscribe, List-Id or Precedence; Auto-Submitted only on automatic replies. A new Gmail account sending a cold offer can still land in spam; that is reputation, outside our control.
+
 ## 28. Your brand: logo and colour (founder request 2026-10-01)
 
 - **Where:**

@@ -1,5 +1,6 @@
 import {
   addUsage,
+  asksForPrice,
   ASSISTANT_HELP,
   AssistantEvidence,
   AssistantStepSchema,
@@ -254,6 +255,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
     let retriedNumbers = false;
     let nudgedToKnowledge = false;
     let actionCards: ActionCard[] = [];
+    const latestOwnerText = ctx.history.filter((m) => m.role === 'owner').at(-1)?.text ?? '';
     const ownerText = ctx.history
       .filter((m) => m.role === 'owner')
       .map((m) => m.text)
@@ -318,7 +320,14 @@ export function assistantTurnHandler(deps: AssistantDeps) {
                     (
                       await retrieveKnowledge(
                         { sql: deps.sql, embeddings: deps.embeddings! },
-                        { tenantId, query, origin: ctx.origin, limit: 6 },
+                        {
+                          tenantId,
+                          query,
+                          origin: ctx.origin,
+                          limit: 6,
+                          // The owner asks for prices or an offer: the priced notes come too.
+                          priceQuestion: asksForPrice(latestOwnerText),
+                        },
                       )
                     ).chunks,
                 }
