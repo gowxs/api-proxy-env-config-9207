@@ -166,7 +166,7 @@ function links(
       return { dashboard: `${app}/payments` };
     case 'weekly_report':
       return {
-        dashboard: `${app}/`,
+        dashboard: `${app}/home`,
         ...(cfg.actionSecret
           ? {
               unsubscribe: `${api}/reports/weekly/unsubscribe/${tenantId}/${weeklyReportToken(tenantId, cfg.actionSecret)}`,
@@ -198,7 +198,7 @@ function links(
           typeof p.threadId === 'string' ? `${app}/conversations/${p.threadId}` : `${app}/quotes`,
       };
     default:
-      return { dashboard: `${app}/` };
+      return { dashboard: `${app}/home` };
   }
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { HomeDashboard } from './home-dashboard';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 /** Same test as the inline script in app/page.tsx: a stored session (Supabase or dev login). */
 export function hasStoredSession(): boolean {
@@ -16,15 +16,15 @@ export function hasStoredSession(): boolean {
   return false;
 }
 
-/** Mounts the dashboard for a signed-in visitor; everyone else keeps the public page. */
-export function HomeGate() {
-  const [signedIn, setSignedIn] = useState(false);
+/**
+ * "/" is the public page only. A signed-in owner who reaches it by an in-app
+ * navigation (the inline script runs only on a full page load) goes to /home.
+ */
+export function SignedInToHome() {
+  const router = useRouter();
   useEffect(() => {
-    if (hasStoredSession()) {
-      setSignedIn(true);
-      // The dashboard shows its own loading state from here on.
-      document.documentElement.setAttribute('data-home', '');
-    } else document.documentElement.removeAttribute('data-session');
-  }, []);
-  return signedIn ? <HomeDashboard /> : null;
+    if (hasStoredSession()) router.replace('/home');
+    else document.documentElement.removeAttribute('data-session');
+  }, [router]);
+  return null;
 }

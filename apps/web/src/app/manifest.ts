@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Noctiv',
     short_name: 'Noctiv',
     description: 'The e-mail assistant that works while you sleep.',
-    start_url: '/',
+    start_url: '/home',
     display: 'standalone',
     background_color: '#0B1026',
     theme_color: '#0B1026',

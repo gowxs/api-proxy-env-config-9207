@@ -35,7 +35,7 @@ const INBOX: Item = {
     { n: c.escalations, tone: 'amber', label: 'escalations' },
   ],
 };
-const HOME: Item = { href: '/', label: 'Home', icon: 'home' };
+const HOME: Item = { href: '/home', label: 'Home', icon: 'home' };
 const LEADS: Item = { href: '/leads', label: 'Leads', icon: 'leads' };
 const QUOTES: Item = { href: '/quotes', label: 'Quotes', icon: 'quotes' };
 const DOCUMENTS: Item = {
@@ -77,7 +77,9 @@ const ALIASES: Record<string, string> = {
 function isActive(pathname: string, href: string) {
   const alias = Object.entries(ALIASES).find(([p]) => pathname.startsWith(p))?.[1];
   if (alias) return alias === href;
-  return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
+  return href === '/home'
+    ? pathname === '/home'
+    : pathname === href || pathname.startsWith(`${href}/`);
 }
 
 const badgesOf = (item: Item, nav: NavData | null) =>
@@ -181,7 +183,7 @@ function Sidebar() {
   const { nav } = useNav();
   return (
     <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-neutral-200 bg-white lg:flex">
-      <Link href="/" className="flex h-16 shrink-0 items-center px-5" aria-label="Noctiv, home">
+      <Link href="/home" className="flex h-16 shrink-0 items-center px-5" aria-label="Noctiv, home">
         <Logo height={24} />
       </Link>
       <nav aria-label="Main" className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
@@ -443,7 +445,7 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
           <Sidebar />
           <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur lg:hidden">
             <div className="flex h-14 items-center gap-3 px-4">
-              <Link href="/" className="shrink-0" aria-label="Noctiv, home">
+              <Link href="/home" className="shrink-0" aria-label="Noctiv, home">
                 <Logo height={24} />
               </Link>
               <PlanChip className="ml-auto" />

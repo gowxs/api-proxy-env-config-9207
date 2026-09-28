@@ -10,11 +10,11 @@ import { DEV_LOGIN, devLogin, SUPABASE_ENABLED, supabase } from '@/lib/auth';
  * browser so the page itself stays static.
  */
 export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' | 'signup' }) {
-  const [next, setNext] = useState('/');
+  const [next, setNext] = useState('/home');
   const [deleted, setDeleted] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(location.search);
-    setNext(q.get('next') || '/');
+    setNext(q.get('next') || '/home');
     setDeleted(q.has('deleted'));
   }, []);
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
@@ -26,7 +26,7 @@ export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' |
 
   // A full page load: / shows the public page or the dashboard depending on the stored session.
   const go = () => {
-    window.location.assign(next.startsWith('/') && !next.startsWith('//') ? next : '/');
+    window.location.assign(next.startsWith('/') && !next.startsWith('//') ? next : '/home');
   };
 
   async function submit(e: React.FormEvent) {

@@ -394,7 +394,7 @@ function AssistantSetup({ onManual }: { onManual: () => void }) {
                 body: { onboardingCompleted: true },
               });
               await refresh();
-              router.replace('/');
+              router.replace('/home');
             })
           }
         >
@@ -453,7 +453,7 @@ function Wizard() {
   }, [path, tenant]);
 
   useEffect(() => {
-    if (tenant?.onboarding_completed_at) router.replace('/');
+    if (tenant?.onboarding_completed_at) router.replace('/home');
   }, [tenant, router]);
 
   if (path === 'resolving') return null;
@@ -547,7 +547,7 @@ function Wizard() {
           tenantId={tenant.id}
           onFinish={async () => {
             await refresh();
-            router.replace('/');
+            router.replace('/home');
           }}
         />
       )}
