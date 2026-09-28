@@ -9,7 +9,7 @@
   <div class="wrap">
     <p class="label">Privacy</p>
     <h1 style="margin-top: var(--s-3)">Privacy, in plain words.</h1>
-    <p class="lead">Last updated 25 September 2026.</p>
+    <p class="lead">Last updated 28 September 2026.</p>
   </div>
   <hr class="dawn-line" />
 </section>
@@ -46,6 +46,11 @@
         </li>
         <li><strong>Your knowledge base:</strong> website text, files and notes you add.</li>
         <li>
+          <strong>Bookings and forms:</strong> the name, e-mail address and phone number your
+          customers give when they book a meeting or fill in a form, their answers, and the booked
+          times.
+        </li>
+        <li>
           <strong>Billing:</strong> subscription status and Paddle's customer and subscription IDs.
           Paddle, our reseller and merchant of record, handles checkout, payment details, tax and
           invoices as its own controller under its
@@ -53,6 +58,22 @@
           details.
         </li>
       </ul>
+
+      <h2>Google Calendar</h2>
+      <p>
+        Bookings (beta): if you connect Google Calendar, Noctiv reads only the times you are busy in
+        your primary calendar and creates, moves and deletes the events it books. It does not read
+        event titles, descriptions or attendees. Noctiv's use and transfer of information received
+        from Google APIs adheres to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy"
+          >Google API Services User Data Policy</a
+        >, including the Limited Use requirements. You can disconnect at any time in Bookings →
+        Setup or in your Google Account.
+      </p>
+      <p>
+        The access Google grants is stored encrypted, and only the background service that talks to
+        your calendar can decrypt it. When you disconnect, we revoke it with Google and delete it.
+      </p>
 
       <h2>Why</h2>
       <ul>
@@ -118,6 +139,11 @@
       <ul>
         <li>
           <strong>E-mail text:</strong> 90 days by default. You can shorten this in the settings.
+        </li>
+        <li>
+          <strong>Bookings and form answers:</strong> with the lead they belong to, like your other
+          business records, until you delete the lead or your account. They are not removed with
+          e-mail text after 90 days.
         </li>
         <li>
           <strong>Your account and knowledge base:</strong> until you delete them. One button
