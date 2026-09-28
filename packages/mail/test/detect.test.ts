@@ -37,8 +37,13 @@ describe('mailbox provider detection (PLAN.md §27.3)', () => {
     expect(await detectMailbox('info@studio.eu', mx('mx.zoho.eu', 'mx2.zoho.eu'))).toMatchObject({
       provider: 'generic',
       label: 'Zoho Mail',
-      imap: { host: 'imap.zoho.eu', port: 993 },
-      smtp: { host: 'smtp.zoho.eu', port: 465 },
+      imap: { host: 'imappro.zoho.eu', port: 993 },
+      smtp: { host: 'smtppro.zoho.eu', port: 465 },
+    });
+    // A personal Zoho address uses the personal servers (no MX lookup needed).
+    expect(await detectMailbox('anna@zohomail.eu', noDns)).toMatchObject({
+      imap: { host: 'imap.zoho.eu' },
+      smtp: { host: 'smtp.zoho.eu' },
     });
     expect(await detectMailbox('info@firma.de', mx('mx00.ionos.de'))).toMatchObject({
       imap: { host: 'imap.ionos.de' },
@@ -64,7 +69,10 @@ describe('mailbox provider detection (PLAN.md §27.3)', () => {
       provider: 'google_workspace',
     });
     expect(mailboxFromName('gmail')).toMatchObject({ provider: 'gmail' });
-    expect(mailboxFromName('Zoho')).toMatchObject({ label: 'Zoho Mail' });
+    expect(mailboxFromName('Zoho')).toMatchObject({
+      label: 'Zoho Mail',
+      imap: { host: 'imappro.zoho.com' },
+    });
     expect(mailboxFromName('Office 365')).toMatchObject({ unsupported: true });
     expect(mailboxFromName('my own server')).toBeNull();
   });

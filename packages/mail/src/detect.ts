@@ -45,8 +45,16 @@ const generic = (label: string, imap: [string, number], smtp: [string, number]):
   smtp,
 });
 const ICLOUD = generic('iCloud Mail', ['imap.mail.me.com', 993], ['smtp.mail.me.com', 587]);
+/**
+ * Zoho uses different servers for personal addresses (@zoho.com, @zohomail.com:
+ * imap/smtp.zoho.*) and for organisation accounts on the business's own domain
+ * (imappro/smtppro.zoho.*), per zoho.com/mail/help/imap-access.html; the
+ * data-centre suffix (com, eu, in, com.au, jp) follows the account.
+ */
 const ZOHO = (tld: string) =>
   generic('Zoho Mail', [`imap.zoho.${tld}`, 993], [`smtp.zoho.${tld}`, 465]);
+const ZOHO_ORG = (tld: string) =>
+  generic('Zoho Mail', [`imappro.zoho.${tld}`, 993], [`smtppro.zoho.${tld}`, 465]);
 const FASTMAIL = generic('Fastmail', ['imap.fastmail.com', 993], ['smtp.fastmail.com', 465]);
 
 /** Consumer domains: the address alone says who it is. */
@@ -67,7 +75,8 @@ const BY_MX: [RegExp, Known | ((mx: string) => Known)][] = [
   [/(^|\.)(google\.com|googlemail\.com)$/, WORKSPACE],
   [/(^|\.)hostinger\.[a-z.]+$/, HOSTINGER],
   [/\.mail\.protection\.outlook\.com$/, MICROSOFT],
-  [/(^|\.)zoho\.(com|eu|in|com\.au|jp)$/, (mx) => ZOHO(/zoho\.([a-z.]+)$/.exec(mx)![1]!)],
+  // A business domain whose mail Zoho hosts is an organisation account.
+  [/(^|\.)zoho\.(com|eu|in|com\.au|jp)$/, (mx) => ZOHO_ORG(/zoho\.([a-z.]+)$/.exec(mx)![1]!)],
   [/(^|\.)yahoodns\.net$/, YAHOO],
   [
     /(^|\.)(ionos\.[a-z.]+|kundenserver\.de)$/,
@@ -102,7 +111,8 @@ const BY_NAME: [RegExp, Known][] = [
   [/hostinger/i, HOSTINGER],
   [/outlook|hotmail|microsoft|office\s*365|m365/i, MICROSOFT],
   [/icloud/i, ICLOUD],
-  [/zoho/i, ZOHO('com')],
+  // Businesses on Zoho almost always use their own domain (organisation servers).
+  [/zoho/i, ZOHO_ORG('com')],
   [/fastmail/i, FASTMAIL],
   [/ionos|1\s*&\s*1/i, generic('IONOS', ['imap.ionos.com', 993], ['smtp.ionos.com', 465])],
   [
