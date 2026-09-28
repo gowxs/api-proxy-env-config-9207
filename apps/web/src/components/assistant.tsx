@@ -8,6 +8,7 @@
  * confirmation dialog as Settings.
  */
 
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AutoSendDialog } from '@/components/auto-send-dialog';
@@ -15,6 +16,7 @@ import { Button, cx, ErrorText } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import {
   browserLocale,
+  type DocLine,
   INTL_LOCALE,
   WORDS,
   type AssistantLocale,
@@ -33,12 +35,15 @@ function SendingDialog({
   onConfirm,
   onCancel,
   busy,
+  text,
 }: {
   locale: AssistantLocale;
   lines: [string, string][];
   onConfirm: () => void;
   onCancel: () => void;
   busy: boolean;
+  /** The e-mail and payment cards say what exactly happens. */
+  text?: { title: string; body: string; check: string; button: string; preview?: string };
 }) {
   const w = WORDS[locale];
   const [ok, setOk] = useState(false);
@@ -51,9 +56,9 @@ function SendingDialog({
     >
       <div className="w-full max-w-md space-y-3 rounded-xl bg-white p-5">
         <h2 id="sending-dialog-title" className="text-lg font-semibold">
-          {w.sendingTitle}
+          {text?.title ?? w.sendingTitle}
         </h2>
-        <p className="text-sm text-neutral-700">{w.sendingBody}</p>
+        <p className="text-sm text-neutral-700">{text?.body ?? w.sendingBody}</p>
         <dl className="space-y-1 rounded-lg bg-neutral-50 p-3 text-sm">
           {lines.map(([k, v]) => (
             <div key={k} className="flex justify-between gap-3">
@@ -62,6 +67,11 @@ function SendingDialog({
             </div>
           ))}
         </dl>
+        {text?.preview && (
+          <p className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 p-3 text-sm whitespace-pre-wrap">
+            {text.preview}
+          </p>
+        )}
         <label className="flex items-start gap-2 text-sm">
           <input
             type="checkbox"
@@ -69,14 +79,14 @@ function SendingDialog({
             checked={ok}
             onChange={(e) => setOk(e.target.checked)}
           />
-          <span>{w.sendingCheck}</span>
+          <span>{text?.check ?? w.sendingCheck}</span>
         </label>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onCancel}>
             {w.cancel}
           </Button>
           <Button disabled={!ok || busy} onClick={onConfirm}>
-            {w.confirm}
+            {text?.button ?? w.confirm}
           </Button>
         </div>
       </div>
@@ -90,8 +100,11 @@ function ProposalCard({
   locale,
   currentMode,
   onChanged,
+  waitingFor,
 }: {
   p: AssistantProposal;
+  /** An e-mail that attaches the document card above: that card's status. */
+  waitingFor?: AssistantProposal['status'];
   tenantId: string;
   locale: AssistantLocale;
   currentMode: Mode | null;
@@ -114,6 +127,8 @@ function ProposalCard({
       onChanged(r.proposal);
       setDialog(null);
     } catch (e) {
+      // Close the dialog so the reason is visible under the card.
+      setDialog(null);
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setBusy(false);
@@ -127,15 +142,52 @@ function ProposalCard({
     setDialog('sending');
   };
 
+  const a = w.actions;
+  const pl = p.payload;
+  const cur = pl.currency ?? 'EUR';
   const label =
-    p.type === 'knowledge_note' ? w.noteCard : p.type === 'price_items' ? w.priceCard : null;
+    p.type === 'knowledge_note'
+      ? w.noteCard
+      : p.type === 'price_items'
+        ? w.priceCard
+        : p.type === 'create_document'
+          ? pl.docType === 'delivery_note'
+            ? a.deliveryNote
+            : a.invoice
+          : p.type === 'send_email'
+            ? a.email
+            : p.type === 'mark_paid'
+              ? a.paid
+              : null;
+  const docLines = p.type === 'create_document' ? (pl.lines as unknown as DocLine[]) : [];
+  const dialogText =
+    p.type === 'send_email'
+      ? {
+          title: a.sendTitle,
+          body: a.sendBody,
+          check: a.sendCheck,
+          button: a.send,
+          preview: `${pl.subject ?? ''}\n\n${pl.body ?? ''}`,
+        }
+      : p.type === 'mark_paid'
+        ? { title: a.paidTitle, body: a.paidBody, check: w.sendingCheck, button: w.confirm }
+        : undefined;
+  const dialogLines: [string, string][] =
+    p.type === 'send_email'
+      ? [
+          ['To', pl.to ?? ''],
+          ...(pl.attachLabels ?? []).map((l, i): [string, string] => [i ? '' : 'Attached', l]),
+        ]
+      : p.type === 'mark_paid'
+        ? [['Document', pl.number ?? '']]
+        : (pl.lines ?? []);
   return (
     <div className="mt-2 rounded-xl border border-indigo-200 bg-white p-3 text-sm shadow-sm">
       <p className="text-xs font-semibold tracking-wide text-indigo-700 uppercase">
         {label ?? w.proposedChange}
       </p>
       <p className="mt-1 font-medium">{p.title}</p>
-      {p.payload.lines && (
+      {p.type === 'settings' && p.payload.lines && (
         <dl className="mt-2 space-y-1">
           {p.payload.lines.map(([k, v]) => (
             <div key={k} className="flex justify-between gap-3">
@@ -163,10 +215,145 @@ function ProposalCard({
           ))}
         </ul>
       )}
+      {p.type === 'create_document' && (
+        <div className="mt-2 space-y-2">
+          <p className="text-neutral-700">
+            <span className="font-medium">{pl.buyer?.name || pl.buyer?.email}</span>
+            {pl.buyer?.email && pl.buyer.name ? ` · ${pl.buyer.email}` : ''}
+            <br />
+            <span className="text-neutral-500">{pl.buyer?.address}</span>
+          </p>
+          <ul className="divide-y divide-neutral-100">
+            {docLines.map((l, i) => (
+              <li key={i} className="flex justify-between gap-3 py-1">
+                <span>
+                  {l.name}
+                  {l.qty !== 1 ? ` × ${l.qty} ${l.unit}` : ''}
+                </span>
+                <span className="tabular-nums">
+                  {l.unitPriceCents === null ? '—' : money(l.unitPriceCents, cur, locale)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {pl.totals && (
+            <dl className="space-y-0.5 border-t border-neutral-200 pt-1 tabular-nums">
+              {pl.vatMode !== 'none' && (
+                <>
+                  <div className="flex justify-between text-neutral-500">
+                    <dt>Subtotal</dt>
+                    <dd>{money(pl.totals.subtotalCents, cur, locale)}</dd>
+                  </div>
+                  <div className="flex justify-between text-neutral-500">
+                    <dt>
+                      VAT {pl.vatRate}%{pl.vatMode === 'inclusive' ? ' (included)' : ''}
+                    </dt>
+                    <dd>{money(pl.totals.vatCents, cur, locale)}</dd>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between font-semibold">
+                <dt>Total</dt>
+                <dd>{money(pl.totals.totalCents, cur, locale)}</dd>
+              </div>
+            </dl>
+          )}
+          {pl.dueDate && (
+            <p className="text-neutral-600">
+              Due{' '}
+              {new Date(`${pl.dueDate}T12:00:00Z`).toLocaleDateString(INTL_LOCALE[locale], {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </p>
+          )}
+        </div>
+      )}
+      {p.type === 'send_email' && (
+        <div className="mt-2 space-y-2">
+          <dl className="space-y-1">
+            <div className="flex justify-between gap-3">
+              <dt className="text-neutral-500">To</dt>
+              <dd className="text-right font-medium break-all">
+                {pl.name ? `${pl.name} <${pl.to}>` : pl.to}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-neutral-500">Subject</dt>
+              <dd className="text-right font-medium">{pl.subject}</dd>
+            </div>
+          </dl>
+          <p className="max-h-40 overflow-y-auto rounded-lg bg-neutral-50 p-2 whitespace-pre-wrap">
+            {pl.body}
+          </p>
+          {(pl.attachLabels ?? []).map((l) => (
+            <p key={l} className="text-neutral-600">
+              📎 {waitingFor === 'applied' ? l.replace(/ \(once you confirm it above\)$/, '') : l}
+            </p>
+          ))}
+        </div>
+      )}
+      {p.type === 'mark_paid' && (
+        <dl className="mt-2 space-y-1">
+          <div className="flex justify-between gap-3">
+            <dt className="text-neutral-500">{pl.number}</dt>
+            <dd className="text-right font-medium">
+              {pl.customer ?? ''}
+              {pl.totalCents !== undefined ? ` · ${money(pl.totalCents, cur, locale)}` : ''}
+            </dd>
+          </div>
+        </dl>
+      )}
+      {p.status === 'applied' && p.result && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 text-sm">
+          {p.type === 'create_document' && p.result.documentId && (
+            <Link
+              className="font-medium text-indigo-700"
+              href={`/documents/${p.result.documentId}`}
+            >
+              {a.ready}: {p.result.number} → {a.open}
+            </Link>
+          )}
+          {p.type === 'send_email' && p.result.threadId && (
+            <Link
+              className="font-medium text-indigo-700"
+              href={`/conversations/${p.result.threadId}`}
+            >
+              {a.sent} → {a.open}
+            </Link>
+          )}
+          {p.type === 'mark_paid' && p.result.documentId && (
+            <Link
+              className="font-medium text-indigo-700"
+              href={`/documents/${p.result.documentId}`}
+            >
+              {a.markedPaid}: {p.result.number}
+            </Link>
+          )}
+        </p>
+      )}
+      {p.type === 'create_document' && p.status === 'failed' && p.result?.documentId && (
+        <Link
+          className="mt-1 block text-sm font-medium text-indigo-700"
+          href={`/documents/${p.result.documentId}`}
+        >
+          {a.open} →
+        </Link>
+      )}
+      {p.status === 'proposed' && waitingFor !== undefined && waitingFor !== 'applied' && (
+        <p className="mt-2 text-xs text-neutral-600">
+          {waitingFor === 'proposed' ? a.confirmFirst : a.nothingToAttach}
+        </p>
+      )}
       {p.status === 'proposed' ? (
         <div className="mt-3 flex gap-2">
-          <Button className="min-h-10 flex-1" disabled={busy} onClick={confirm}>
-            {w.confirm}
+          <Button
+            className="min-h-10 flex-1"
+            disabled={busy || (waitingFor !== undefined && waitingFor !== 'applied')}
+            onClick={confirm}
+          >
+            {p.type === 'send_email' ? a.send : w.confirm}
           </Button>
           <Button
             variant="secondary"
@@ -206,7 +393,8 @@ function ProposalCard({
       {dialog === 'sending' && (
         <SendingDialog
           locale={locale}
-          lines={p.payload.lines ?? []}
+          lines={dialogLines}
+          text={dialogText}
           busy={busy}
           onCancel={() => setDialog(null)}
           onConfirm={() => void decide('apply', true)}
@@ -373,6 +561,13 @@ export function AssistantChat({
                 <ProposalCard
                   key={p.id}
                   p={p}
+                  waitingFor={
+                    p.payload.attachProposalId
+                      ? thread?.messages
+                          .flatMap((x) => x.proposals)
+                          .find((x) => x.id === p.payload.attachProposalId)?.status
+                      : undefined
+                  }
                   tenantId={tenantId}
                   locale={locale}
                   currentMode={currentMode}

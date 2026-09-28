@@ -21,6 +21,7 @@ import {
 } from '@noctiv/core';
 import { currentBudget, recordUsage, withTenant, type Job } from '@noctiv/db';
 import type { Sql } from 'postgres';
+import { normalizeActions, type ActionCard } from '../assistant/actions.ts';
 import { runTool } from '../assistant/tools.ts';
 
 export interface AssistantDeps {
@@ -58,6 +59,8 @@ const UNSURE: Record<AssistantLanguage, string> = {
   es: 'Lo siento, no pude responder con seguridad. ¿Puedes preguntarlo de otra forma?',
 };
 
+const ACTION_TYPES = new Set(['create_document', 'send_email', 'mark_paid']);
+
 const NO_CARD: Record<AssistantLanguage, string> = {
   en: '(Some of this is not shown as a card: it is already set, or I could not use the values as given.)',
   de: '(Ein Teil davon erscheint nicht als Karte: Es ist bereits so eingestellt, oder ich konnte die Werte so nicht übernehmen.)',
@@ -74,17 +77,25 @@ function describeCard(c: {
   payload: Record<string, unknown>;
   status: string;
   error: string | null;
+  result?: Record<string, unknown> | null;
 }): string {
+  const p = c.payload;
   const what =
     c.type === 'settings'
-      ? ((c.payload.lines as [string, string][] | undefined) ?? [])
-          .map(([k, v]) => `${k}: ${v}`)
-          .join('; ')
+      ? ((p.lines as [string, string][] | undefined) ?? []).map(([k, v]) => `${k}: ${v}`).join('; ')
       : c.type === 'knowledge_note'
-        ? `knowledge note "${String(c.payload.title ?? '')}"`
-        : `price items: ${((c.payload.items as { name: string }[] | undefined) ?? []).map((i) => i.name).join(', ')}`;
+        ? `knowledge note "${String(p.title ?? '')}"`
+        : c.type === 'price_items'
+          ? `price items: ${((p.items as { name: string }[] | undefined) ?? []).map((i) => i.name).join(', ')}`
+          : c.type === 'create_document'
+            ? `${String(p.docType)} with ${((p.lines as unknown[] | undefined) ?? []).length} line(s), due ${String(p.dueDate ?? '—')}`
+            : c.type === 'send_email'
+              ? `e-mail to ${String(p.to)}, subject "${String(p.subject ?? '')}"`
+              : `mark ${String(p.number)} as paid`;
+  const made =
+    c.status === 'applied' && c.result?.number ? ` (created ${String(c.result.number)})` : '';
   const why = c.status === 'failed' && c.error ? ` (reason: ${c.error.slice(0, 200)})` : '';
-  return `  [CARD (${c.status}): ${c.title} — ${what}${why}]`;
+  return `  [CARD (${c.status}): ${c.title} — ${what}${made}${why}]`;
 }
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
@@ -131,9 +142,10 @@ export function assistantTurnHandler(deps: AssistantDeps) {
               payload: Record<string, unknown>;
               status: string;
               error: string | null;
+              result: Record<string, unknown> | null;
             }[]
           >`
-            select message_id, type, title, payload, status, error from public.assistant_proposals
+            select message_id, type, title, payload, status, error, result from public.assistant_proposals
             where message_id in ${tx(history.map((m) => m.id))} order by created_at`
         : [];
       const mailboxes = await tx<{ is_test_mailbox: boolean }[]>`
@@ -212,6 +224,11 @@ export function assistantTurnHandler(deps: AssistantDeps) {
     let final: AssistantStep | null = null;
     let language: AssistantLanguage = ctx.conv.locale;
     let retriedNumbers = false;
+    let actionCards: ActionCard[] = [];
+    const ownerText = ctx.history
+      .filter((m) => m.role === 'owner')
+      .map((m) => m.text)
+      .join('\n');
 
     for (let step = 0; step < MAX_STEPS && !final; step++) {
       const lastStep = step === MAX_STEPS - 1;
@@ -275,6 +292,17 @@ export function assistantTurnHandler(deps: AssistantDeps) {
         });
         continue;
       }
+      // Document, e-mail and payment cards are checked against this business's data first:
+      // what they state (totals, due dates) may then be said in the answer.
+      const actions = await withTenant(deps.sql, tenantId, (tx) =>
+        normalizeActions(
+          s.proposals.filter((p) => ACTION_TYPES.has(p.type)),
+          { tx, evidence, ownerText },
+        ),
+      );
+      actionCards = actions.cards;
+      if (actions.dropped.length)
+        deps.logger?.info({ tenantId, dropped: actions.dropped }, 'assistant proposals dropped');
       const unsupported = evidence.unsupportedIn(s.reply);
       if (unsupported.length && !retriedNumbers && !lastStep) {
         retriedNumbers = true;
@@ -298,7 +326,8 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       return { ok: false, error: 'invalid_output' };
     }
 
-    const proposals = final.proposals
+    const settingsCards = final.proposals
+      .filter((p) => !ACTION_TYPES.has(p.type))
       .map((p) =>
         normalizeProposal(p, {
           current: currentSettings(t),
@@ -308,6 +337,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
         }),
       )
       .filter((p): p is NormalizedProposal => p !== null);
+    const proposals: ActionCard[] = [...settingsCards, ...actionCards];
     let reply = final.reply.trim() || UNSURE[language];
     // The model proposed something that did not pass the checks: no card appears.
     if (final.proposals.length > proposals.length) reply = `${reply}\n\n${NO_CARD[language]}`;
@@ -323,13 +353,20 @@ export function assistantTurnHandler(deps: AssistantDeps) {
                     .slice(0, 3),
                 )}, ${toolsUsed})
         returning id`;
+      let documentCardId: string | null = null;
       for (const p of proposals) {
+        // An e-mail that attaches the document card above: linked by that card's id.
+        const payload: Record<string, unknown> =
+          p.type === 'send_email' && p.attachNew
+            ? { ...p.payload, attachProposalId: documentCardId }
+            : p.payload;
         const [row] = await tx<{ id: string }[]>`
           insert into public.assistant_proposals (tenant_id, conversation_id, message_id, type, title, payload,
                                                   requires_confirmation)
-          values (${tenantId}, ${conversationId}, ${m!.id}, ${p.type}, ${p.title}, ${tx.json(p.payload as never)},
+          values (${tenantId}, ${conversationId}, ${m!.id}, ${p.type}, ${p.title}, ${tx.json(payload as never)},
                   ${p.requiresConfirmation})
           returning id`;
+        if (p.type === 'create_document') documentCardId = row!.id;
         await tx`insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
                  values (${tenantId}, 'system', 'assistant.proposed', 'assistant_proposal', ${row!.id},
                          ${tx.json({

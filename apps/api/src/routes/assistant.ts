@@ -55,12 +55,13 @@ interface ProposalRow {
   requires_confirmation: boolean;
   status: string;
   error: string | null;
+  result: Record<string, unknown> | null;
 }
 
 async function withProposals(tx: TransactionSql, rows: Row[]) {
   if (!rows.length) return [];
   const ps = await tx<ProposalRow[]>`
-    select id, message_id, type, title, payload, requires_confirmation, status, error
+    select id, message_id, type, title, payload, requires_confirmation, status, error, result
     from public.assistant_proposals where message_id in ${tx(rows.map((r) => r.id))}
     order by created_at`;
   return rows.map((r) => ({
@@ -218,7 +219,7 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
   const decided = async (tenantId: string, id: string) =>
     withTenant(deps.sql, tenantId, async (tx) => {
       const [p] = await tx<ProposalRow[]>`
-        select id, message_id, type, title, payload, requires_confirmation, status, error
+        select id, message_id, type, title, payload, requires_confirmation, status, error, result
         from public.assistant_proposals where id = ${id}`;
       const { message_id: _m, ...rest } = p!;
       return { proposal: rest };
@@ -251,7 +252,7 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
       .parse(req.body ?? {});
     const p = await withTenant(deps.sql, tenantId, async (tx) => {
       const [row] = await tx<ProposalRow[]>`
-        select id, message_id, type, title, payload, requires_confirmation, status, error
+        select id, message_id, type, title, payload, requires_confirmation, status, error, result
         from public.assistant_proposals where id = ${id} for update`;
       return row;
     });
@@ -263,18 +264,42 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
         needsConfirmation: true,
       });
 
-    const call = (method: 'PATCH' | 'POST', url: string, payload: object) =>
+    const call = (method: 'GET' | 'PATCH' | 'POST', url: string, payload?: object) =>
       app.inject({
         method,
         url,
         headers: {
           authorization: req.headers.authorization ?? '',
-          'content-type': 'application/json',
+          ...(payload ? { 'content-type': 'application/json' } : {}),
         },
-        payload: JSON.stringify(payload),
+        ...(payload ? { payload: JSON.stringify(payload) } : {}),
       });
     const base = `/v1/tenants/${tenantId}`;
     let error: string | null = null;
+    let result: Record<string, unknown> | null = null;
+
+    // An e-mail that attaches the document card above: that card must be confirmed first.
+    let attached: string[] = [];
+    if (p.type === 'send_email') {
+      attached = [...((p.payload.documentIds as string[] | undefined) ?? [])];
+      const cardId = p.payload.attachProposalId as string | null | undefined;
+      if (cardId) {
+        const [doc] = await withTenant(
+          deps.sql,
+          tenantId,
+          (tx) => tx<{ status: string; result: { documentId?: string; number?: string } | null }[]>`
+            select status, result from public.assistant_proposals where id = ${cardId}`,
+        );
+        if (doc?.status !== 'applied' || !doc.result?.number || !doc.result.documentId)
+          return reply.code(409).send({
+            error:
+              doc?.status === 'dismissed'
+                ? 'The document card was dismissed: there is nothing to attach.'
+                : 'Confirm the document card above first; then send the e-mail with it.',
+          });
+        attached.push(doc.result.documentId);
+      }
+    }
     if (p.type === 'settings') {
       const changes = { ...(p.payload.changes as Record<string, unknown>) };
       if (changes.mode) changes.confirmAutoSend = true;
@@ -286,6 +311,86 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
         text: p.payload.text,
       });
       if (res.statusCode >= 400) error = errorText(res.body);
+    } else if (p.type === 'create_document') {
+      // The document engine's own routes: create, fill in, issue (number and PDF).
+      const d = p.payload as {
+        docType: 'invoice' | 'delivery_note';
+        buyer: {
+          name: string;
+          email: string;
+          address: string;
+          regNo: string;
+          vatNo: string;
+          threadId: string | null;
+        };
+        lines: { name: string; unit: string; qty: number; unitPriceCents: number | null }[];
+        withPrices: boolean;
+        dueDate: string | null;
+      };
+      const made = await call('POST', `${base}/documents`, {
+        type: d.docType,
+        ...(d.buyer.threadId ? { threadId: d.buyer.threadId } : {}),
+      });
+      if (made.statusCode >= 400) error = errorText(made.body);
+      else {
+        const id = (made.json() as { id: string }).id;
+        result = { documentId: id, number: null };
+        const cur = (await call('GET', `${base}/documents/${id}`)).json() as {
+          data: Record<string, unknown>;
+        };
+        const data =
+          d.docType === 'invoice'
+            ? {
+                ...cur.data,
+                buyer: {
+                  ...(cur.data.buyer as object),
+                  ...(d.buyer.name ? { name: d.buyer.name } : {}),
+                  ...(d.buyer.email ? { email: d.buyer.email } : {}),
+                  address: d.buyer.address,
+                  regNo: d.buyer.regNo,
+                  vatNo: d.buyer.vatNo,
+                },
+                lines: d.lines,
+                dueDate: d.dueDate ?? cur.data.dueDate,
+              }
+            : {
+                ...cur.data,
+                receiver: {
+                  ...(cur.data.receiver as object),
+                  name: d.buyer.name || d.buyer.email,
+                  address: d.buyer.address,
+                  regNo: d.buyer.regNo,
+                  vatNo: d.buyer.vatNo,
+                },
+                deliveryAddress: d.buyer.address,
+                lines: d.lines,
+                withPrices: d.withPrices,
+                dueDate: d.dueDate ?? cur.data.dueDate,
+              };
+        const saved = await call('PATCH', `${base}/documents/${id}`, { data });
+        const issued =
+          saved.statusCode < 400 ? await call('POST', `${base}/documents/${id}/issue`, {}) : saved;
+        if (issued.statusCode >= 400)
+          error = `Saved as a draft in Documents, not ready yet: ${errorText(issued.body)}`;
+        else result = { documentId: id, number: (issued.json() as { number: string }).number };
+      }
+    } else if (p.type === 'send_email') {
+      // Compose's own path: its checks, a new conversation, the send-time checks in the worker.
+      const e = p.payload as { to: string; subject: string; body: string };
+      const sent = await call('POST', `${base}/compose`, {
+        to: e.to,
+        subject: e.subject,
+        body: e.body,
+        documentIds: attached,
+        followUp: true,
+      });
+      if (sent.statusCode >= 400) error = errorText(sent.body);
+      else result = sent.json() as { threadId: string; draftId: string };
+    } else if (p.type === 'mark_paid') {
+      const m = p.payload as { documentId: string; number: string };
+      const res = await call('POST', `${base}/documents/${m.documentId}/mark`, { status: 'paid' });
+      if (res.statusCode >= 400) error = errorText(res.body);
+      else result = { documentId: m.documentId, number: m.number };
     } else {
       const items = p.payload.items as { name: string; unit: string; unitPriceCents: number }[];
       for (const i of items) {
@@ -303,6 +408,7 @@ export function assistantRoutes(app: FastifyInstance, deps: AppDeps) {
     await withTenant(deps.sql, tenantId, async (tx) => {
       await tx`update public.assistant_proposals
                set status = ${error ? 'failed' : 'applied'}, error = ${error?.slice(0, 500) ?? null},
+                   result = ${result ? tx.json(result as never) : null},
                    decided_by = ${req.user!.userId}, decided_at = now()
                where id = ${id}`;
       await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id, metadata)

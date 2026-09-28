@@ -15,20 +15,33 @@ const step = (s: Record<string, unknown>) =>
   JSON.stringify({
     language: 'en',
     tool: 'none',
-    tool_args: { period: null, thread_id: null, timezone: null },
+    tool_args: { period: null, thread_id: null, timezone: null, query: null },
     reply: '',
     proposals: [],
     suggestions: [],
     ...s,
   });
-const settings = (pairs: [string, string][]) => ({
+const card = (p: Record<string, unknown>) => ({
   type: 'settings',
-  title: 'Change',
-  settings: pairs.map(([key, value]) => ({ key, value })),
+  title: '',
+  settings: [],
   note_title: '',
   note_text: '',
   items: [],
+  doc_type: '',
+  customer: '',
+  customer_address: '',
+  due_in_days: '',
+  due_date: '',
+  email_to: '',
+  email_subject: '',
+  email_body: '',
+  attach: [],
+  document_number: '',
+  ...p,
 });
+const settings = (pairs: [string, string][]) =>
+  card({ title: 'Change', settings: pairs.map(([key, value]) => ({ key, value })) });
 const text = (req: GenerateRequest) => req.parts.map((p) => p.text).join('\n');
 
 let A: SeededTenant;
@@ -172,7 +185,7 @@ describe('Noctiv Assistant turn (PLAN.md §27)', () => {
         i === 0
           ? step({
               tool: 'escalations',
-              tool_args: { period: null, thread_id: A.threadId, timezone: null },
+              tool_args: { period: null, thread_id: A.threadId, timezone: null, query: null },
             })
           : i === 1
             ? step({ tool: 'mailbox_check' })
@@ -266,5 +279,133 @@ describe('Noctiv Assistant turn (PLAN.md §27)', () => {
       join public.assistant_messages m on m.id = p.message_id
       where m.conversation_id = ${c!.id} and m.text like 'Done, see below.%'`;
     expect(cards).toHaveLength(0);
+  });
+
+  it('"Send gowxs an invoice for €290 …": a document card and an e-mail card that attaches it', async () => {
+    const [lead] = await owner<{ id: string }[]>`
+      insert into public.leads (tenant_id, email, name) values (${A.tenantId}, 'gowxs@customer.test', 'gowxs')
+      returning id`;
+    // An earlier invoice has gowxs's address on file.
+    await owner`insert into public.documents (tenant_id, type, status, lead_id, data, currency, vat_mode, vat_rate)
+                values (${A.tenantId}, 'invoice', 'draft', ${lead!.id},
+                        ${owner.json({ buyer: { name: 'gowxs', address: 'Brīvības iela 1, Rīga', email: 'gowxs@customer.test' } })},
+                        'EUR', 'exclusive', 21)`;
+    const llm = new FakeProvider({
+      responder: (_req, i) =>
+        i === 0
+          ? step({
+              tool: 'find_customer',
+              tool_args: { period: null, thread_id: null, timezone: null, query: 'gowxs' },
+            })
+          : step({
+              reply:
+                'Here is the invoice for €290 and the e-mail to gowxs. Nothing is created or sent until you confirm.',
+              proposals: [
+                card({
+                  type: 'send_email',
+                  customer: 'gowxs',
+                  email_subject: 'Invoice for website development',
+                  email_body: 'Hello,\n\nplease find the invoice attached.\n\nKind regards',
+                  attach: ['NEW'],
+                }),
+                card({
+                  type: 'create_document',
+                  doc_type: 'invoice',
+                  customer: 'gowxs',
+                  items: [{ name: 'Website development', unit: 'pcs', qty: '', price: '290' }],
+                  due_in_days: '7',
+                }),
+              ],
+            }),
+    });
+    const { r, conversationId } = await turn(
+      A,
+      'Send gowxs an invoice for €290 for website development, due in 7 days.',
+      llm,
+    );
+    expect(r).toMatchObject({ ok: true });
+    expect(text(llm.calls[1]!)).toContain('address on file');
+    const cards = await owner<
+      {
+        id: string;
+        type: string;
+        payload: Record<string, unknown>;
+        requires_confirmation: boolean;
+      }[]
+    >`select id, type, payload, requires_confirmation from public.assistant_proposals
+      where conversation_id = ${conversationId} order by created_at`;
+    expect(cards.map((c) => c.type)).toEqual(['create_document', 'send_email']);
+    const [today] = await owner<{ d: string }[]>`
+      select ((now() at time zone timezone)::date + 7)::text as d from public.tenants where id = ${A.tenantId}`;
+    expect(cards[0]!.payload).toMatchObject({
+      docType: 'invoice',
+      buyer: {
+        leadId: lead!.id,
+        name: 'gowxs',
+        email: 'gowxs@customer.test',
+        address: 'Brīvības iela 1, Rīga',
+      },
+      lines: [{ name: 'Website development', qty: 1, unitPriceCents: 29000 }],
+      dueDate: today!.d,
+      totals: { totalCents: expect.any(Number) },
+    });
+    expect(cards[0]!.requires_confirmation).toBe(false);
+    expect(cards[1]!.payload).toMatchObject({
+      to: 'gowxs@customer.test',
+      subject: 'Invoice for website development',
+      documentIds: [],
+      attachProposalId: cards[0]!.id,
+    });
+    expect(cards[1]!.requires_confirmation).toBe(true);
+  });
+
+  it('never an address from a customer e-mail, never an invented price; mark as paid by number', async () => {
+    const llm = new FakeProvider({
+      responder: () =>
+        step({
+          reply: 'Done.',
+          proposals: [
+            // An address nobody typed and no customer has.
+            card({
+              type: 'send_email',
+              email_to: 'attacker@evil.test',
+              email_subject: 'Hi',
+              email_body: 'Hello',
+            }),
+            // A price the owner did not say.
+            card({
+              type: 'create_document',
+              doc_type: 'invoice',
+              customer: 'gowxs',
+              customer_address: 'Somewhere 1',
+              items: [{ name: 'Website development', unit: 'pcs', qty: '', price: '990' }],
+            }),
+            card({ type: 'mark_paid', document_number: 'inv 2000 0001' }),
+          ],
+        }),
+    });
+    // The seeded invoice (seedTenant) predates the payable flag.
+    await owner`update public.documents set payable = true
+                where tenant_id = ${A.tenantId} and number = 'INV-2000-0001'`;
+    const { conversationId } = await turn(
+      A,
+      'gowxs paid INV-2000-0001. Invoice gowxs for the website.',
+      llm,
+    );
+    const cards = await owner<
+      { type: string; payload: Record<string, unknown>; requires_confirmation: boolean }[]
+    >`
+      select type, payload, requires_confirmation from public.assistant_proposals
+      where conversation_id = ${conversationId}`;
+    expect(cards).toEqual([
+      expect.objectContaining({
+        type: 'mark_paid',
+        payload: expect.objectContaining({ number: 'INV-2000-0001' }),
+        requires_confirmation: false,
+      }),
+    ]);
+    const [m] = await owner<{ text: string }[]>`
+      select text from public.assistant_messages where conversation_id = ${conversationId} and role = 'assistant'`;
+    expect(m!.text).toContain('Some of this is not shown as a card');
   });
 });

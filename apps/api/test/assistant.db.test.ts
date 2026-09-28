@@ -198,4 +198,122 @@ describe('Noctiv Assistant: proposals are applied only when the owner confirms (
     expect(refused.status).toBe(422);
     expect(refused.json.code).toBe('free_tier_refused');
   });
+
+  it('document card → a Ready invoice; the e-mail card waits for it, needs the dialog, goes out via Compose; mark paid', async () => {
+    await owner`update public.tenants
+                set documents_enabled = true, seller_legal_name = 'Wxs SIA', seller_legal_address = 'Rīga, Latvia',
+                    seller_vat_no = 'DE123456789', seller_iban = 'DE89370400440532013000',
+                    quotes_vat_mode = 'exclusive', quotes_vat_rate = 21, quotes_currency = 'EUR'
+                where id = ${A.tenantId}`;
+    const [due] = await owner<{ d: string }[]>`select (current_date + 7)::text as d`;
+    // What the worker writes for "Send gowxs an invoice for €290 for website development, due in 7 days."
+    const [c] = await owner<{ id: string }[]>`
+      insert into public.assistant_conversations (tenant_id, user_id) values (${A.tenantId}, ${A.userId})
+      returning id`;
+    const [m] = await owner<{ id: string }[]>`
+      insert into public.assistant_messages (tenant_id, conversation_id, role, text)
+      values (${A.tenantId}, ${c!.id}, 'assistant', 'Here are the invoice and the e-mail.') returning id`;
+    const insert = async (type: string, payload: object, requiresConfirmation: boolean) =>
+      (
+        await owner<{ id: string }[]>`
+          insert into public.assistant_proposals (tenant_id, conversation_id, message_id, type, title, payload,
+                                                  requires_confirmation)
+          values (${A.tenantId}, ${c!.id}, ${m!.id}, ${type}, 'Card', ${owner.json(payload as never)},
+                  ${requiresConfirmation}) returning id`
+      )[0]!.id;
+    const docCard = await insert(
+      'create_document',
+      {
+        docType: 'invoice',
+        buyer: {
+          leadId: null,
+          name: 'gowxs',
+          email: 'gowxs@customer.test',
+          address: 'Brīvības iela 1, Rīga',
+          regNo: '',
+          vatNo: '',
+          threadId: null,
+        },
+        lines: [{ name: 'Website development', unit: 'pcs', qty: 1, unitPriceCents: 29000 }],
+        withPrices: true,
+        dueDate: due!.d,
+      },
+      false,
+    );
+    const mailCard = await insert(
+      'send_email',
+      {
+        to: 'gowxs@customer.test',
+        name: 'gowxs',
+        subject: 'Invoice for website development',
+        body: 'Hello,\n\nplease find the invoice attached.\n\nKind regards',
+        documentIds: [],
+        attachLabels: ['The new invoice'],
+        attachProposalId: docCard,
+      },
+      true,
+    );
+
+    // Never without the click in the dialog; and not before the invoice exists.
+    expect((await apply(A, mailCard)).json.needsConfirmation).toBe(true);
+    const early = await apply(A, mailCard, { confirmSending: true });
+    expect(early.status).toBe(409);
+    expect(early.json.error).toContain('Confirm the document card above first');
+
+    const made = await apply(A, docCard);
+    expect(made.json.proposal).toMatchObject({
+      status: 'applied',
+      result: { number: expect.stringMatching(/^INV-/) },
+    });
+    const docId = made.json.proposal.result.documentId;
+    const doc = await call('GET', `/v1/tenants/${A.tenantId}/documents/${docId}`, A.userId);
+    expect(doc.json).toMatchObject({
+      status: 'issued',
+      total_cents: 35090,
+      due_date: due!.d,
+      data: { buyer: { name: 'gowxs', address: 'Brīvības iela 1, Rīga' } },
+    });
+
+    const sent = await apply(A, mailCard, { confirmSending: true });
+    expect(sent.json.proposal).toMatchObject({
+      status: 'applied',
+      result: { threadId: expect.any(String) },
+    });
+    const [draft] = await owner<
+      { kind: string; status: string; to_address: string; docs: number }[]
+    >`
+      select d.kind, d.status, d.to_address,
+             (select count(*)::int from public.documents x where x.draft_id = d.id) as docs
+      from public.drafts d where d.id = ${sent.json.proposal.result.draftId}`;
+    expect(draft).toEqual({
+      kind: 'compose',
+      status: 'approved',
+      to_address: 'gowxs@customer.test',
+      docs: 1,
+    });
+    const jobs = await owner`select 1 from public.jobs where queue = 'mail.send'
+                             and payload->>'draftId' = ${sent.json.proposal.result.draftId}`;
+    expect(jobs).toHaveLength(1);
+
+    const paidCard = await insert(
+      'mark_paid',
+      { documentId: docId, number: made.json.proposal.result.number },
+      false,
+    );
+    expect((await apply(A, paidCard)).json.proposal.status).toBe('applied');
+    const [paid] = await owner<
+      { status: string }[]
+    >`select status from public.documents where id = ${docId}`;
+    expect(paid!.status).toBe('paid');
+    const logs = await owner<{ action: string }[]>`
+      select action from public.audit_log where tenant_id = ${A.tenantId}
+        and action in ('document.created', 'document.issued', 'email.composed', 'document.paid')
+        and created_at > now() - interval '1 minute' order by created_at`;
+    expect(logs.map((l) => l.action)).toEqual([
+      'document.created',
+      'document.issued',
+      'email.composed',
+      'document.paid',
+    ]);
+  });
 });

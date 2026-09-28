@@ -30,6 +30,51 @@ const PROVIDER_NAMES: Record<string, string> = {
   outlook: 'Outlook',
 };
 
+const STATUS_TEXT: Record<string, string> = {
+  issued: 'ready (not sent)',
+  sent: 'sent',
+  paid: 'paid',
+  delivered: 'delivered',
+};
+
+/** The buyer details on this customer's latest invoice or delivery note (address, reg. and VAT no.). */
+export async function customerOnFile(
+  tx: TransactionSql,
+  c: { leadId: string | null; email: string },
+): Promise<{ address: string; regNo: string; vatNo: string } | null> {
+  const [d] = await tx<{ party: { address?: string; regNo?: string; vatNo?: string } | null }[]>`
+    select case when type = 'invoice' then data->'buyer' else data->'receiver' end as party
+    from public.documents
+    where type in ('invoice', 'delivery_note')
+      and (${c.leadId ? tx`lead_id = ${c.leadId} or ` : tx``}lower(data->'buyer'->>'email') = ${c.email.toLowerCase()})
+    order by created_at desc limit 1`;
+  const party = d?.party;
+  return party?.address?.trim()
+    ? { address: party.address, regNo: party.regNo ?? '', vatNo: party.vatNo ?? '' }
+    : null;
+}
+
+/** Customers (leads) by e-mail address, or by a name or the start of the address. */
+export async function findCustomers(tx: TransactionSql, query: string) {
+  const q = query.trim().toLowerCase();
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  return tx<
+    {
+      id: string;
+      name: string | null;
+      email: string;
+      last_activity_at: Date;
+      thread_id: string | null;
+    }[]
+  >`
+    select l.id, l.name, l.email::text as email, l.last_activity_at,
+           (select th.id from public.threads th where th.lead_id = l.id
+            order by th.created_at desc limit 1) as thread_id
+    from public.leads l
+    where ${q.includes('@') ? tx`lower(l.email::text) = ${q}` : tx`lower(coalesce(l.name, '')) like ${like} or split_part(lower(l.email::text), '@', 1) like ${like}`}
+    order by l.last_activity_at desc limit 5`;
+}
+
 export interface ToolContext {
   tx: TransactionSql;
   tenantId: string;
@@ -135,6 +180,54 @@ export async function runTool(
       });
       const last = new Date(Math.min(to.getTime(), now.getTime()) - 1);
       return valueLines(`${localDay(from, tz)} – ${localDay(last, tz)}`, v);
+    }
+    case 'find_customer': {
+      const q = (args.query ?? '').trim();
+      if (q.length < 2) return ['find_customer needs a name or e-mail address (query).'];
+      const leads = await findCustomers(tx, q);
+      if (!leads.length)
+        return [`No customer matches "${q.slice(0, 80)}". A new customer can be used.`];
+      const lines = [
+        `Customers matching "${q.slice(0, 80)}": ${leads.length}${leads.length > 1 ? ' (several: ask the owner which one)' : ''}`,
+      ];
+      for (const l of leads) {
+        const docs = await tx<
+          { number: string; status: string; total_cents: number; currency: string }[]
+        >`
+          select number, status, total_cents, currency from public.documents
+          where lead_id = ${l.id} and number is not null and status in ('issued', 'sent')
+          order by created_at desc limit 3`;
+        const onFile = await customerOnFile(tx, { leadId: l.id, email: l.email });
+        lines.push(
+          `${customerText(nonce, l.name ?? '—', 100)} <${l.email}>; ${onFile ? `address on file: ${customerText(nonce, onFile.address, 200)}` : 'no address on file (ask the owner for it before an invoice)'}; last contact ${localDay(l.last_activity_at, tz)}${docs.length ? `; open documents: ${docs.map((d) => `${d.number} (${d.status === 'issued' ? 'ready, not sent' : 'sent, unpaid'}, ${money(d.total_cents, d.currency)})`).join(', ')}` : ''}`,
+        );
+      }
+      return lines;
+    }
+    case 'documents': {
+      const docs = await tx<
+        {
+          number: string;
+          type: string;
+          status: string;
+          counterparty_name: string | null;
+          total_cents: number;
+          currency: string;
+          due_date: Date | null;
+          payable: boolean;
+        }[]
+      >`
+        select number, type, status, counterparty_name, total_cents, currency, due_date, payable
+        from public.documents where number is not null and type <> 'cmr' and status <> 'cancelled'
+        order by (status in ('issued', 'sent')) desc, created_at desc limit 15`;
+      if (!docs.length) return ['Documents: none yet (Documents → New).'];
+      return [
+        `Documents (unpaid and ready first, at most 15):`,
+        ...docs.map(
+          (d) =>
+            `${d.number}: ${d.type === 'invoice' ? 'invoice' : 'delivery note'}; ${STATUS_TEXT[d.status] ?? d.status}${d.payable && (d.status === 'issued' || d.status === 'sent') ? ', unpaid' : ''}; ${money(d.total_cents, d.currency)}; customer ${customerText(nonce, d.counterparty_name ?? '—', 100)}${d.due_date ? `; due ${localDay(d.due_date, 'UTC')}` : ''}`,
+        ),
+      ];
     }
     case 'open_quotes': {
       const q = await tx<

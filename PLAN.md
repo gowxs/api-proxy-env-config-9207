@@ -956,7 +956,7 @@ QA.md lists the findings; these are the decisions and how they were built.
   - The app shows each proposal as a card with an "old → new" line and a Confirm button.
   - On Confirm, the API applies the change through the same routes as the Settings, Knowledge and Price list pages, with the owner's token. Validation, side effects and the audit entry are therefore identical to the pages.
   - Reply mode, auto-send limits, follow-ups, rate limits, quotes, documents and automation are sending settings. They need the existing confirmation dialog: the API returns 409 without `confirmSending`. Raising the mode uses the same auto-send dialog as Settings.
-- **Cannot:** send e-mails, approve drafts, create documents, or change billing. There are no tools for these, and the help text and prompt say so.
+- **Cannot:** approve or reject drafts, cancel or edit documents, or change billing. It sends e-mails and creates documents only as action cards the owner confirms (§27.2).
 - **Audit log:** `assistant.proposed`, `assistant.applied`, `assistant.apply_failed`, `assistant.dismissed`, `assistant.mailbox_check`.
 - **Costs and data rules:**
   - Every model call counts toward the tenant's daily AI budget (`recordUsage`). The assistant refuses when the budget is halted.
@@ -966,3 +966,33 @@ QA.md lists the findings; these are the decisions and how they were built.
   - `assistant_conversations`, `assistant_messages`, `assistant_proposals` (migration 20260929000100).
   - Forced RLS on all three. The API may only update the proposal status and the conversation locale.
   - Customer e-mail text is not stored, only the assistant's answers.
+
+### 27.2 Action cards: documents, e-mails, payments (founder request 2026-09-30)
+
+- **Same rules as the other cards:** the model proposes, the worker checks the card against the business's data, the API applies it only on Confirm through the existing routes, and every card is logged (`assistant.proposed` / `assistant.applied` / `assistant.apply_failed`), next to each route's own audit entry.
+- **New read-only tools:**
+  - `find_customer`: leads by exact e-mail, name, or the start of the address; each with their address on file and open documents.
+  - `documents`: recent and unpaid invoices and delivery notes.
+- **`create_document`** (invoice or delivery note):
+  - **Buyer:** exactly one lead matching a name or e-mail *the owner wrote*. Several matches: the model asks. No match: a new buyer by that name or address.
+  - **Address:** from the customer's latest document, or as the owner typed it (`customer_address`). Without an address there is no card; the model asks for one, so a card never silently ends as a draft.
+  - **Lines:**
+    - Prices come from the owner's own numbers, or from the price list by line name (an empty price takes the list price).
+    - Quantity 1 when none is said; any other quantity must be the owner's.
+    - Numbers inside a line name must be the owner's.
+    - An invoice needs every price. A delivery note shows prices (pavadzīme-rēķins) only when every line has one.
+  - **Due date:** the owner's "in N days" or date, else the business's default (`invoice_due_days`).
+  - **VAT and currency:** the business's settings, so €290 on a 21 % VAT-exclusive business reads as €290 + €60.90 = €350.90. The card shows the documents engine's totals.
+  - **Confirm:** `POST documents` (linked to the customer's latest conversation when there is one), fill in the fields, `POST issue`. The document becomes Ready: numbered, with a PDF. The card shows "Ready: INV-… → Open". If issuing fails (for example seller details missing in Documents → Setup), the card reports why and links the draft.
+- **`send_email`:**
+  - **Recipient:** an address the owner wrote, or a known customer's address. Never an address found only in a customer's e-mail (prompt-injection guard); never the business's own mailbox.
+  - **Text:** subject and a short body; every number must be backed (owner, tool, attached document). With a document attached, the body leaves amounts and dates to the document.
+  - **Attachments:** Ready documents by number, or `NEW`, the document card in the same answer. Send stays disabled with "Confirm the invoice card above first" until that card is applied; the API refuses as well (409).
+  - **Confirm:** always the confirmation dialog ("Send this e-mail now?": recipient, attachments, full text, a checkbox), then `POST compose`. That is Compose's own path: its checks, a new conversation with follow-up, and the worker's send-time checks. The API refuses without `confirmSending`.
+- **`mark_paid`:** by document number; only an unpaid invoice or priced delivery note (Ready or sent). Confirm calls `POST documents/:id/mark`. When "delivery note after payment" automation is on, the confirmation dialog comes first, because it can create and send a delivery note.
+- **Card result:** `assistant_proposals.result` (migration 20260930000100) keeps what Confirm made: the document id and number, or the e-mail's conversation. The model sees it in the history (`[CARD (applied): … (created INV-…)]`).
+- **Live run** (dev stack, free Gemini lite model, local mail server):
+  - "Send gowxs an invoice for €290 for website development, due in 7 days." gave an invoice card (€350.90, due in 7 days, address on file) and an e-mail card with the invoice attached.
+  - Confirm made INV-2026-0003 Ready. Send (dialog) delivered the e-mail with `Invoice-INV-2026-0003.pdf`.
+  - "Mark invoice INV-2026-0001 as paid" set it to paid.
+

@@ -41,6 +41,7 @@ One plan per business, with a free trial; billing is handled by Paddle (Settings
 DATA AND PRIVACY
 E-mail text is kept for the retention period set in Settings and then deleted. Notification e-mails show only the sender's domain and a summary unless the owner switches on full text. The owner can delete all data in Settings → Account.
 
-WHAT THE ASSISTANT CANNOT DO
-Send e-mails, approve or reject drafts, create documents, or change billing. It proposes changes; nothing changes until the owner presses Confirm.
+WHAT THE ASSISTANT DOES AND CANNOT DO
+It proposes, the owner confirms: settings, knowledge notes, price-list items, invoices and delivery notes (created as Ready with a number and PDF), e-mails to a customer (sent from the business mailbox only after the owner presses Send in the confirmation dialog), and marking an invoice as paid. Nothing happens until the owner confirms.
+It cannot approve or reject drafts, cancel or edit documents, or change billing.
 `.trim();

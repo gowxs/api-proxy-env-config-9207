@@ -6,9 +6,10 @@ import { foldForMatching } from '../text/normalize.ts';
  * Noctiv Assistant (PLAN.md §27): what the model may return, and the rules
  * that turn its suggestions into proposal cards. The model never changes
  * anything: a card is applied by the API only when the owner confirms, and
- * with the same validation as the Settings page. Only these three kinds of
- * change exist — nothing that sends e-mail, approves drafts, creates
- * documents or touches billing.
+ * with the same validation as the page it belongs to. Settings, knowledge
+ * notes, price items, documents (created as Ready), e-mails (sent through
+ * Compose, always behind the confirmation dialog) and "mark as paid" — never
+ * approving drafts or touching billing.
  */
 
 export const ASSISTANT_LANGUAGES = ['en', 'de', 'lv', 'nl', 'fr', 'es'] as const;
@@ -23,10 +24,22 @@ export const ASSISTANT_TOOLS = [
   'price_list',
   'mailbox_check',
   'locale_defaults',
+  'find_customer',
+  'documents',
 ] as const;
 export type AssistantTool = (typeof ASSISTANT_TOOLS)[number];
 
 export const VALUE_PERIODS = ['this_week', 'last_week', 'this_month', 'last_month'] as const;
+
+export const ASSISTANT_PROPOSAL_TYPES = [
+  'settings',
+  'knowledge_note',
+  'price_items',
+  'create_document',
+  'send_email',
+  'mark_paid',
+] as const;
+export type AssistantProposalType = (typeof ASSISTANT_PROPOSAL_TYPES)[number];
 
 /** One step of the assistant: call a read-only tool, or answer (with optional proposals). */
 export const AssistantStepSchema = z.strictObject({
@@ -37,22 +50,43 @@ export const AssistantStepSchema = z.strictObject({
     period: z.enum(VALUE_PERIODS).nullable(),
     thread_id: z.string().max(40).nullable(),
     timezone: z.string().max(60).nullable(),
+    /** find_customer: a name or e-mail address the owner used. */
+    query: z.string().max(200).nullable(),
   }),
   reply: z.string().max(4000),
   proposals: z.array(
     z.strictObject({
-      type: z.enum(['settings', 'knowledge_note', 'price_items']),
+      type: z.enum(ASSISTANT_PROPOSAL_TYPES),
       title: z.string().max(120),
       settings: z.array(z.strictObject({ key: z.string().max(40), value: z.string().max(1000) })),
       note_title: z.string().max(200),
       note_text: z.string().max(6000),
+      /** price_items, and the lines of create_document ("qty" empty = 1). */
       items: z.array(
         z.strictObject({
           name: z.string().max(200),
           unit: z.string(),
+          qty: z.string(),
           price: z.string(),
         }),
       ),
+      /** create_document: "invoice" or "delivery_note". */
+      doc_type: z.string().max(20),
+      /** create_document / send_email: the customer's name or e-mail as the owner wrote it. */
+      customer: z.string().max(200),
+      /** create_document: the buyer's address, only as the owner wrote it ("" = the one on file). */
+      customer_address: z.string().max(500),
+      /** create_document: days until due as the owner said, or a date (YYYY-MM-DD). */
+      due_in_days: z.string().max(10),
+      due_date: z.string().max(10),
+      /** send_email. */
+      email_to: z.string().max(254),
+      email_subject: z.string().max(200),
+      email_body: z.string().max(5000),
+      /** send_email: document numbers to attach, or "NEW" for the document card in this answer. */
+      attach: z.array(z.string().max(40)),
+      /** mark_paid: the document number. */
+      document_number: z.string().max(40),
     }),
   ),
   suggestions: z.array(z.string().max(80)),
@@ -70,6 +104,7 @@ export function limitStep(s: AssistantStep): AssistantStep {
       ...p,
       settings: p.settings.slice(0, 12),
       items: p.items.slice(0, 30),
+      attach: p.attach.slice(0, 5),
     })),
     suggestions: s.suggestions.slice(0, 3),
   };
@@ -228,7 +263,7 @@ export class AssistantEvidence {
 }
 
 export interface NormalizedProposal {
-  type: 'settings' | 'knowledge_note' | 'price_items';
+  type: AssistantProposalType;
   title: string;
   payload: Record<string, unknown>;
   requiresConfirmation: boolean;
@@ -358,6 +393,8 @@ export function normalizeProposal(
       requiresConfirmation: false,
     };
   }
+  // Documents, e-mails and payments need the business's data: checked in the worker (actions.ts).
+  if (p.type !== 'price_items') return null;
   const items = p.items
     .map((i) => ({
       name: i.name.trim(),

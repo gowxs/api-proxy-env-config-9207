@@ -40,3 +40,4 @@ export * from './assistant/locale-defaults.ts';
 export * from './assistant/help.ts';
 export * from './assistant/proposals.ts';
 export * from './assistant/prompt.ts';
+export * from './assistant/actions.ts';
