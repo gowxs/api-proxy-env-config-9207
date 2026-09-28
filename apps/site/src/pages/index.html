@@ -11,21 +11,13 @@
     <div>
       <h1>Your inbox, answered while you sleep.</h1>
       <p class="lead">
-        Noctiv reads every customer e-mail, drafts a reply from your own prices and policies, and
-        follows up with the ones who go quiet. You approve with one click from your phone<span
-          data-new
-          >, or just tell the Noctiv Assistant: “Send Anna an invoice for €290, due in 7
-          days.”</span
-        >
+        Noctiv drafts every reply from your own prices and policies, and you approve it with one
+        tap.
       </p>
       <div class="actions">
         <a class="btn" href="{{app}}signup">Start 14-day free trial</a>
-        <a class="btn btn--secondary" href="#how">See how it works</a>
+        <a class="btn btn--secondary" href="/how-it-works/">See how it works</a>
       </div>
-      <p class="note mailboxes" data-new>
-        <b>Works with any business mailbox</b> — Gmail, Google Workspace, Hostinger, Zoho, any IMAP
-        — not just Gmail. Connected in 2 minutes; no migration, no new helpdesk.
-      </p>
     </div>
 
     <div class="hero-visual">
@@ -46,7 +38,7 @@
           decoding="async"
         />
       </picture>
-      <div class="phone phone--hero" data-reveal-skip>
+      <div class="phone phone--hero">
         <div class="phone-screen">
           <span class="phone-island" aria-hidden="true"></span>
           {{> demo}}
@@ -56,18 +48,56 @@
   </div>
 </section>
 
-{{> jobs}} {{> flow}} {{> summary}}
+<section class="works-with" aria-labelledby="works-with">
+  <div class="wrap works-with-row">
+    <p id="works-with" class="label">Works with</p>
+    <ul>
+      <li class="wm wm-gmail">Gmail</li>
+      <li class="wm wm-workspace">Google Workspace</li>
+      <li class="wm wm-hostinger">Hostinger</li>
+      <li class="wm wm-zoho">Zoho Mail</li>
+      <li class="wm wm-imap">Any IMAP mailbox</li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="how">
+  <div class="wrap home-split">
+    <div class="section-head">
+      <h2>One assistant, every repetitive job.</h2>
+      <p class="lead">Replies, follow-ups, leads and the paperwork, handled day and night.</p>
+    </div>
+    <ul class="job-tiles">
+      <li class="job">
+        <div class="job-art job-art--reply" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p>{{icon:reply}}Replies within minutes</p>
+      </li>
+      <li class="job">
+        <div class="job-art job-art--follow" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p>{{icon:repeat-2}}Follow-ups on autopilot</p>
+      </li>
+      <li class="job">
+        <div class="job-art job-art--leads" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p>{{icon:list-checks}}Leads track themselves</p>
+      </li>
+      <li class="job">
+        <div class="job-art job-art--docs" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p>{{icon:file-text}}Quotes and invoices</p>
+      </li>
+    </ul>
+  </div>
+</section>
 
 <section class="section" id="who">
   <div class="wrap">
-    <div class="section-head">
+    <div class="section-head section-head--center">
       <h2>Built for two kinds of inbox.</h2>
+      <p class="lead">Online stores and service businesses that sell by e-mail.</p>
     </div>
-    <div class="audiences">
-      <article class="panel audience">
+    <div class="aud-grid">
+      <figure class="aud">
         <img
-          class="audience-img"
-          src="/img/stores-880.webp"
+          src="/img/stores-1200.webp"
           srcset="/img/stores-560.webp 560w, /img/stores-880.webp 880w, /img/stores-1200.webp 1200w"
           sizes="(min-width: 72rem) 34rem, (min-width: 56rem) 46vw, calc(100vw - 2rem)"
           alt=""
@@ -76,35 +106,17 @@
           loading="lazy"
           decoding="async"
         />
-        <h3>Online stores</h3>
-        <p class="who">
-          Shopify, WooCommerce and any shop that gets "where is my order?" twenty times a day.
-        </p>
-        <ul>
-          <li>
-            <b>Stock and shipping questions</b
-            ><span>answered from your own policy pages, not from a generic bot script.</span>
-          </li>
-          <li>
-            <b>Pre-sale questions at night</b
-            ><span
-              >are exactly the ones that decide whether the cart gets checked out tomorrow.</span
-            >
-          </li>
-          <li>
-            <b>Refunds and complaints</b
-            ><span>are never answered automatically; they land on your phone as a summary.</span>
-          </li>
-        </ul>
-        <p class="more" data-new>
-          More for <a href="/for/shopify-stores/">Shopify stores</a> and
-          <a href="/for/woocommerce-stores/">WooCommerce stores</a>.
-        </p>
-      </article>
-      <article class="panel audience">
+        <figcaption>
+          <b>Online stores</b>
+          <span
+            ><a href="/for/shopify-stores/">Shopify</a> ·
+            <a href="/for/woocommerce-stores/">WooCommerce</a></span
+          >
+        </figcaption>
+      </figure>
+      <figure class="aud">
         <img
-          class="audience-img"
-          src="/img/services-880.webp"
+          src="/img/services-1200.webp"
           srcset="
             /img/services-560.webp   560w,
             /img/services-880.webp   880w,
@@ -117,49 +129,211 @@
           loading="lazy"
           decoding="async"
         />
-        <h3>Service businesses</h3>
-        <p class="who">
-          Agencies, studios, repair shops, clinics, trades: anyone who wins work by e-mail and loses
-          it by silence.
-        </p>
-        <ul>
-          <li>
-            <b>Quote requests</b
-            ><span>get an immediate reply with your prices, delivery times and next step.</span>
-          </li>
-          <li>
-            <b>Follow-ups you'd forget</b
-            ><span>go out on their own, and stop the moment the customer answers.</span>
-          </li>
-          <li>
-            <b>A clear pipeline</b
-            ><span>shows which inquiries are waiting on you and which are waiting on them.</span>
-          </li>
-        </ul>
-        <p class="more" data-new>
-          More for <a href="/for/agencies/">agencies</a>,
-          <a href="/for/repair-shops/">repair shops</a> and <a href="/for/clinics/">clinics</a>.
-        </p>
-      </article>
+        <figcaption>
+          <b>Service businesses</b>
+          <span
+            ><a href="/for/agencies/">Agencies</a> · <a href="/for/repair-shops/">Repair shops</a> ·
+            <a href="/for/clinics/">Clinics</a></span
+          >
+        </figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
-{{> rules}} {{> steps}}
+<section class="section" id="flow">
+  <div class="wrap">
+    <div class="section-head section-head--center">
+      <h2>From e-mail to paid, in one place.</h2>
+      <p class="lead">Each step follows from the last, and you approve where it matters.</p>
+    </div>
+    <ol class="flow5" data-live>
+      <li>
+        <div class="flow5-shot flow5-mail" aria-hidden="true">
+          <p class="flow5-mail-top"><b>Sarah Miller</b><time>23:40</time></p>
+          <p class="flow5-mail-subject">Lavender candles for a wedding</p>
+          <p class="flow5-mail-text">
+            Hi, do you have 20 lavender soy candles for 14 June, and what would they cost?
+          </p>
+        </div>
+        <p class="flow5-label">E-mail</p>
+      </li>
+      <li>
+        <div class="flow5-shot">
+          <img
+            src="/img/mini-reply.webp"
+            alt="Noctiv's draft reply in the app, waiting for approval: 20 candles, €24 each."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <p class="flow5-label">Reply</p>
+      </li>
+      <li>
+        <div class="flow5-shot">
+          <img
+            src="/img/mini-quote.webp"
+            alt="The quote PDF: 20 lavender soy candles, €580.80 with VAT, accept online."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <p class="flow5-label">Quote</p>
+      </li>
+      <li>
+        <div class="flow5-shot">
+          <img
+            src="/img/mini-invoice.webp"
+            alt="The invoice PDF with payment details."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <p class="flow5-label">Invoice</p>
+      </li>
+      <li>
+        <div class="flow5-shot">
+          <img
+            src="/img/mini-paid.webp"
+            alt="The invoice in the app, marked Paid."
+            width="240"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+        <p class="flow5-label">Paid</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section" id="assistant">
+  <div class="wrap home-split home-split--flip">
+    <div class="section-head">
+      <h2>Or just tell it what to do.</h2>
+      <p class="lead">Ask in your own words; nothing happens until you confirm.</p>
+    </div>
+    <figure
+      class="chat-mock"
+      aria-label="Example: the owner asks the Noctiv Assistant for an invoice"
+    >
+      <p class="chat-top">{{icon:sparkles}}<b>Noctiv Assistant</b></p>
+      <p class="chat-owner">Send Anna an invoice for €290, due in 7 days.</p>
+      <p class="chat-answer">
+        Here are the invoice and the e-mail. Nothing happens until you confirm.
+      </p>
+      <div class="card">
+        <p class="card-kind">New invoice</p>
+        <p class="card-who">Anna Berg · Website development</p>
+        <dl class="card-lines">
+          <dt>Net</dt>
+          <dd>€290.00</dd>
+          <dt>VAT 21%</dt>
+          <dd>€60.90</dd>
+          <dt class="total">Total · due in 7 days</dt>
+          <dd class="total">€350.90</dd>
+        </dl>
+        <div class="card-actions">
+          <span class="btn btn--sm">Confirm</span>
+          <span class="btn btn--secondary btn--sm">Dismiss</span>
+        </div>
+      </div>
+      <div class="card">
+        <p class="card-kind">E-mail to send</p>
+        <p class="card-who">To Anna Berg · Your invoice</p>
+        <p class="card-file">{{icon:paperclip}}Invoice INV-2026-0007.pdf</p>
+        <div class="card-actions">
+          <span class="btn btn--sm">Send</span>
+          <span class="btn btn--secondary btn--sm">Edit</span>
+        </div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section class="section" id="summary">
+  <div class="wrap home-split">
+    <div class="section-head">
+      <h2>Know what it did for you.</h2>
+      <p class="lead">
+        Every Monday at 08:00: replies, follow-ups, paid invoices and the hours it saved.
+      </p>
+    </div>
+    <figure class="mailapp">
+      <div class="mailapp-bar" aria-hidden="true">
+        <span class="browser-dots"><i></i><i></i><i></i></span>
+        <span class="mailapp-folder">{{icon:inbox}}Inbox</span>
+      </div>
+      <div class="mailapp-head">
+        <span class="mailapp-avatar" aria-hidden="true">N</span>
+        <div>
+          <p class="mailapp-from"><b>Noctiv</b> to you</p>
+          <p class="mailapp-subject">Your week with Noctiv, 21 – 27 September</p>
+        </div>
+        <time>Mon 08:00</time>
+      </div>
+      <img
+        src="/img/mail-weekly.webp"
+        alt="The Monday e-mail: 38 e-mails answered in 4 minutes on average, 11 follow-ups, 4 customers won back, 5 invoices paid, about 3 hours saved."
+        width="600"
+        height="760"
+        loading="lazy"
+        decoding="async"
+      />
+    </figure>
+  </div>
+</section>
+
+<section class="band night" id="rules">
+  <div class="wrap">
+    <div class="section-head section-head--center">
+      <h2>Rules it can't break.</h2>
+      <p class="lead">Built into the software, not into a prompt.</p>
+    </div>
+    <ul class="rule-tiles">
+      <li class="tile">{{icon:pen-line}}<b>Draft-only by default</b></li>
+      <li class="tile">{{icon:badge-check}}<b>No invented numbers</b></li>
+      <li class="tile">{{icon:user-round}}<b>Complaints reach you</b></li>
+      <li class="tile">{{icon:shield-check}}<b>EU data, deletable</b></li>
+    </ul>
+    <p class="band-more"><a href="/how-it-works/#rules">How the rules work</a></p>
+  </div>
+</section>
 
 <section class="section" id="pricing">
   <div class="wrap">
-    <div class="section-head">
-      <h2>One plan. Less than a day of an assistant's salary.</h2>
+    <div class="section-head section-head--center">
+      <h2>One plan. Everything included.</h2>
+      <p class="lead">14 days free, no card to start.</p>
     </div>
-    {{> price}}
+    <div class="plan plan--compact">
+      <p class="plan-name">Noctiv <span class="plan-badge">14 days free</span></p>
+      <p class="amount">$79<small>/month</small></p>
+      <p class="compare">Per business, plus VAT where applicable.</p>
+      <a class="btn btn--lg btn--glow" href="{{app}}signup"
+        >Start free trial<span class="arrow">{{icon:arrow-right}}</span></a
+      >
+      <ul class="trust">
+        <li>{{icon:lock}}Secure checkout by Paddle</li>
+        <li>{{icon:map-pin}}EU data (Frankfurt)</li>
+        <li>{{icon:rotate-ccw}}Cancel any time</li>
+      </ul>
+      <p class="plan-more"><a href="/pricing/">Everything in the plan</a></p>
+    </div>
   </div>
 </section>
 
 <section class="section" id="faq">
   <div class="wrap">
-    <div class="section-head">
-      <h2>Questions people ask before trying it.</h2>
+    <div class="section-head section-head--center">
+      <h2>Questions before trying it.</h2>
     </div>
     <div class="faq">
       <details>
@@ -191,7 +365,7 @@
           language.
         </p>
       </details>
-      <details data-new>
+      <details>
         <summary>Does it work with Outlook / Microsoft 365?</summary>
         <p>
           Not yet. <a href="/contact/">Tell us</a> and we'll prioritise it. Every other business
@@ -206,10 +380,5 @@
         </p>
       </details>
     </div>
-    <p class="muted" style="margin-top: var(--s-6)" data-new>
-      More answers in the <a href="/help/">help centre</a>. Comparing tools? See Noctiv vs
-      <a href="/compare/tidio/">Tidio</a>, <a href="/compare/gorgias/">Gorgias</a> and
-      <a href="/compare/gemini-in-gmail/">Gemini in Gmail</a>.
-    </p>
   </div>
 </section>

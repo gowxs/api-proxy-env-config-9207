@@ -778,7 +778,7 @@
 .card-lines {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: var(--s-1) var(--s-4);
+  gap: var(--s-1) 0;
   margin: var(--s-3) 0 0;
   font-variant-numeric: tabular-nums;
 }
@@ -787,6 +787,7 @@
 }
 .card-lines dd {
   margin: 0;
+  padding-left: var(--s-4);
   text-align: right;
 }
 .card-lines .total {
@@ -1059,4 +1060,666 @@
 }
 .post-end .actions {
   margin-top: var(--s-4);
+}
+
+/* ================= Home: one headline, one sentence, one visual ================= */
+
+/* Text and visual side by side on desktop; --flip puts the visual on the left. */
+.home-split {
+  display: grid;
+  gap: var(--s-7);
+  align-items: center;
+}
+@media (min-width: 60rem) {
+  .home-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--s-9);
+  }
+  .home-split--flip > :first-child {
+    order: 2;
+  }
+}
+.section-head--center {
+  justify-items: center;
+  text-align: center;
+}
+.section-head--center h2,
+.section-head--center .lead {
+  margin-inline: auto;
+}
+
+/* ---------- Works with: mailbox providers as text marks ---------- */
+.works-with {
+  padding-block: var(--s-6);
+  border-bottom: 1px solid var(--line);
+}
+.works-with-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3) var(--s-6);
+}
+.works-with ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-3) var(--s-6);
+  padding: 0;
+  list-style: none;
+}
+.wm {
+  color: var(--text-3);
+  font-size: 1.0625rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: color 0.2s var(--ease);
+}
+.wm:hover {
+  color: var(--text);
+}
+.wm-gmail {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.wm-workspace {
+  font-weight: 500;
+}
+.wm-hostinger {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.wm-zoho {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.wm-imap {
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* ---------- Jobs: four illustrated tiles ---------- */
+.job-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+  padding: 0;
+  list-style: none;
+}
+.job {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+.job:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+}
+.job p {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.job p .icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--link);
+}
+/* The little scenes: bubbles, a follow-up timeline, lead stages, a document. */
+.job-art {
+  position: relative;
+  height: clamp(6rem, 4rem + 6vw, 8.5rem);
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(
+      80% 90% at 50% 100%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--surface-2);
+}
+.job-art i {
+  position: absolute;
+  display: block;
+  border-radius: 0.5rem;
+}
+.job-art--reply i:nth-child(1) {
+  left: 12%;
+  top: 22%;
+  width: 52%;
+  height: 22%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.job-art--reply i:nth-child(2) {
+  right: 12%;
+  top: 52%;
+  width: 58%;
+  height: 26%;
+  background: var(--accent);
+}
+.job-art--reply i:nth-child(3) {
+  right: 18%;
+  top: 60%;
+  width: 36%;
+  height: 4%;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.7);
+}
+.job-art--follow::before {
+  content: '';
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 50%;
+  height: 2px;
+  background: var(--line-strong);
+}
+.job-art--follow i {
+  top: calc(50% - 0.625rem);
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+}
+.job-art--follow i:nth-child(1) {
+  left: calc(14% - 0.625rem);
+  background: var(--accent);
+}
+.job-art--follow i:nth-child(2) {
+  left: calc(50% - 0.625rem);
+  background: var(--accent);
+}
+.job-art--follow i:nth-child(3) {
+  left: calc(86% - 0.625rem);
+  border-color: var(--ok);
+  background: var(--ok);
+}
+.job-art--leads i {
+  left: 14%;
+  right: 14%;
+  height: 18%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.job-art--leads i::after {
+  content: '';
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  width: 28%;
+  height: 0.5rem;
+  transform: translateY(-50%);
+  border-radius: var(--r-pill);
+  background: var(--c, var(--accent));
+}
+.job-art--leads i:nth-child(1) {
+  top: 16%;
+  --c: var(--ok);
+}
+.job-art--leads i:nth-child(2) {
+  top: 41%;
+  --c: var(--accent);
+}
+.job-art--leads i:nth-child(3) {
+  top: 66%;
+  --c: var(--dawn-2);
+}
+.job-art--docs i:nth-child(1) {
+  left: 30%;
+  right: 30%;
+  top: 14%;
+  bottom: -8%;
+  border-radius: 0.375rem 0.375rem 0 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.job-art--docs i:nth-child(2) {
+  left: 36%;
+  right: 44%;
+  top: 28%;
+  height: 7%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.job-art--docs i:nth-child(3) {
+  left: 36%;
+  right: 36%;
+  top: 48%;
+  height: 26%;
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, var(--line-strong) 0 2px, transparent 2px 9px);
+}
+
+/* ---------- Audiences: the two illustrations, large, captioned ---------- */
+.aud-grid {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-8);
+}
+@media (min-width: 48rem) {
+  .aud-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.aud {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--night-900);
+}
+.aud img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  transition: transform 0.6s var(--ease);
+}
+.aud:hover img {
+  transform: scale(1.02);
+}
+.aud figcaption {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: grid;
+  gap: 0.125rem;
+  padding: var(--s-7) var(--s-5) var(--s-5);
+  background: linear-gradient(to top, rgb(7 11 28 / 0.85), transparent);
+  color: var(--night-text);
+}
+.aud figcaption b {
+  font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+  letter-spacing: -0.02em;
+}
+.aud figcaption span {
+  color: var(--night-text-2);
+  font-size: var(--fs-small);
+}
+.aud figcaption a {
+  color: var(--night-text-2);
+}
+.aud figcaption a:hover {
+  color: #fff;
+}
+
+/* ---------- From e-mail to paid: five steps, lit one after another ---------- */
+.flow5 {
+  --steps: 5;
+  --cycle: 12s;
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(11.5rem, 62%);
+  gap: var(--s-4);
+  margin: var(--s-8) calc(-1 * var(--gutter)) 0;
+  padding: 0.5rem var(--gutter) var(--s-4);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--gutter);
+  list-style: none;
+  counter-reset: f;
+  scrollbar-width: none;
+}
+.flow5::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 60rem) {
+  .flow5 {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+}
+.flow5 li {
+  scroll-snap-align: start;
+  counter-increment: f;
+}
+.flow5-shot {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.4s var(--ease),
+    box-shadow 0.4s var(--ease),
+    transform 0.4s var(--ease);
+}
+.flow5-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+/* The customer's e-mail, drawn (it arrives in any mail app). */
+.flow5-mail {
+  display: grid;
+  align-content: start;
+  gap: 0.375rem;
+  padding: 1rem;
+  color: #131a2e;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.flow5-mail-top {
+  display: flex;
+  justify-content: space-between;
+  color: #131a2e;
+}
+.flow5-mail-top time {
+  color: #646c8a;
+  font-variant-numeric: tabular-nums;
+}
+.flow5-mail-subject {
+  font-weight: 700;
+}
+.flow5-mail-text {
+  color: #4a5270;
+}
+.flow5-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  font-weight: 700;
+}
+.flow5-label::before {
+  content: counter(f);
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.4s var(--ease),
+    color 0.4s var(--ease);
+}
+/* Desktop: arrows between the steps. */
+@media (min-width: 60rem) {
+  .flow5 li:not(:last-child) .flow5-shot::after {
+    content: none;
+  }
+  .flow5 li {
+    position: relative;
+  }
+  .flow5 li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 40%;
+    right: calc(-1 * var(--s-4) + 0.1875rem);
+    width: 0.625rem;
+    height: 0.625rem;
+    border-top: 2px solid var(--line-strong);
+    border-right: 2px solid var(--line-strong);
+    transform: rotate(45deg);
+  }
+}
+/* In view and motion allowed: each step lights up in turn, then the loop starts again. */
+@media (prefers-reduced-motion: no-preference) {
+  .flow5.is-live li .flow5-shot {
+    animation: flow5-shot var(--cycle) var(--ease) infinite;
+  }
+  .flow5.is-live li .flow5-label::before {
+    animation: flow5-num var(--cycle) var(--ease) infinite;
+  }
+  .flow5.is-live li:nth-child(2) > * {
+    animation-delay: calc(var(--cycle) / var(--steps) * 1);
+  }
+  .flow5.is-live li:nth-child(2) .flow5-label::before {
+    animation-delay: calc(var(--cycle) / var(--steps) * 1);
+  }
+  .flow5.is-live li:nth-child(3) .flow5-shot,
+  .flow5.is-live li:nth-child(3) .flow5-label::before {
+    animation-delay: calc(var(--cycle) / var(--steps) * 2);
+  }
+  .flow5.is-live li:nth-child(4) .flow5-shot,
+  .flow5.is-live li:nth-child(4) .flow5-label::before {
+    animation-delay: calc(var(--cycle) / var(--steps) * 3);
+  }
+  .flow5.is-live li:nth-child(5) .flow5-shot,
+  .flow5.is-live li:nth-child(5) .flow5-label::before {
+    animation-delay: calc(var(--cycle) / var(--steps) * 4);
+  }
+  @keyframes flow5-shot {
+    0%,
+    22% {
+      border-color: var(--accent);
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent),
+        var(--shadow-md);
+      transform: translateY(-4px);
+    }
+    28%,
+    100% {
+      border-color: var(--line);
+      box-shadow: var(--shadow-sm);
+      transform: none;
+    }
+  }
+  @keyframes flow5-num {
+    0%,
+    22% {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+    28%,
+    100% {
+      background: var(--surface-2);
+      color: var(--text-2);
+    }
+  }
+}
+
+/* ---------- The assistant: a chat with two cards ---------- */
+.chat-mock {
+  display: grid;
+  gap: var(--s-3);
+  max-width: 30rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--s-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: 0.9375rem;
+}
+.chat-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--line);
+}
+.chat-top .icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--link);
+}
+.chat-owner {
+  justify-self: end;
+  max-width: 85%;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--r-md) var(--r-md) 0.25rem var(--r-md);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.chat-answer {
+  max-width: 90%;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--r-md) var(--r-md) var(--r-md) 0.25rem;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.chat-mock .card {
+  margin: 0;
+  color: #131a2e;
+}
+.card-file {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-sm);
+  background: #f5f6fa;
+  color: #4a5270;
+  font-size: var(--fs-small);
+}
+.card-file .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ---------- The Monday e-mail in a mail app ---------- */
+.mailapp {
+  width: 100%;
+  max-width: 36rem;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.mailapp-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  height: 2.5rem;
+  padding: 0 0.875rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.mailapp-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.mailapp-folder .icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.mailapp-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.mailapp-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--night-900);
+  color: var(--moon);
+  font-weight: 800;
+}
+.mailapp-from {
+  color: var(--text-3);
+  font-size: var(--fs-small);
+}
+.mailapp-from b {
+  color: var(--text);
+}
+.mailapp-subject {
+  font-weight: 700;
+  line-height: 1.3;
+}
+.mailapp-head time {
+  align-self: start;
+  color: var(--text-3);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.mailapp > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 600 / 560;
+  object-fit: cover;
+  object-position: top;
+  background: #fff;
+}
+
+/* ---------- Rules: four tiles, icon and three words ---------- */
+.rule-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-4);
+  margin-top: var(--s-8);
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 56rem) {
+  .rule-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.rule-tiles .tile {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-4);
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+}
+.rule-tiles .icon {
+  width: 2rem;
+  height: 2rem;
+  stroke-width: 1.5;
+  color: var(--moon);
+}
+.rule-tiles b {
+  font-size: 1.0625rem;
+  line-height: 1.3;
+}
+.band-more {
+  margin-top: var(--s-6);
+  text-align: center;
+}
+
+/* ---------- Pricing on Home: one compact card ---------- */
+.plan--compact {
+  display: block;
+  max-width: 28rem;
+  margin-inline: auto;
+  text-align: center;
+}
+.plan--compact .plan-name {
+  justify-content: center;
+}
+.plan--compact .trust {
+  justify-items: center;
+}
+.plan-more {
+  margin-top: var(--s-5);
+  font-size: var(--fs-small);
 }

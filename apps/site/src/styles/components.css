@@ -348,11 +348,6 @@
   --hero-fade-warm: color-mix(in srgb, var(--dawn-1) 45%, var(--bg));
   padding-bottom: calc(clamp(2rem, 1rem + 3vw, 3.5rem) + var(--hero-fade-h));
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .hero {
-    --hero-fade-warm: color-mix(in srgb, #3a2a5c 55%, var(--bg));
-  }
-}
 .hero::before {
   content: '';
   position: absolute;

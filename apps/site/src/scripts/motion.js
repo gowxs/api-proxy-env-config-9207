@@ -35,3 +35,14 @@
   update();
   window.addEventListener('scroll', update, { passive: true });
 })();
+// Animations that only run while they are on screen ([data-live] gets .is-live).
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+  var els = document.querySelectorAll('[data-live]');
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      e.target.classList.toggle('is-live', e.isIntersecting);
+    });
+  });
+  for (var i = 0; i < els.length; i++) io.observe(els[i]);
+})();
