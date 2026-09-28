@@ -1,0 +1,50 @@
+<!--
+  Blog post template. Not built: copy it to src/pages/blog/<slug>.html
+  (the slug becomes /blog/<slug>/, lower case with hyphens) and fill it in.
+
+  - "title": "<Headline> · Noctiv Blog". The part before " · " is the headline
+    on the blog index, in the breadcrumb and in the structured data.
+  - "description": one or two sentences (up to ~160 characters); shown on the
+    blog index and in search results.
+  - "date": publication date, YYYY-MM-DD (required). The index sorts by it.
+  - "updated": optional, YYYY-MM-DD, only for a real change to the content.
+  - "draft": true keeps the post out of the deployed site, the sitemap and the
+    index; `pnpm --filter @noctiv/site dev` still shows it for proofreading.
+    Remove the line to publish.
+
+  The build adds the breadcrumbs, the BlogPosting structured data, the sitemap
+  entry and the post's text in /llms-full.txt. Mark new copy with data-new
+  while it waits for review. Only facts that are true of Noctiv today.
+  Delete this comment in the copy.
+-->
+<script type="application/json" id="page">
+  {
+    "title": "Headline of the post · Noctiv Blog",
+    "description": "One or two sentences on what the reader learns.",
+    "date": "2026-10-01",
+    "draft": true
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap">
+    {{crumbs}}
+    <h1>Headline of the post.</h1>
+    <p class="lead">A short standfirst: what this post is about, in one or two sentences.</p>
+    <p class="post-date"><time datetime="{{date}}">{{dateLong}}</time></p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <article class="wrap prose">
+    <p>Opening paragraph.</p>
+
+    <h2>A section heading</h2>
+    <p>Body text. Link to related pages, such as <a href="/help/">the help centre</a>.</p>
+    <ul>
+      <li>A list item</li>
+    </ul>
+
+    {{> post-end}}
+  </article>
+</section>

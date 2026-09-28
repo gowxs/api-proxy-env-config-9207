@@ -969,3 +969,18 @@
     color: var(--text);
   }
 }
+
+/* ---------- Blog ---------- */
+.post-date {
+  margin-top: var(--s-4);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.post-end {
+  margin-top: var(--s-7);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--line);
+}
+.post-end .actions {
+  margin-top: var(--s-4);
+}

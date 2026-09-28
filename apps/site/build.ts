@@ -39,6 +39,12 @@ interface PageMeta {
   crumb?: string;
   /** Adds the SoftwareApplication structured data (home and pricing). */
   product?: boolean;
+  /** Blog posts: publication date (YYYY-MM-DD), required below /blog/. */
+  date?: string;
+  /** Blog posts: date of the last real change (YYYY-MM-DD). */
+  updated?: string;
+  /** Blog posts: built only by the local preview, never deployed or listed. */
+  draft?: boolean;
 }
 
 /** Facts shared by the structured data and llms.txt: keep in step with Pricing. */
@@ -85,7 +91,21 @@ const SOFTWARE = {
   },
 };
 /** Names of the section index pages, for breadcrumbs of the pages below them. */
-const SECTIONS: Record<string, string> = { for: 'Use cases', compare: 'Compare', help: 'Help' };
+const SECTIONS: Record<string, string> = {
+  for: 'Use cases',
+  compare: 'Compare',
+  help: 'Help',
+  blog: 'Blog',
+};
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const longDate = (iso: string) =>
+  new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 
 const read = (p: string) => readFileSync(p, 'utf8');
 
@@ -279,7 +299,7 @@ function pageFiles(dir = join(SRC, 'pages'), prefix = ''): string[] {
 /** robots.txt: everyone may crawl; the AI crawlers are named so the intent is explicit. */
 const AI_CRAWLERS = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended'];
 
-export function build(): { pages: string[] } {
+export function build({ drafts = false } = {}): { pages: string[] } {
   rmSync(DIST, { recursive: true, force: true });
   mkdirSync(DIST, { recursive: true });
 
@@ -333,25 +353,49 @@ export function build(): { pages: string[] } {
   const sitemap: string[] = [];
 
   // First pass: every page's meta and path, so breadcrumbs can name their parents.
-  const entries = pageFiles().map((file) => {
-    const raw = read(join(SRC, 'pages', file));
-    const m = /^<script type="application\/json" id="page">([\s\S]*?)<\/script>\s*/.exec(raw);
-    if (!m) throw new Error(`${file}: missing page header`);
-    const meta = JSON.parse(m[1]!) as PageMeta;
-    const slug = file.replace(/\.html$/, '');
-    const path =
-      slug === 'index'
-        ? '/'
-        : slug === '404'
-          ? '/404'
-          : `/${slug.replace(/(^|\/)index$/, '')}/`.replace(/\/\/$/, '/');
-    const target = slug === '404' ? '404.html' : join(path.slice(1), 'index.html');
-    return { file, body: raw.slice(m[0].length), meta, path, target };
-  });
+  const entries = pageFiles()
+    .map((file) => {
+      const raw = read(join(SRC, 'pages', file));
+      const m = /^<script type="application\/json" id="page">([\s\S]*?)<\/script>\s*/.exec(raw);
+      if (!m) throw new Error(`${file}: missing page header`);
+      const meta = JSON.parse(m[1]!) as PageMeta;
+      const slug = file.replace(/\.html$/, '');
+      const path =
+        slug === 'index'
+          ? '/'
+          : slug === '404'
+            ? '/404'
+            : `/${slug.replace(/(^|\/)index$/, '')}/`.replace(/\/\/$/, '/');
+      const target = slug === '404' ? '404.html' : join(path.slice(1), 'index.html');
+      const post = /^\/blog\/[^/]+\/$/.test(path);
+      if (post && !ISO_DATE.test(meta.date ?? ''))
+        throw new Error(`${file}: "date" must be YYYY-MM-DD`);
+      if (post && meta.updated && !ISO_DATE.test(meta.updated)) {
+        throw new Error(`${file}: "updated" must be YYYY-MM-DD`);
+      }
+      return { file, body: raw.slice(m[0].length), meta, path, target, post };
+    })
+    .filter((e) => drafts || !e.meta.draft);
+
+  // The blog index lists published posts, newest first. With none it says so
+  // and stays out of search engines, so an empty section is never indexed.
+  const posts = entries
+    .filter((e) => e.post && !e.meta.draft)
+    .sort((a, b) => b.meta.date!.localeCompare(a.meta.date!) || a.path.localeCompare(b.path));
+  const blogIndex = entries.find((e) => e.path === '/blog/');
+  if (blogIndex && posts.length === 0) blogIndex.meta.noindex = true;
+  const postList = posts.length
+    ? `<ul class="links">${posts
+        .map(
+          (p) =>
+            `<li><a href="${p.path}"><b>${p.meta.title.split(' · ')[0]}</b><span><time datetime="${p.meta.date}">${longDate(p.meta.date!)}</time> · ${p.meta.description}</span></a></li>`,
+        )
+        .join('')}</ul>`
+    : '<p class="lead">No posts yet. The first one is on its way.</p>';
   const crumbName = (meta: PageMeta) => meta.crumb ?? meta.title.split(' · ')[0]!;
   const texts: { path: string; title: string; text: string }[] = [];
 
-  for (const { file, body, meta, path, target } of entries) {
+  for (const { file, body, meta, path, target, post } of entries) {
     const scripts = (meta.scripts ?? [])
       .map((s) => `<script>${minifyJs(read(join(SRC, 'scripts', s)))}</script>`)
       .join('');
@@ -374,7 +418,17 @@ export function build(): { pages: string[] } {
           .join('')}</ol></nav>`
       : '';
 
-    const content = render(body, { app: APP_URL, crumbs }, parts);
+    const content = render(
+      body,
+      {
+        app: APP_URL,
+        crumbs,
+        posts: postList,
+        date: meta.date ?? '',
+        dateLong: meta.date ? longDate(meta.date) : '',
+      },
+      parts,
+    );
     const graph: object[] = [];
     if (path === '/') {
       graph.push(ORGANIZATION, {
@@ -386,6 +440,21 @@ export function build(): { pages: string[] } {
       });
     }
     if (meta.product) graph.push(SOFTWARE);
+    if (post) {
+      graph.push({
+        '@type': 'BlogPosting',
+        headline: meta.title.split(' · ')[0],
+        description: meta.description,
+        datePublished: meta.date,
+        dateModified: meta.updated ?? meta.date,
+        url: ORIGIN + path,
+        mainEntityOfPage: ORIGIN + path,
+        image: `${ORIGIN}/og.jpg`,
+        inLanguage: 'en',
+        author: { '@id': `${ORIGIN}/#organization` },
+        publisher: ORGANIZATION,
+      });
+    }
     const faq = faqSchema(content);
     if (faq) graph.push(faq);
     if (trail.length) {
@@ -401,7 +470,8 @@ export function build(): { pages: string[] } {
     }
     const head = [
       meta.noindex ? '<meta name="robots" content="noindex" />' : '',
-      graph.length && !meta.noindex ? jsonLd({ '@graph': graph }) : '',
+      graph.length && !meta.noindex && !meta.draft ? jsonLd({ '@graph': graph }) : '',
+      meta.draft ? '<meta name="robots" content="noindex" />' : '',
     ].join('');
 
     const html = render(
@@ -429,7 +499,7 @@ export function build(): { pages: string[] } {
     for (const m of finalHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)) inlineScripts.add(m[1]!);
     writeFileSync(join(DIST, target), finalHtml);
     pages.push(path);
-    if (!meta.noindex && path !== '/404') {
+    if (!meta.noindex && !meta.draft && path !== '/404') {
       sitemap.push(ORIGIN + path);
       if (path !== '/') texts.push({ path, title: meta.title, text: pageText(content) });
     }
@@ -484,7 +554,7 @@ export function serve(port = 4321): Promise<() => void> {
     const server = createServer((req, res) => {
       let p = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
       if (p.endsWith('/')) p += 'index.html';
-      if (extname(p) === '.html') build();
+      if (extname(p) === '.html') build({ drafts: true });
       let file = join(DIST, p);
       if (!file.startsWith(DIST) || !existsSync(file)) {
         file = existsSync(join(DIST, p, 'index.html'))
@@ -511,7 +581,8 @@ export function serve(port = 4321): Promise<() => void> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { pages } = build();
+  // The local preview also shows draft posts; the deployed build never does.
+  const { pages } = build({ drafts: process.argv.includes('--serve') });
   console.log(`built ${pages.length} pages → dist/`);
   if (process.argv.includes('--serve')) {
     await serve();
