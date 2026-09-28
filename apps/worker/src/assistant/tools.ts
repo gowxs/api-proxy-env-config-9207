@@ -6,8 +6,10 @@ import {
   localDefaults,
   localMonthStart,
   localWeekStart,
+  knowledgeText,
   type AssistantStep,
   type AssistantTool,
+  type KnowledgeExcerpt,
   type ValueReport,
 } from '@noctiv/core';
 import { loadValueRows } from '@noctiv/db';
@@ -96,6 +98,80 @@ export interface ToolContext {
   resolveMx?: (domain: string) => Promise<{ exchange: string }[]>;
   /** Bookings (beta): app.noctiv.io, for the booking page address. */
   appUrl?: string;
+  /** knowledge_search: the reply pipeline's retrieval (notes first, no repeated website text). */
+  searchKnowledge?: (query: string) => Promise<KnowledgeChunk[]>;
+  /** Registers an excerpt the model is shown ("K1", "K2", …) as evidence; returns its label. */
+  knowledge?: {
+    add: (e: Omit<KnowledgeExcerpt, 'amounts' | 'label'>, content: string) => string;
+    get: (label: string) => KnowledgeExcerpt | undefined;
+  };
+}
+
+export interface KnowledgeChunk {
+  sourceId: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  source: { type: 'website' | 'file' | 'note'; title: string; url: string | null; updatedAt: Date };
+}
+
+const KNOWLEDGE_READ_CHUNKS = 12;
+const KNOWLEDGE_READ_CHARS = 9000;
+
+/** "[K1] owner note «Prices», updated 2026-09-24: <text>" — registered as evidence. */
+function knowledgeLines(chunks: KnowledgeChunk[], c: ToolContext, perChunk: number): string[] {
+  return chunks.map((k) => {
+    const url = typeof k.metadata?.url === 'string' ? k.metadata.url : k.source.url;
+    const label =
+      c.knowledge?.add(
+        { sourceId: k.sourceId, type: k.source.type, title: k.source.title, url },
+        k.content,
+      ) ?? '';
+    const day = k.source.updatedAt.toISOString().slice(0, 10);
+    const where =
+      k.source.type === 'note'
+        ? `owner note «${k.source.title}», updated ${day}`
+        : k.source.type === 'file'
+          ? `file «${k.source.title}», read ${day}`
+          : `website page ${url ?? k.source.title}, read ${day}`;
+    return `[${label}] ${where}: ${knowledgeText(c.nonce, k.content, perChunk)}`;
+  });
+}
+
+/**
+ * Full-text fallback when no embedding model is available (tests). Words in another language
+ * than the knowledge base match nothing: then the owner's notes come back, newest first.
+ */
+async function textSearchKnowledge(tx: TransactionSql, query: string): Promise<KnowledgeChunk[]> {
+  const words = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []).slice(0, 20).join(' or ');
+  const rows = await tx<
+    {
+      source_id: string;
+      content: string;
+      metadata: Record<string, unknown>;
+      type: 'website' | 'file' | 'note';
+      title: string;
+      url: string | null;
+      at: Date;
+    }[]
+  >`
+    select c.source_id, c.content, c.metadata, s.type, s.title, s.url, coalesce(s.ingested_at, s.updated_at) as at
+    from public.kb_chunks c join public.kb_sources s on s.id = c.source_id,
+         websearch_to_tsquery('simple', ${words}) q
+    where c.fts @@ q
+    order by (s.type = 'note') desc, ts_rank(c.fts, q) desc
+    limit 6`;
+  const found = rows.length
+    ? rows
+    : await tx<typeof rows>`
+        select c.source_id, c.content, c.metadata, s.type, s.title, s.url, coalesce(s.ingested_at, s.updated_at) as at
+        from public.kb_chunks c join public.kb_sources s on s.id = c.source_id
+        where s.type = 'note' order by s.updated_at desc, c.chunk_index limit 4`;
+  return found.map((r) => ({
+    sourceId: r.source_id,
+    content: r.content,
+    metadata: r.metadata,
+    source: { type: r.type, title: r.title, url: r.url, updatedAt: r.at },
+  }));
 }
 
 /** DNS MX lookup with a short timeout: an unknown or slow domain is simply "unknown". */
@@ -461,6 +537,76 @@ export async function runTool(
         );
       }
       return out;
+    }
+    case 'knowledge_search': {
+      const q = (args.query ?? '').trim();
+      if (!q) return ['knowledge_search needs a query (what to look for).'];
+      const [src] = await tx<{ n: number }[]>`select count(*)::int as n from public.kb_sources`;
+      if (!src!.n) return ['Knowledge base: empty. Add the website, files or a note in Knowledge.'];
+      const chunks = c.searchKnowledge
+        ? await c.searchKnowledge(q)
+        : await textSearchKnowledge(tx, q);
+      if (!chunks.length) return [`Knowledge base: nothing found for «${q.slice(0, 80)}».`];
+      return [
+        `Knowledge base excerpts for «${q.slice(0, 80)}» (${chunks.length}; owner notes first). Quote them as they are; cite the label:`,
+        ...knowledgeLines(chunks, c, 1500),
+      ];
+    }
+    case 'knowledge_read': {
+      const want = (args.source ?? args.query ?? '').trim();
+      if (!want)
+        return [
+          'knowledge_read needs a source: an excerpt label (K1), a note title or a page address.',
+        ];
+      const byLabel = c.knowledge?.get(want);
+      const like = `%${want.replace(/^https?:\/\//i, '').replace(/[\\%_]/g, (x) => `\\${x}`)}%`;
+      const [s] = byLabel
+        ? await tx<{ id: string; url: string | null }[]>`
+            select id, ${byLabel.url} as url from public.kb_sources where id = ${byLabel.sourceId}`
+        : await tx<{ id: string; url: string | null }[]>`
+            select s.id, (select c.metadata->>'url' from public.kb_chunks c
+                          where c.source_id = s.id and c.metadata->>'url' ilike ${like} limit 1) as url
+            from public.kb_sources s
+            where s.title ilike ${like} or s.url ilike ${like}
+               or exists (select 1 from public.kb_chunks c where c.source_id = s.id and c.metadata->>'url' ilike ${like})
+            order by (s.type = 'note') desc, s.updated_at desc limit 1`;
+      if (!s)
+        return [
+          `Knowledge base: no source matches «${want.slice(0, 80)}». Use knowledge_status for the list.`,
+        ];
+      // A website is many pages: read the page asked for (or the one the excerpt came from).
+      const rows = await tx<
+        {
+          source_id: string;
+          content: string;
+          metadata: Record<string, unknown>;
+          type: 'website' | 'file' | 'note';
+          title: string;
+          url: string | null;
+          at: Date;
+        }[]
+      >`
+        select c.source_id, c.content, c.metadata, k.type, k.title, k.url, coalesce(k.ingested_at, k.updated_at) as at
+        from public.kb_chunks c join public.kb_sources k on k.id = c.source_id
+        where c.source_id = ${s.id}
+          ${s.url ? tx`and c.metadata->>'url' = ${s.url}` : tx``}
+        order by c.chunk_index limit ${KNOWLEDGE_READ_CHUNKS}`;
+      let budget = KNOWLEDGE_READ_CHARS;
+      const chunks: KnowledgeChunk[] = [];
+      for (const r of rows) {
+        if (budget <= 0) break;
+        chunks.push({
+          sourceId: r.source_id,
+          content: r.content.slice(0, budget),
+          metadata: r.metadata,
+          source: { type: r.type, title: r.title, url: r.url, updatedAt: r.at },
+        });
+        budget -= r.content.length;
+      }
+      return [
+        `Knowledge source «${rows[0]?.title ?? want.slice(0, 80)}» (${chunks.length} passage${chunks.length === 1 ? '' : 's'}${rows.length === KNOWLEDGE_READ_CHUNKS ? ', the first ones' : ''}):`,
+        ...knowledgeLines(chunks, c, KNOWLEDGE_READ_CHARS),
+      ];
     }
     case 'locale_defaults': {
       const zone = args.timezone ?? tz;

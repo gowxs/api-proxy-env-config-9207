@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { detectClaims } from '../claims/detect.ts';
 import { findNumbers, numberSet } from '../claims/numbers.ts';
 import { foldForMatching } from '../text/normalize.ts';
 
@@ -28,6 +29,8 @@ export const ASSISTANT_TOOLS = [
   'documents',
   'mailbox_setup',
   'bookings',
+  'knowledge_search',
+  'knowledge_read',
 ] as const;
 export type AssistantTool = (typeof ASSISTANT_TOOLS)[number];
 
@@ -53,8 +56,13 @@ export const AssistantStepSchema = z.strictObject({
     period: z.enum(VALUE_PERIODS).nullable(),
     thread_id: z.string().max(40).nullable(),
     timezone: z.string().max(60).nullable(),
-    /** find_customer: a name or e-mail address the owner used; mailbox_setup: their address or provider. */
+    /**
+     * find_customer: a name or e-mail address the owner used; mailbox_setup: their address or
+     * provider; knowledge_search: what to look for, in any language.
+     */
     query: z.string().max(200).nullable(),
+    /** knowledge_read: an excerpt label ("K2"), a note's title or a page address. */
+    source: z.string().max(200).nullable().default(null),
   }),
   reply: z.string().max(4000),
   proposals: z.array(
@@ -71,6 +79,8 @@ export const AssistantStepSchema = z.strictObject({
           unit: z.string(),
           qty: z.string(),
           price: z.string(),
+          /** price_items: the knowledge-base excerpt ("K3") the price is from; "" = the owner said it. */
+          source: z.string().max(20).default(''),
         }),
       ),
       /** create_document: "invoice" or "delivery_note". */
@@ -99,6 +109,8 @@ export const AssistantStepSchema = z.strictObject({
   suggestions: z.array(z.string().max(80)),
 });
 export type AssistantStep = z.infer<typeof AssistantStepSchema>;
+/** A proposal as written by hand (tests): fields with defaults may be left out. */
+export type AssistantProposalInput = z.input<typeof AssistantStepSchema>['proposals'][number];
 
 /**
  * Array limits are applied here, not in the schema: Gemini's structured
@@ -248,10 +260,63 @@ export function parseAmountToCents(raw: string): number | null {
   return Number.isSafeInteger(v) && v >= 0 && v <= 100_000_000_00 ? v : null;
 }
 
+/** A knowledge-base excerpt the assistant was shown this turn, by its label ("K1"). */
+export interface KnowledgeExcerpt {
+  label: string;
+  sourceId: string;
+  type: 'website' | 'file' | 'note';
+  title: string;
+  url: string | null;
+  /** Amounts of money the excerpt states, as number readings ("490"). */
+  amounts: Set<string>;
+}
+
 /** Numbers the assistant may use: from the owner's messages, tool results and the help. */
 export class AssistantEvidence {
   readonly #all = new Set<string>();
   readonly #owner = new Set<string>();
+  readonly #knowledge = new Map<string, KnowledgeExcerpt>();
+
+  /**
+   * An excerpt from the tenant's knowledge base (knowledge_search / knowledge_read). Its
+   * numbers may be used in answers and e-mails like any tool result, and its amounts of money
+   * may become price-list items when the card cites it (the owner still confirms).
+   */
+  addKnowledge(e: Omit<KnowledgeExcerpt, 'amounts' | 'label'>, content: string): string {
+    const label = `K${this.#knowledge.size + 1}`;
+    const amounts = new Set<string>();
+    for (const c of detectClaims(content))
+      if (c.kind === 'money') for (const n of c.numbers) for (const r of n) amounts.add(r);
+    this.#knowledge.set(label, { ...e, label, amounts });
+    this.add(content, 'tool');
+    return label;
+  }
+
+  knowledge(label: string): KnowledgeExcerpt | undefined {
+    return this.#knowledge.get(
+      label
+        .trim()
+        .replace(/^\[|\]$/g, '')
+        .toUpperCase(),
+    );
+  }
+
+  /** Excerpts stating this amount of money: the cited one first when it does. */
+  knowledgeWithAmount(value: number, cited?: string): KnowledgeExcerpt[] {
+    const key = String(value);
+    const all = [...this.#knowledge.values()].filter((k) => k.amounts.has(key));
+    const first = cited ? this.knowledge(cited) : undefined;
+    return first && all.includes(first) ? [first, ...all.filter((k) => k !== first)] : all;
+  }
+
+  /** The excerpts whose amounts appear in `text` (for citing them on a card). */
+  knowledgeCitedBy(text: string): KnowledgeExcerpt[] {
+    const amounts = new Set<string>();
+    for (const c of detectClaims(text))
+      if (c.kind === 'money') for (const n of c.numbers) for (const r of n) amounts.add(r);
+    return [...this.#knowledge.values()].filter((k) => [...k.amounts].some((a) => amounts.has(a)));
+  }
+
   add(text: string, from: 'owner' | 'tool' | 'help') {
     for (const n of numberSet(foldForMatching(text))) {
       this.#all.add(n);
@@ -345,7 +410,7 @@ function parseSetting(key: string, raw: string, ctx: ProposalContext): unknown |
 
 /** Turns one model proposal into a card, or null when nothing valid is left. */
 export function normalizeProposal(
-  p: AssistantStep['proposals'][number],
+  p: AssistantProposalInput,
   ctx: ProposalContext,
 ): NormalizedProposal | null {
   const title = p.title.trim().slice(0, 120) || 'Proposed change';
@@ -408,16 +473,26 @@ export function normalizeProposal(
       name: i.name.trim(),
       unit: i.unit.trim() || 'pcs',
       cents: parseAmountToCents(i.price),
+      cited: i.source ?? '',
     }))
-    .filter(
-      (i) =>
-        i.name &&
-        i.cents !== null &&
-        i.cents > 0 &&
-        // Prices only as the owner wrote them.
-        ctx.evidence.has(i.cents / 100, true),
-    )
-    .map((i) => ({ name: i.name, unit: i.unit, unitPriceCents: i.cents!, currency: ctx.currency }));
+    .filter((i) => i.name && i.cents !== null && i.cents > 0)
+    .flatMap((i) => {
+      const base = { name: i.name, unit: i.unit, unitPriceCents: i.cents!, currency: ctx.currency };
+      // Prices as the owner wrote them, or exactly as a knowledge-base excerpt states them.
+      if (ctx.evidence.has(i.cents! / 100, true)) return [base];
+      const k = ctx.evidence.knowledgeWithAmount(i.cents! / 100, i.cited)[0];
+      return k
+        ? [{ ...base, source: { label: k.label, type: k.type, title: k.title, url: k.url } }]
+        : [];
+    });
   if (!items.length) return null;
-  return { type: 'price_items', title, payload: { items }, requiresConfirmation: false };
+  // Prices taken from the knowledge base become confirmed price-list items (used in quotes):
+  // the owner confirms them in a dialog, not with one tap.
+  const fromKnowledge = items.some((i) => 'source' in i);
+  return {
+    type: 'price_items',
+    title,
+    payload: { items },
+    requiresConfirmation: fromKnowledge,
+  };
 }

@@ -9,12 +9,10 @@ import {
   normalizeProposal,
   ownerNamed,
   parseAmountToCents,
-  type AssistantStep,
+  type AssistantProposalInput,
 } from '../src/index.ts';
 
-const proposal = (
-  p: Partial<AssistantStep['proposals'][number]>,
-): AssistantStep['proposals'][number] => ({
+const proposal = (p: Partial<AssistantProposalInput>): AssistantProposalInput => ({
   type: 'settings',
   title: 'Change',
   settings: [],
@@ -206,7 +204,7 @@ describe('assistant action cards (PLAN.md §27.2)', () => {
     vatNo: '',
     threadId: null,
   };
-  const doc = (p: Partial<AssistantStep['proposals'][number]>, e = evidence()) =>
+  const doc = (p: Partial<AssistantProposalInput>, e = evidence()) =>
     draftDocument(proposal({ type: 'create_document', doc_type: 'invoice', ...p }), {
       evidence: e,
       customer: gowxs,
@@ -320,5 +318,96 @@ describe('assistant action cards (PLAN.md §27.2)', () => {
         e,
       ),
     ).toMatchObject({ ok: false });
+  });
+});
+
+describe('assistant: prices from the knowledge base (Latvian session, 2026-09-28)', () => {
+  const note = {
+    sourceId: '00000000-0000-4000-8000-0000000000aa',
+    type: 'note' as const,
+    title: 'Services and prices',
+    url: null,
+  };
+  const withNote = (ownerSaid = 'Send our offer') => {
+    const c = ctx(ownerSaid);
+    const label = c.evidence.addKnowledge(
+      note,
+      'Landing page: €290\nBusiness website (up to 6 pages): €490',
+    );
+    return { c, label };
+  };
+
+  it('labels excerpts K1, K2, … and lets their numbers be used like tool results', () => {
+    const { c, label } = withNote();
+    expect(label).toBe('K1');
+    expect(c.evidence.addKnowledge({ ...note, title: 'Other' }, 'Shopify store: €690')).toBe('K2');
+    expect(c.evidence.unsupportedIn('A business website is €490, a store €690.')).toEqual([]);
+    expect(c.evidence.has(490, true)).toBe(false); // not the owner's words
+    expect(c.evidence.knowledge('[k1]')?.title).toBe('Services and prices');
+    expect(c.evidence.knowledgeWithAmount(490).map((k) => k.label)).toEqual(['K1']);
+    expect(c.evidence.knowledgeCitedBy('Mājaslapa: €490').map((k) => k.label)).toEqual(['K1']);
+    expect(c.evidence.knowledgeCitedBy('No prices here, 10 days.')).toEqual([]);
+  });
+
+  it('a price-list card may take prices stated verbatim in a cited excerpt, behind the dialog', () => {
+    const { c } = withNote();
+    const card = normalizeProposal(
+      proposal({
+        type: 'price_items',
+        items: [
+          { name: 'Business website', unit: 'pcs', qty: '', price: '490', source: 'K1' },
+          { name: 'Landing page', unit: 'pcs', qty: '', price: '€290', source: '' },
+          { name: 'Invented', unit: 'pcs', qty: '', price: '350', source: 'K1' },
+        ],
+      }),
+      c,
+    );
+    expect(card).toMatchObject({ type: 'price_items', requiresConfirmation: true });
+    expect(card!.payload.items).toEqual([
+      expect.objectContaining({
+        name: 'Business website',
+        unitPriceCents: 49000,
+        source: { label: 'K1', type: 'note', title: 'Services and prices', url: null },
+      }),
+      expect.objectContaining({
+        name: 'Landing page',
+        unitPriceCents: 29000,
+        source: expect.objectContaining({ label: 'K1' }),
+      }),
+    ]);
+  });
+
+  it("the owner's own prices stay a one-tap card", () => {
+    const { c } = withNote('Add a logo design for 120 EUR');
+    const card = normalizeProposal(
+      proposal({
+        type: 'price_items',
+        items: [{ name: 'Logo design', unit: 'pcs', qty: '', price: '120' }],
+      }),
+      c,
+    );
+    expect(card).toMatchObject({ requiresConfirmation: false });
+    expect(card!.payload.items).toEqual([
+      { name: 'Logo design', unit: 'pcs', unitPriceCents: 12000, currency: 'EUR' },
+    ]);
+  });
+
+  it('the prompt has the knowledge tools, the offer flow and the tone rules', () => {
+    const s = buildAssistantSystem({
+      businessName: 'WXS',
+      locale: 'lv',
+      purpose: 'app',
+      today: 'Monday',
+      timeZone: 'Europe/Riga',
+      nonce: 'abc',
+    });
+    expect(s).toContain('- knowledge_search (query:');
+    expect(s).toContain('- knowledge_read (source:');
+    expect(s).toContain('<<<KB_TEXT_abc>>>');
+    expect(s).toContain(
+      'Never stop at "the price list is empty" when the knowledge base has prices',
+    );
+    expect(s).toContain('never ask the owner for facts a tool can give');
+    expect(s).toContain('do not end every answer with "Lūdzu, nosauciet…"');
   });
 });

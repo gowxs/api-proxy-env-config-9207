@@ -271,6 +271,15 @@ export async function normalizeActions(
           documentIds,
           attachLabels,
           ...(formName ? { formName } : {}),
+          // Prices taken from the knowledge base: the excerpts they are from, shown on the card.
+          sources: evidence
+            .knowledgeCitedBy(`${text.value.subject}\n${text.value.body}`)
+            .map((k) => ({
+              label: k.label,
+              type: k.type,
+              title: k.title,
+              url: k.url,
+            })),
         },
         // Always the confirmation dialog: this e-mail goes out from the business mailbox.
         requiresConfirmation: true,

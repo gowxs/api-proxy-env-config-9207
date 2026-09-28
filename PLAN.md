@@ -1022,6 +1022,13 @@ QA.md lists the findings; these are the decisions and how they were built.
 - **Help:** App Password steps for Zoho, iCloud, GMX/WEB.DE and hosting providers were added to the help text.
 - **Migration:** 20261002000100 adds the card type.
 
+### 27.x The knowledge base in the assistant (founder, after a Latvian session on 2026-09-28)
+The owner asked (in Latvian) to send "our offer" to an address; the price list was empty, the owner's note had the prices, and the assistant answered five times "please name the services and prices" without looking, once claiming the website had no prices.
+- **Tools** `knowledge_search(query)` (the reply pipeline's retrieval: owner notes first, no repeated website text) and `knowledge_read(source)` (a whole note, file or page, by excerpt label, title or address; long sources cut). Excerpts are labelled K1, K2, … with source and date and wrapped as `KB_TEXT` data (a website can contain anything).
+- **Evidence:** numbers in excerpts may be used in answers and e-mails like tool results. A `price_items` card may take a price stated verbatim as an amount in an excerpt the assistant was shown (the item cites it; code finds the excerpt when the model gives no label, drops the item when none states it). Such cards open a confirmation dialog (the items become confirmed prices used in quotes); the owner's own prices stay one tap.
+- **Offer flow:** "send our offer / services / prices" → price_list, else knowledge_search → in one answer a `send_email` card listing the services and prices as the excerpts state them (the card shows "Prices from your note «…»") and a `price_items` card filling the price list. Never the "price list is empty" dead end when the knowledge base has prices. A formal quote card (PDF, Accept) is not offered from the assistant: quotes need a customer conversation (`quotes.thread_id`); open point.
+- **Tone:** at most three short sentences (or a list); look things up instead of asking; never repeat the previous request; say once what it cannot do and offer the nearest thing. Code backstop: an answer that asks the owner for services/prices (six languages) before any knowledge tool ran gets one instruction to search first.
+
 ## 28. Your brand: logo and colour (founder request 2026-10-01)
 
 - **Where:**

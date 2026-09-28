@@ -17,6 +17,7 @@ import { Button, cx, ErrorText } from '@/components/ui';
 import { api, ApiError } from '@/lib/api';
 import {
   browserLocale,
+  describeKnowledgeSource,
   type DocLine,
   INTL_LOCALE,
   WORDS,
@@ -212,11 +213,16 @@ function ProposalCard({
       {p.type === 'price_items' && (
         <ul className="mt-2 divide-y divide-neutral-100">
           {p.payload.items?.map((i) => (
-            <li key={i.name} className="flex justify-between gap-3 py-1">
-              <span>{i.name}</span>
-              <span className="tabular-nums">
-                {money(i.unitPriceCents, i.currency, locale)} / {i.unit}
-              </span>
+            <li key={i.name} className="py-1">
+              <div className="flex justify-between gap-3">
+                <span>{i.name}</span>
+                <span className="tabular-nums">
+                  {money(i.unitPriceCents, i.currency, locale)} / {i.unit}
+                </span>
+              </div>
+              {i.source && (
+                <p className="text-xs text-neutral-500">From {describeKnowledgeSource(i.source)}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -293,6 +299,11 @@ function ProposalCard({
           <p className="max-h-40 overflow-y-auto rounded-lg bg-neutral-50 p-2 whitespace-pre-wrap">
             {pl.body}
           </p>
+          {pl.sources && pl.sources.length > 0 && (
+            <p className="text-xs text-neutral-500">
+              Prices from {pl.sources.map(describeKnowledgeSource).join(', ')}
+            </p>
+          )}
           {(pl.attachLabels ?? []).map((l) => (
             <p key={l} className="text-neutral-600">
               📎 {waitingFor === 'applied' ? l.replace(/ \(once you confirm it above\)$/, '') : l}

@@ -13,6 +13,7 @@ import {
   ZERO_USAGE,
   type AssistantLanguage,
   type AssistantStep,
+  type EmbeddingProvider,
   type LlmProvider,
   type NormalizedProposal,
   type PromptPart,
@@ -22,11 +23,14 @@ import {
 import { currentBudget, recordUsage, withTenant, type Job } from '@noctiv/db';
 import type { Sql } from 'postgres';
 import { normalizeActions, type ActionCard } from '../assistant/actions.ts';
+import { retrieveKnowledge } from '@noctiv/kb';
 import { runTool } from '../assistant/tools.ts';
 
 export interface AssistantDeps {
   sql: Sql;
   llm: LlmProvider;
+  /** knowledge_search: the same retrieval as replies; without it, full-text search only. */
+  embeddings?: EmbeddingProvider;
   /** A mailbox connection test (the health check), for the mailbox_check tool. */
   checkMailbox: (
     tenantId: string,
@@ -44,6 +48,14 @@ export interface AssistantDeps {
 export type AssistantTurnResult =
   | { ok: true; messageId: string }
   | { ok: false; error: 'budget_halted' | 'free_tier_refused' | 'model_error' | 'invalid_output' };
+
+/**
+ * An answer that asks the owner to type services or prices (the Latvian session of
+ * 2026-09-28: "Lūdzu, nosauciet pakalpojumus un cenas" five times) while the knowledge base
+ * was never searched. Six languages; matched on the answer only.
+ */
+const ASKS_FOR_FACTS =
+  /(nosauciet|norādiet|uzrakstiet|pastāstiet|iedodiet|tell me|name|list|provide|specify|send me|nennen|geben sie|teilen sie|noem|geef|indiquez|donnez|dites|indique|dime|díganos)[^.?!\n]{0,80}(pakalpojum|cen[ai]|cenas|prec|servic|price|product|leistung|preis|produkt|dienst|prijs|prix|tarif|produit|precio|servicio|producto)/iu;
 
 /** Model calls per owner message: tool lookups plus the answer. */
 const MAX_STEPS = 5;
@@ -232,6 +244,7 @@ export function assistantTurnHandler(deps: AssistantDeps) {
     let final: AssistantStep | null = null;
     let language: AssistantLanguage = ctx.conv.locale;
     let retriedNumbers = false;
+    let nudgedToKnowledge = false;
     let actionCards: ActionCard[] = [];
     const ownerText = ctx.history
       .filter((m) => m.role === 'owner')
@@ -287,6 +300,21 @@ export function assistantTurnHandler(deps: AssistantDeps) {
             checkMailbox: (id) => deps.checkMailbox(tenantId, id),
             ...(deps.resolveMx ? { resolveMx: deps.resolveMx } : {}),
             ...(deps.appUrl ? { appUrl: deps.appUrl } : {}),
+            knowledge: {
+              add: (e, content) => evidence.addKnowledge(e, content),
+              get: (label) => evidence.knowledge(label),
+            },
+            ...(deps.embeddings
+              ? {
+                  searchKnowledge: async (query: string) =>
+                    (
+                      await retrieveKnowledge(
+                        { sql: deps.sql, embeddings: deps.embeddings! },
+                        { tenantId, query, origin: ctx.origin, limit: 6 },
+                      )
+                    ).chunks,
+                }
+              : {}),
           }),
         );
         toolsUsed.push(s.tool);
@@ -324,6 +352,30 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       actionCards = actions.cards;
       if (actions.dropped.length)
         deps.logger?.info({ tenantId, dropped: actions.dropped }, 'assistant proposals dropped');
+      // Look it up instead of asking: once per turn, when the knowledge base has something.
+      if (
+        !nudgedToKnowledge &&
+        !lastStep &&
+        ASKS_FOR_FACTS.test(s.reply) &&
+        !toolsUsed.some((t) => t === 'knowledge_search' || t === 'knowledge_read')
+      ) {
+        nudgedToKnowledge = true;
+        const [kb] = await withTenant(
+          deps.sql,
+          tenantId,
+          (tx) =>
+            tx<
+              { n: number }[]
+            >`select count(*)::int as n from public.kb_sources where status = 'ready'`,
+        );
+        if (kb!.n > 0) {
+          parts.push({
+            kind: 'instruction',
+            text: 'Do not ask the owner for services or prices before looking: call knowledge_search (and price_list) first, then answer from what they return.',
+          });
+          continue;
+        }
+      }
       const unsupported = evidence.unsupportedIn(s.reply);
       if (unsupported.length && !retriedNumbers && !lastStep) {
         retriedNumbers = true;
@@ -359,7 +411,11 @@ export function assistantTurnHandler(deps: AssistantDeps) {
       )
       .filter((p): p is NormalizedProposal => p !== null);
     const proposals: ActionCard[] = [...settingsCards, ...actionCards];
-    let reply = final.reply.trim() || UNSURE[language];
+    // Excerpt labels (K1, …) are for the model and the cards; the owner reads the source's name.
+    let reply =
+      final.reply
+        .replace(/\s*\(\s*\[?K\d{1,3}\]?(?:\s*,\s*\[?K\d{1,3}\]?)*\s*\)|\s*\[K\d{1,3}\]/g, '')
+        .trim() || UNSURE[language];
     // The model proposed something that did not pass the checks: no card appears.
     if (final.proposals.length > proposals.length) reply = `${reply}\n\n${NO_CARD[language]}`;
 

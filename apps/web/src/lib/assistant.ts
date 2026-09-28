@@ -32,7 +32,16 @@ export interface AssistantProposal {
     title?: string;
     text?: string;
     /** price_items */
-    items?: { name: string; unit: string; unitPriceCents: number; currency: string }[];
+    items?: {
+      name: string;
+      unit: string;
+      unitPriceCents: number;
+      currency: string;
+      /** The knowledge-base excerpt the price is from (not the owner's own words). */
+      source?: KnowledgeSource;
+    }[];
+    /** send_email: the knowledge-base excerpts whose prices the e-mail states. */
+    sources?: KnowledgeSource[];
     /** create_document */
     docType?: 'invoice' | 'delivery_note';
     buyer?: { name: string; email: string; address: string };
@@ -524,3 +533,17 @@ export const WORDS: Record<AssistantLocale, Words> = {
     },
   },
 };
+
+export interface KnowledgeSource {
+  label: string;
+  type: 'website' | 'file' | 'note';
+  title: string;
+  url: string | null;
+}
+
+/** "your note «Prices»" / "your website example.com/en/pricing/". */
+export function describeKnowledgeSource(s: KnowledgeSource): string {
+  if (s.type === 'note') return `your note «${s.title}»`;
+  if (s.type === 'file') return `your file «${s.title}»`;
+  return `your website ${(s.url ?? s.title).replace(/^https?:\/\//, '')}`;
+}

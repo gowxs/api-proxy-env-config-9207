@@ -1,6 +1,10 @@
 import { findNumbers } from '../claims/numbers.ts';
 import { foldForMatching } from '../text/normalize.ts';
-import { parseAmountToCents, type AssistantEvidence, type AssistantStep } from './proposals.ts';
+import {
+  parseAmountToCents,
+  type AssistantEvidence,
+  type AssistantProposalInput,
+} from './proposals.ts';
 
 /**
  * Noctiv Assistant action cards (PLAN.md §27.2): a document, an e-mail, a
@@ -46,7 +50,7 @@ export interface DocumentDraft {
 
 export type DraftResult<T> = { ok: true; value: T } | { ok: false; reason: string };
 
-type Proposal = AssistantStep['proposals'][number];
+type Proposal = AssistantProposalInput;
 
 /** "1", "2,5", "10" → a positive quantity; null when not a plain number. */
 function parseQty(raw: string): number | null {

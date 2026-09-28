@@ -129,6 +129,7 @@ const runner = new JobRunner({
       sql: db.sql,
       logger,
       llm: providers.llm,
+      embeddings: providers.embeddings,
       appUrl: config.PUBLIC_APP_URL,
       ...(config.ACTION_LINK_SECRET
         ? {
