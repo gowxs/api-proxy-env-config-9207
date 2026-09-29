@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 import { AppPage } from '@/components/shell';
 import { Badge, ErrorText, Loading, timeAgo, useLoad } from '@/components/ui';
 import { api } from '@/lib/api';
-import { THREAD_STATUS } from '@/lib/reasons';
+import { OWNER_REPLIED_STATUS, THREAD_STATUS } from '@/lib/reasons';
 import { useTenantId } from '@/lib/session';
 
 interface Row {
@@ -21,6 +21,8 @@ interface Row {
   open_escalations: number;
   /** An incoming e-mail is still unread in the owner's mailbox. */
   unread: boolean;
+  /** Answered from the owner's own mail client; waiting for the customer. */
+  owner_replied: boolean;
   preview: string | null;
   /** The latest e-mail was skipped (newsletter, spam, automatic message). */
   ignored: boolean;
@@ -73,7 +75,10 @@ function List() {
       ) : (
         <ul className="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white">
           {data.map((r) => {
-            const st = THREAD_STATUS[r.status] ?? { text: r.status, tone: 'gray' as const };
+            const st =
+              r.owner_replied && r.status === 'awaiting_customer'
+                ? OWNER_REPLIED_STATUS
+                : (THREAD_STATUS[r.status] ?? { text: r.status, tone: 'gray' as const });
             return (
               <li key={r.id}>
                 <Link

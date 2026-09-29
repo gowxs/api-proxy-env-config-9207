@@ -57,9 +57,35 @@ export async function storeSent(
         followup_stop_reason = case when next_followup_at is not null then ${OWNER_REPLIED} else followup_stop_reason end,
         next_followup_at = null
     where id = ${hit.thread_id}`;
-  // A follow-up waiting for the owner's approval is moot now.
+  await settleThread(tx, hit.thread_id, msg.date);
+  return 'stored';
+}
+
+/**
+ * The owner answered this conversation themselves: what was waiting for them
+ * is done. Only things that existed when they wrote (up to the reply's own
+ * date) are settled, so a customer message that arrived after the reply, and
+ * any escalation it raised while the Sent mail was still unsynced, stay open.
+ * A later customer message goes through the usual rules, hard list included.
+ */
+async function settleThread(tx: TransactionSql, threadId: string, repliedAt: Date): Promise<void> {
+  // Escalations raised by messages the owner has now answered.
+  await tx`
+    update public.escalations e set resolved_at = now(), resolved_by = ${OWNER_REPLIED}
+    from public.messages m
+    where m.id = e.message_id and e.thread_id = ${threadId} and e.resolved_at is null
+      and m.received_at <= ${repliedAt}`;
+  // Drafts and suggestions waiting for the owner about those messages are moot.
   await tx`
     update public.drafts set status = 'superseded'
-    where thread_id = ${hit.thread_id} and kind = 'followup' and status in ('pending_approval', 'suggestion')`;
-  return 'stored';
+    where thread_id = ${threadId} and kind in ('reply', 'followup')
+      and status in ('pending_approval', 'suggestion') and created_at <= ${repliedAt}`;
+  // Answered: waiting for the customer. Unless a newer customer message or a still-open
+  // escalation says the conversation needs attention again.
+  await tx`
+    update public.threads th set status = 'awaiting_customer'
+    where th.id = ${threadId} and th.status in ('open', 'escalated', 'customer_replied')
+      and not exists (select 1 from public.escalations e where e.thread_id = th.id and e.resolved_at is null)
+      and not exists (select 1 from public.messages m
+                      where m.thread_id = th.id and m.direction = 'inbound' and m.received_at > ${repliedAt})`;
 }

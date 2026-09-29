@@ -20,7 +20,7 @@ import { QuoteBlock } from '@/components/quote';
 import { ConversationDocuments, DraftDocument } from '@/components/documents';
 import { ConversationBookings, InsertFormLink } from '@/components/bookings';
 import type { Doc } from '@/lib/documents';
-import { reasonText, THREAD_STATUS } from '@/lib/reasons';
+import { OWNER_REPLIED_STATUS, reasonText, THREAD_STATUS } from '@/lib/reasons';
 import { useTenantId } from '@/lib/session';
 
 interface Message {
@@ -85,6 +85,7 @@ interface Detail {
     lead_stage: string | null;
     mailbox: string;
     provider?: string;
+    owner_replied?: boolean;
   };
   messages: Message[];
   drafts: Draft[];
@@ -357,7 +358,10 @@ function ConversationView() {
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
   const t = data.thread;
-  const st = THREAD_STATUS[t.status] ?? { text: t.status, tone: 'gray' as const };
+  const st =
+    t.owner_replied && t.status === 'awaiting_customer'
+      ? OWNER_REPLIED_STATUS
+      : (THREAD_STATUS[t.status] ?? { text: t.status, tone: 'gray' as const });
   const openDrafts = data.drafts.filter((d) =>
     ['pending_approval', 'suggestion', 'approved', 'send_failed'].includes(d.status),
   );

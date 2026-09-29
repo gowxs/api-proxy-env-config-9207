@@ -601,6 +601,9 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
                (select count(*) from public.drafts d where d.thread_id = th.id and d.status in ('pending_approval', 'suggestion'))::int as pending_drafts,
                (select count(*) from public.escalations e where e.thread_id = th.id and e.resolved_at is null)::int as open_escalations,
                exists (select 1 from public.messages m where m.thread_id = th.id and m.direction = 'inbound' and m.seen = false) as unread,
+               coalesce((select m.sent_by = 'owner' from public.messages m where m.thread_id = th.id and m.direction = 'outbound'
+                         order by m.received_at desc limit 1), false)
+                 and th.last_outbound_at >= coalesce(th.last_inbound_at, th.created_at) as owner_replied,
                (select left(m.body_text, 160) from public.messages m where m.thread_id = th.id and m.direction = 'inbound'
                   order by m.received_at desc limit 1) as preview,
                coalesce((select p.status in ('queued', 'processing') from public.messages m
@@ -630,7 +633,10 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const [thread] = await tx`
         select th.id, th.subject, th.status, th.followups_sent, th.next_followup_at, th.followup_stop_reason,
                th.last_inbound_at, th.last_outbound_at, th.lead_id, l.email as customer_email, l.name as customer_name,
-               l.stage as lead_stage, c.email_address as mailbox, c.provider
+               l.stage as lead_stage, c.email_address as mailbox, c.provider,
+               coalesce((select m.sent_by = 'owner' from public.messages m where m.thread_id = th.id and m.direction = 'outbound'
+                         order by m.received_at desc limit 1), false)
+                 and th.last_outbound_at >= coalesce(th.last_inbound_at, th.created_at) as owner_replied
         from public.threads th
         left join public.leads l on l.id = th.lead_id
         join public.email_connections c on c.id = th.connection_id

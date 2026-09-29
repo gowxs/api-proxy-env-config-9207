@@ -54,7 +54,8 @@ let connectionId = '';
 /** Sends every queued mail.send job of the tenant, like the worker loop would. */
 async function flushMail(tenantId: string) {
   const jobs = await owner<{ id: string; payload: { draftId: string } }[]>`
-    select id, payload from public.jobs where tenant_id = ${tenantId} and queue = 'mail.send' and status = 'queued'`;
+    select id, payload from public.jobs where tenant_id = ${tenantId} and queue = 'mail.send' and status = 'queued'
+    order by created_at, id`;
   for (const j of jobs) {
     await send(job(tenantId, QUEUES.mailSend, j.payload));
     await owner`update public.jobs set status = 'done' where id = ${j.id}`;
@@ -249,8 +250,13 @@ describe('confirming a booking', () => {
     expect(c).toEqual({ status: 'cancelled', by: 'customer' });
     expect(google.events.has(nb!.google_event_id)).toBe(false);
     await flushMail(T.tenantId);
-    const mails = await readFolder(gm, customer);
-    const last = await simpleParser(mails.at(-1)!.raw);
+    // Delivery to the customer's inbox is asynchronous: wait for the cancellation mail.
+    const last = await waitFor(async () => {
+      const parsed = await Promise.all(
+        (await readFolder(gm, customer)).map((m) => simpleParser(m.raw)),
+      );
+      return parsed.find((p) => p.subject?.startsWith('Cancelled: ')) ?? null;
+    });
     expect(last.subject).toMatch(/^Cancelled: /);
     const ics = last.attachments.find((a) => a.filename === 'invite.ics')!.content.toString();
     expect(ics).toContain('METHOD:CANCEL');

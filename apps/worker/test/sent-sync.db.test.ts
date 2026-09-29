@@ -129,8 +129,8 @@ describe('Sent folder sync', () => {
     await owner`update public.threads set status = 'awaiting_customer', next_followup_at = now() + interval '1 day'
                 where id = ${thread!.id}`;
     const [d] = await owner<{ id: string }[]>`
-      insert into public.drafts (tenant_id, thread_id, kind, to_address, subject, body, status)
-      values (${ctx.tenantId}, ${thread!.id}, 'followup', ${customer}, 'Re: Candles', 'Just checking in', 'pending_approval')
+      insert into public.drafts (tenant_id, thread_id, kind, to_address, subject, body, status, created_at)
+      values (${ctx.tenantId}, ${thread!.id}, 'followup', ${customer}, 'Re: Candles', 'Just checking in', 'pending_approval', now() - interval '1 hour')
       returning id`;
 
     const replyId = id('owner');

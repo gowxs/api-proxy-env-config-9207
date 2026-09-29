@@ -57,6 +57,9 @@ export function reasonText(code: string): string {
   return code.replace(/[_:]/g, ' ');
 }
 
+/** Waiting for the customer after the owner answered from their own mail client. */
+export const OWNER_REPLIED_STATUS = { text: 'You replied', tone: 'gray' as const };
+
 export const THREAD_STATUS: Record<
   string,
   { text: string; tone: 'gray' | 'amber' | 'green' | 'red' | 'blue' }

@@ -12,6 +12,7 @@ import {
   type AttackEmail,
 } from '../../../packages/core/test/fixtures/attack-emails.ts';
 import { KB_CHUNKS } from '../../../packages/core/test/fixtures/kb.ts';
+import { storeSent } from '../src/ingest/sent.ts';
 import { storeInbound } from '../src/ingest/store.ts';
 import { mailFetchHandler } from '../src/jobs/mail-fetch.ts';
 import { processMessage } from '../src/pipeline/process.ts';
@@ -819,5 +820,160 @@ describe('pipeline: price questions and sources that disagree', () => {
     expect(r.retrieved_chunk_ids.length).toBeGreaterThan(0);
     expect(r.guard_report.excerpts[0]).toMatchObject({ type: 'note' });
     expect(r.guard_report.price).toMatchObject({ asked: true, omitted: true });
+  });
+});
+
+describe('owner replies from their own mail client and escalations', () => {
+  let T: SeededTenant;
+  beforeAll(async () => {
+    T = await tenantWithKb('pipe-owner-reply');
+  });
+  const complaint = cls({
+    category: 'complaint',
+    sentiment: 'angry',
+    summary: 'Customer is unhappy with a broken candle.',
+  });
+  const at = (ms: number) => new Date(Date.now() + ms);
+  const sent = (msg: InboundMessage) =>
+    withTenant(worker, T.tenantId, (tx) =>
+      storeSent(tx, {
+        tenantId: T.tenantId,
+        connectionId: T.connectionId,
+        ownAddress: 'shop@nordlicht.test',
+        uid: 1,
+        msg: { ...msg, from: { address: 'shop@nordlicht.test', name: null } },
+      }),
+    );
+  const thread = async (messageId: string) =>
+    one(
+      await owner<{ id: string; status: string }[]>`
+        select th.id, th.status from public.threads th join public.messages m on m.thread_id = th.id
+        where m.id = ${messageId}`,
+    );
+  const escalations = (threadId: string) =>
+    owner<{ resolved_at: Date | null; resolved_by: string | null }[]>`
+      select resolved_at, resolved_by from public.escalations where thread_id = ${threadId} order by created_at`;
+
+  it('an owner reply resolves the open escalation and moves the thread to answered', async () => {
+    const llm = scripted({ classify: complaint });
+    const first = inbound({ subject: 'Broken', text: 'My candle arrived broken. Unacceptable.' });
+    const id = await receive(T, first);
+    expect((await run(T, llm, id)).status).toBe('escalated');
+    const th = await thread(id);
+    expect(th.status).toBe('escalated');
+    const [open] = await owner<{ id: string }[]>`
+      insert into public.drafts (tenant_id, thread_id, kind, to_address, subject, body, status)
+      values (${T.tenantId}, ${th.id}, 'reply', 'anna@example-mail.test', 'Re: Broken', 'AI guess', 'suggestion')
+      returning id`;
+
+    const reply = {
+      ...inbound({ subject: 'Re: Broken', inReplyTo: first.messageId }),
+      date: at(1_000),
+    };
+    expect(await sent(reply)).toBe('stored');
+
+    expect(await escalations(th.id)).toEqual([
+      { resolved_at: expect.any(Date), resolved_by: 'owner_replied' },
+    ]);
+    expect((await thread(id)).status).toBe('awaiting_customer');
+    const [d] = await owner<
+      { status: string }[]
+    >`select status from public.drafts where id = ${open!.id}`;
+    expect(d!.status).toBe('superseded');
+  });
+
+  it('a later customer message reopens the thread and the hard list escalates again', async () => {
+    const llm = scripted({ classify: complaint });
+    const first = inbound({ subject: 'Broken again', text: 'This candle is broken. Refund!' });
+    const id = await receive(T, first);
+    await run(T, llm, id);
+    const th = await thread(id);
+    const reply = {
+      ...inbound({ subject: 'Re: Broken again', inReplyTo: first.messageId }),
+      date: at(1_000),
+    };
+    await sent(reply);
+    expect((await thread(id)).status).toBe('awaiting_customer');
+
+    // A normal follow-up question goes through the usual rules: the thread is reopened.
+    const question = inbound({
+      subject: 'Re: Broken again',
+      text: 'How much is a candle?',
+      inReplyTo: reply.messageId,
+    });
+    const qid = await receive(T, { ...question, date: at(2_000) });
+    expect((await run(T, scripted({}), qid)).status).toBe('drafted');
+    expect((await thread(qid)).status).toBe('customer_replied');
+
+    // A new complaint after the owner's reply is escalated: the reply never suppresses it.
+    const angry = inbound({
+      subject: 'Re: Broken again',
+      text: 'Still broken, I want my money back!',
+      inReplyTo: reply.messageId,
+    });
+    const aid = await receive(T, { ...angry, date: at(3_000) });
+    expect((await run(T, llm, aid)).status).toBe('escalated');
+    expect((await thread(aid)).status).toBe('escalated');
+    const escs = await escalations(th.id);
+    expect(escs).toHaveLength(2);
+    expect(escs[0]).toMatchObject({ resolved_by: 'owner_replied' });
+    expect(escs[1]).toEqual({ resolved_at: null, resolved_by: null });
+  });
+
+  it('a reply synced late does not resolve an escalation raised by a newer customer message', async () => {
+    const llm = scripted({ classify: complaint });
+    const first = {
+      ...inbound({ subject: 'Late sync', text: 'Broken candle, unacceptable.' }),
+      date: at(-10_000),
+    };
+    const id = await receive(T, first);
+    await run(T, llm, id);
+    // The owner replied 8 s ago; the customer wrote back 5 s ago; Noctiv escalated that too;
+    // only now is the owner's Sent mail read.
+    const ownerReply = {
+      ...inbound({ subject: 'Re: Late sync', inReplyTo: first.messageId }),
+      date: at(-8_000),
+    };
+    const again = {
+      ...inbound({ subject: 'Re: Late sync', text: 'Still broken!!', inReplyTo: first.messageId }),
+      date: at(-5_000),
+    };
+    const aid = await receive(T, again);
+    await run(T, llm, aid);
+    await sent(ownerReply);
+
+    const escs = await escalations((await thread(id)).id);
+    expect(escs).toHaveLength(2);
+    expect(escs[0]).toMatchObject({ resolved_by: 'owner_replied' });
+    expect(escs[1]).toEqual({ resolved_at: null, resolved_by: null });
+    expect((await thread(id)).status).toBe('escalated');
+  });
+
+  it('unrelated Sent mail changes nothing', async () => {
+    const llm = scripted({ classify: complaint });
+    const id = await receive(
+      T,
+      inbound({ subject: 'Broken 3', text: 'Broken candle, unacceptable.' }),
+    );
+    await run(T, llm, id);
+    const th = await thread(id);
+    const [dr] = await owner<{ id: string }[]>`
+      insert into public.drafts (tenant_id, thread_id, kind, to_address, subject, body, status)
+      values (${T.tenantId}, ${th.id}, 'reply', 'anna@example-mail.test', 'Re: Broken 3', 'AI guess', 'suggestion')
+      returning id`;
+    const noRefs = { ...inbound({ subject: 'Lunch?' }), date: at(1_000) };
+    const wrongRefs = {
+      ...inbound({ subject: 'Re: Broken 3', inReplyTo: '<nobody@elsewhere.test>' }),
+      date: at(1_000),
+    };
+    expect(await sent(noRefs)).toBe('unrelated');
+    expect(await sent(wrongRefs)).toBe('unrelated');
+
+    expect(await escalations(th.id)).toEqual([{ resolved_at: null, resolved_by: null }]);
+    expect((await thread(id)).status).toBe('escalated');
+    const [d] = await owner<
+      { status: string }[]
+    >`select status from public.drafts where id = ${dr!.id}`;
+    expect(d!.status).toBe('suggestion');
   });
 });
