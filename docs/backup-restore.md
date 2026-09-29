@@ -117,3 +117,13 @@ To recover rows deleted by mistake:
 1. Restore the backup from before the mistake into a scratch Supabase project, or the local container.
 2. Copy the affected rows back with `psql` (`\copy … to` from the scratch database, `\copy … from` into production), as the `postgres` role, inside a transaction.
 3. Delete the scratch project afterwards: it holds customer data.
+
+## Free-plan safety (worker)
+
+Runs inside the worker; needs `ADMIN_EMAIL` and the system mailer.
+
+- **Keep-alive:** the worker writes a heartbeat row every minute, and every 2 days runs an extra write + read (`app.keepalive_ping`) and logs `database keepalive: write+read ok`. Supabase pauses idle free projects; this counts as activity.
+- **Unreachable or paused database:** every 5 minutes the worker probes the database. After 3 failures in a row it e-mails `[admin] Noctiv database unreachable` (repeated at most every 6 hours) and `… reachable again` once it answers.
+- **Weekly encrypted export by e-mail:** set `BACKUP_AGE_RECIPIENT=age1…` (the same public key as the nightly R2 dump) in the worker's environment. On the first check after 04:00 Riga, at most once a week, the worker attaches `noctiv-export-<date>.json.gz.age` to an e-mail to `ADMIN_EMAIL`. It holds the business tables (tenants, settings, leads, threads, message metadata, knowledge-base sources and notes, price list, quotes, documents, bookings): no credentials, no mailbox logins, no e-mail text. Without the key nothing is sent. Over 8 MB the mail says so instead of attaching the file. Read it with `age -d -i noctiv-backup-key.txt noctiv-export-<date>.json.gz.age | gunzip > export.json`.
+- **Nightly copy in R2:** the full nightly `pg_dump` above is the R2 route; enable it in the steps above when you want it.
+- **Digest:** the daily admin digest has a DATABASE section (size against `DB_SIZE_LIMIT_MB`, 500 by default; warning line and a WARNING subject from 70 %) and the last successful keep-alive and export.

@@ -1149,3 +1149,5 @@ All new tables have `tenant_id`, forced RLS and the two isolation policies, fixt
 2. **Confirmation e-mails send automatically in every mode** (29.5). Decided: yes.
 3. **Retention** as proposed. Decided: bookings and form answers are kept with the lead (business records, like documents) until the lead or the account is deleted, not purged with e-mail text after 90 days. The privacy notice says so.
 4. **Privacy notice:** published on 28 September 2026 with the Google Calendar paragraph and the Limited Use statement (Google's verification requires it), plus the bookings data and retention lines. The founder is the only account owner, so no advance e-mail was needed this time.
+
+- **Free-plan safety (2026-09-29):** worker keep-alive write+read every 2 days, database probe every 5 minutes with admin alert (unreachable or paused), weekly age-encrypted export of the business tables e-mailed to the admin (`BACKUP_AGE_RECIPIENT`), database size vs 500 MB with a 70 % warning in the daily digest. See `docs/backup-restore.md`.

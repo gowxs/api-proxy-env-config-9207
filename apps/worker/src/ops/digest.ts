@@ -92,6 +92,16 @@ export function digestText(s: DigestStats, day: string, health: HealthLine): str
     `  Failed jobs: ${dead.length ? dead.map(([q, c]) => `${q} ${n(c)}`).join(', ') : 'none'} · overdue queued jobs: ${n(s.jobs.backlog)}`,
     `  Mailboxes: ${n(s.mailboxes.connected)} connected, ${n(s.mailboxes.disconnected)} not connected; disconnects: ${n(s.mailboxes.disconnects)}; repeated check failures: ${n(s.mailboxes.unhealthy_alerts)}`,
     `  Worker heartbeat: ${health.heartbeat} · mailboxes not checked for 60 min: ${n(health.unchecked)}`,
+    ...(health.database ? ['', 'DATABASE', ...databaseLines(health.database)] : []),
+    ...(health.ops?.length
+      ? [
+          ...(health.database ? [] : ['', 'DATABASE']),
+          ...health.ops.map(
+            (o) =>
+              `  ${o.job}: ${o.lastOkAt ? `last ok ${o.lastOkAt.toISOString().slice(0, 16).replace('T', ' ')} UTC` : 'never ok'}`,
+          ),
+        ]
+      : []),
     '',
     'WAITLIST',
     `  Sign-ups: ${n(s.waitlist.new)} new, ${n(s.waitlist.confirmed)} confirmed; ${n(s.waitlist.total_confirmed)} confirmed in total`,
@@ -110,6 +120,24 @@ export function digestText(s: DigestStats, day: string, health: HealthLine): str
 export interface HealthLine {
   heartbeat: string;
   unchecked: number;
+  /** Database size against the plan limit (free plan: 500 MB). */
+  database?: { bytes: number; limitMb: number };
+  /** Scheduled operations (keepalive, weekly export): last success and detail. */
+  ops?: { job: string; lastOkAt: Date | null; detail: string | null }[];
+}
+
+export const DB_WARN_FRACTION = 0.7;
+
+/** "DATABASE" digest section, with a warning from 70 % of the limit. */
+export function databaseLines(db: NonNullable<HealthLine['database']>): string[] {
+  const mb = db.bytes / (1024 * 1024);
+  const pct = (mb / db.limitMb) * 100;
+  const lines = [`  Size: ${mb.toFixed(1)} MB of ${n(db.limitMb)} MB (${pct.toFixed(0)} %)`];
+  if (pct >= DB_WARN_FRACTION * 100)
+    lines.push(
+      `  WARNING: the database is at ${pct.toFixed(0)} % of the ${n(db.limitMb)} MB limit. Delete old data or upgrade before it fills up.`,
+    );
+  return lines;
 }
 
 export interface DigestDeps {
@@ -118,6 +146,8 @@ export interface DigestDeps {
   from: string;
   to: string;
   logger?: Logger;
+  /** Plan limit for the size warning; 500 (free plan) when not given. */
+  dbLimitMb?: number;
 }
 
 /**
@@ -140,14 +170,23 @@ export async function maybeSendDigest(deps: DigestDeps, now = new Date()): Promi
   const [h] = await deps.sql<{ last_beat: Date | null; unchecked: number }[]>`
     select last_beat, unchecked from app.worker_health(interval '60 minutes')`;
   const beatAge = h?.last_beat ? Math.round((now.getTime() - h.last_beat.getTime()) / 1000) : null;
+  const [sz] = await deps.sql<{ bytes: string }[]>`select app.db_size_bytes()::text as bytes`;
+  const ops = await deps.sql<
+    { job: string; last_ok_at: Date | null; last_detail: string | null }[]
+  >`
+    select job, last_ok_at, last_detail from app.ops_status()`;
+  const database = { bytes: Number(sz?.bytes ?? 0), limitMb: deps.dbLimitMb ?? 500 };
   const text = digestText(row!.stats, local.date, {
     heartbeat: beatAge === null ? 'none' : `${beatAge} s ago`,
     unchecked: h?.unchecked ?? 0,
+    database,
+    ops: ops.map((o) => ({ job: o.job, lastOkAt: o.last_ok_at, detail: o.last_detail })),
   });
+  const warn = database.bytes / (1024 * 1024) >= DB_WARN_FRACTION * database.limitMb;
   await deps.transport.sendMail({
     from: deps.from,
     to: deps.to,
-    subject: `[admin] Noctiv daily digest ${local.date}`,
+    subject: `[admin]${warn ? ' [WARNING: database size]' : ''} Noctiv daily digest ${local.date}`,
     text,
     headers: { 'Auto-Submitted': 'auto-generated' },
   });

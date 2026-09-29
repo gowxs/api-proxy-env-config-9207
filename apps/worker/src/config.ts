@@ -36,6 +36,13 @@ export const workerEnvSchema = z
     SYSTEM_SMTP_USER: z.string().optional(),
     SYSTEM_SMTP_PASS: z.string().optional(),
     SYSTEM_MAIL_FROM: z.string().min(3).default('Noctiv <notify@noctiv.io>'),
+    /** age public key (docs/backup-restore.md) for the weekly e-mailed export; without it no export is made. */
+    BACKUP_AGE_RECIPIENT: z
+      .string()
+      .regex(/^age1[a-z0-9]{50,}$/, 'must be an age public key (age1…)')
+      .optional(),
+    /** Plan limit the digest measures the database size against (Supabase free plan: 500). */
+    DB_SIZE_LIMIT_MB: z.coerce.number().int().min(1).default(500),
     /** Admin alerts (disconnects, budget). Without it admin notifications fail as 'no_recipient'. */
     ADMIN_EMAIL: z.email().optional(),
     /** Public base URLs used in notification links. */

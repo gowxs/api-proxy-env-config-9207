@@ -23,7 +23,9 @@ import { queuePaymentReminders } from './ops/payment-reminders.ts';
 import { healthCheckHandler, scanHealthChecks } from './ops/health.ts';
 import { scanQuotaWaits } from './ops/quota.ts';
 import { scanWeeklyReports } from './ops/weekly-report.ts';
-import { maybeSendDigest } from './ops/digest.ts';
+import { DIGEST_TIME_ZONE, maybeSendDigest, zonedParts } from './ops/digest.ts';
+import { EXPORT_HOUR_RIGA, maybeMailExport } from './ops/export.ts';
+import { createDbWatch, maybeKeepalive, sqlProbe } from './ops/keepalive.ts';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
@@ -228,6 +230,13 @@ const beat = () =>
   );
 void beat();
 const heartbeatTimer = setInterval(() => void beat(), 60_000);
+// Free-tier safety: a trivial write + read every 2 days (checked hourly, once across workers).
+const keepalive = () =>
+  maybeKeepalive({ sql: db.sql, logger }).catch((e: unknown) =>
+    logger.error({ err: String(e) }, 'keepalive failed'),
+  );
+void keepalive();
+const keepaliveTimer = setInterval(() => void keepalive(), 60 * 60_000);
 // Mailbox health checks every 30 minutes: /healthz/worker reports a
 // connected mailbox not checked for 60 minutes.
 const healthScan = () =>
@@ -262,6 +271,8 @@ void hourly();
 
 let notifyTimer: NodeJS.Timeout | undefined;
 let digestTimer: NodeJS.Timeout | undefined;
+let dbWatchTimer: NodeJS.Timeout | undefined;
+let exportTimer: NodeJS.Timeout | undefined;
 if (config.SYSTEM_SMTP_HOST) {
   const transport = createSystemTransport({
     host: config.SYSTEM_SMTP_HOST,
@@ -339,9 +350,50 @@ if (config.SYSTEM_SMTP_HOST) {
         from: config.SYSTEM_MAIL_FROM,
         to: adminEmail,
         logger,
+        dbLimitMb: config.DB_SIZE_LIMIT_MB,
       }).catch((e: unknown) => logger.error({ err: String(e) }, 'admin digest failed'));
     digest();
     digestTimer = setInterval(digest, 60_000);
+
+    // Free-tier safety: alert when the database stops answering (e.g. a paused project).
+    const watch = createDbWatch({
+      probe: sqlProbe(db.sql),
+      alert: (subject, text) =>
+        transport
+          .sendMail({
+            from: config.SYSTEM_MAIL_FROM,
+            to: adminEmail,
+            subject,
+            text,
+            headers: { 'Auto-Submitted': 'auto-generated' },
+          })
+          .then(() => undefined),
+      logger,
+    });
+    void watch();
+    dbWatchTimer = setInterval(() => void watch(), 5 * 60_000);
+
+    // Weekly encrypted export of the business tables to the admin e-mail (only with an age key).
+    const recipient = config.BACKUP_AGE_RECIPIENT;
+    if (recipient) {
+      const exportMail = () =>
+        maybeMailExport({
+          sql: db.sql,
+          transport,
+          from: config.SYSTEM_MAIL_FROM,
+          to: adminEmail,
+          recipient,
+          logger,
+        }).catch((e: unknown) => logger.error({ err: String(e) }, 'weekly export failed'));
+      // At 04:00 Riga or later; app.ops_claim keeps it to one send per week.
+      const hourlyExport = () => {
+        if (zonedParts(new Date(), DIGEST_TIME_ZONE).hour >= EXPORT_HOUR_RIGA) void exportMail();
+      };
+      hourlyExport();
+      exportTimer = setInterval(hourlyExport, 60 * 60_000);
+    } else {
+      logger.warn('BACKUP_AGE_RECIPIENT not set: no weekly encrypted export by e-mail');
+    }
   }
 } else {
   logger.warn(
@@ -380,9 +432,12 @@ const shutdown = async (signal: string) => {
   clearInterval(housekeepingTimer);
   clearInterval(followupTimer);
   clearInterval(heartbeatTimer);
+  clearInterval(keepaliveTimer);
   clearInterval(healthTimer);
   clearInterval(calendarTimer);
   if (digestTimer) clearInterval(digestTimer);
+  if (dbWatchTimer) clearInterval(dbWatchTimer);
+  if (exportTimer) clearInterval(exportTimer);
   clearInterval(quotaTimer);
   clearInterval(weeklyTimer);
   if (notifyTimer) clearInterval(notifyTimer);
