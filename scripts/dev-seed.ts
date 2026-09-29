@@ -7,8 +7,9 @@ import { sealMailboxPassword } from '../packages/mail/src/credentials.ts';
 
 export const DEV = {
   userId: 'd0e10000-0000-4000-8000-000000000001',
-  ownerEmail: 'owner@noctiv.local',
-  mailbox: 'shop@demo.test',
+  // Overridable, e.g. for a fictional demo business (demo/seed.ts).
+  ownerEmail: process.env.DEV_OWNER_EMAIL ?? 'owner@noctiv.local',
+  mailbox: process.env.DEV_MAILBOX ?? 'shop@demo.test',
   mailboxPassword: 'demo-app-password',
   /** GreenMail host ports (docker/compose.dev.yml); movable when taken. */
   smtpPort: Number(process.env.GREENMAIL_SMTP_PORT ?? 3025),

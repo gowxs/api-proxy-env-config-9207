@@ -113,8 +113,9 @@ await context.addInitScript(() => {
 
 // Redaction: signed links (quote accept links, tokens) and IBANs are blurred wherever they appear.
 await context.addInitScript(() => {
+  // Signed links, IBANs, and any e-mail address that is not on a fictional .example / example.com domain.
   const RE =
-    /(https?:\/\/\S*(?:\/q\/|\/a\/|token|access_token|apikey)\S*|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b)/g;
+    /(https?:\/\/\S*(?:\/q\/|\/a\/|token|access_token|apikey)\S*|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b|[A-Za-z0-9._%+-]+@(?![A-Za-z0-9.-]*example(?:\.com)?\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
   const redact = () => {
     if (!document.body) return;
     const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
