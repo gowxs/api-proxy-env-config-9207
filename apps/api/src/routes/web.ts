@@ -133,6 +133,7 @@ const settingsBody = z
     maxAiRepliesPerSender24h: z.number().int().min(0).max(2),
     retentionDays: z.number().int().min(1).max(3650),
     replySignature: z.string().max(1000).nullable(),
+    replyStyle: z.enum(['short', 'detailed']),
     onboardingCompleted: z.literal(true),
     ...designShape,
     ...quoteSettingsShape,
@@ -206,7 +207,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
       const [t] = await tx`
         select id, name, website_url, timezone, mode, notify_full_text, budget_state, daily_token_budget,
                max_replies_per_hour, max_ai_replies_per_sender_24h, followup_after_days, followup_max,
-               retention_days, reply_signature, onboarding_completed_at, created_at,
+               retention_days, reply_signature, reply_style, onboarding_completed_at, created_at,
                email_template, brand_company_name, brand_logo_url, brand_color, brand_website,
                brand_phone, brand_address, brand_social_links,
                quotes_enabled, quotes_currency, quotes_vat_mode, quotes_vat_rate::float8 as quotes_vat_rate,
@@ -248,6 +249,7 @@ export function webRoutes(app: FastifyInstance, deps: AppDeps): void {
         cols.max_ai_replies_per_sender_24h = b.maxAiRepliesPerSender24h;
       if (b.retentionDays !== undefined) cols.retention_days = b.retentionDays;
       if (b.replySignature !== undefined) cols.reply_signature = b.replySignature?.trim() || null;
+      if (b.replyStyle !== undefined) cols.reply_style = b.replyStyle;
       if (b.onboardingCompleted) cols.onboarding_completed_at = new Date();
       if (b.valueMinutesPerReply !== undefined)
         cols.value_minutes_per_reply = b.valueMinutesPerReply;

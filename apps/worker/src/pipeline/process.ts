@@ -77,6 +77,7 @@ export interface Loaded {
     name: string;
     mode: TenantMode;
     notifyFullText: boolean;
+    replyStyle: 'short' | 'detailed';
     maxPerSender24h: number;
     maxPerHour: number;
     quotesEnabled: boolean;
@@ -112,6 +113,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       tenant_name: string;
       mode: TenantMode;
       notify_full_text: boolean;
+      reply_style: 'short' | 'detailed';
       max_ai_replies_per_sender_24h: number;
       max_replies_per_hour: number;
       quotes_enabled: boolean;
@@ -125,7 +127,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
     select mp.status as processing_status, m.id, m.connection_id, m.thread_id, m.message_id_header, m.reference_ids,
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
-           t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
+           t.reply_style, t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
            th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
@@ -164,6 +166,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       // Mail that arrived while service was stopped (no subscription) is only drafted.
       mode: row.backlog ? 'draft_only' : row.mode,
       notifyFullText: row.notify_full_text,
+      replyStyle: row.reply_style,
       maxPerSender24h: row.max_ai_replies_per_sender_24h,
       maxPerHour: row.max_replies_per_hour,
       quotesEnabled: row.quotes_enabled,
@@ -535,6 +538,7 @@ export async function generateGrounded(
     email,
     chunks: knowledge.chunks.map((c) => ({ id: c.id, content: c.content, source: c.source })),
     inboundLanguage: i.classification.language,
+    replyStyle: l.tenant.replyStyle,
     ...(i.focus?.length ? { focus: i.focus } : {}),
   });
   const gen = await generateJson(

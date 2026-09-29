@@ -170,3 +170,29 @@ describe('supported languages (Q14)', () => {
     expect(isSupportedLanguage('und')).toBe(false);
   });
 });
+
+describe('Latvian availability (production case 0b7d8929, 2026-09-29)', () => {
+  // The reply that was escalated for "availability": "Pieejami trīs darbības režīmi" only
+  // says three modes exist. Money, duration and "bez maksas" stay detected (and cited).
+  const REPLY = [
+    'Jā, tā ir mēneša maksa — Noctiv maksā $79 mēnesī vienam uzņēmumam (plus PVN, kur piemērojams).',
+    'Noctiv ir mākslīgā intelekta e-pasta asistents, kas pieslēdzas jūsu esošajai e-pasta kastītei un palīdz apstrādāt saziņu no pirmā jautājuma līdz apmaksai:',
+    '- sagatavo un nosūta atbildes uz klientu e-pastiem, balstoties uz jūsu faktiem;',
+    '- pēc apstiprināšanas izveido un nosūta rēķinu ar jūsu numuru un logo;',
+    'Atbildes tiek sūtītas no jūsu adreses un parādās jūsu nosūtīto vēstuļu mapē. Pieejami trīs darbības režīmi — no visu atbilžu manuālas apstiprināšanas līdz pilnīgai automatizācijai, un sistēma ir izmēģināma 14 dienas bez maksas bez bankas kartes piesaistes.',
+  ].join('\n');
+
+  it('does not treat "Pieejami trīs darbības režīmi" as an availability claim', () => {
+    expect(kinds(REPLY)).not.toContain('availability');
+    expect(kinds(REPLY)).toEqual(expect.arrayContaining(['money', 'duration', 'free']));
+  });
+
+  it.each([
+    'Šis produkts ir pieejams noliktavā.',
+    'Šobrīd pieejama tikai melnā krāsa.',
+    'Prece ir pieejama piegādei rīt.',
+    'Noliktavā ir 5 gab.',
+  ])('still flags stock statements: %s', (text) => {
+    expect(kinds(text)).toContain('availability');
+  });
+});

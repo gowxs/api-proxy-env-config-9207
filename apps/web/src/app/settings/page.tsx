@@ -36,6 +36,7 @@ interface Tenant {
   followup_max: number;
   retention_days: number;
   reply_signature: string | null;
+  reply_style?: 'short' | 'detailed';
   email_template: string;
 }
 
@@ -128,6 +129,7 @@ function SettingsForm({
           maxAiRepliesPerSender24h: form.max_ai_replies_per_sender_24h,
           retentionDays: form.retention_days,
           replySignature: form.reply_signature || null,
+          replyStyle: form.reply_style ?? 'short',
         },
       });
       await reload();
@@ -187,6 +189,19 @@ function SettingsForm({
                   {Intl.supportedValuesOf('timeZone').map((z) => (
                     <option key={z}>{z}</option>
                   ))}
+                </select>
+              </Field>
+              <Field
+                label="Reply style"
+                hint="Short: 2–5 sentences, plain text. Detailed: a fuller answer when the question needs it."
+              >
+                <select
+                  className={inputClass}
+                  value={form.reply_style ?? 'short'}
+                  onChange={(e) => set('reply_style', e.target.value as 'short' | 'detailed')}
+                >
+                  <option value="short">Short</option>
+                  <option value="detailed">Detailed</option>
                 </select>
               </Field>
               <Field label="Signature" hint="Added below every reply.">

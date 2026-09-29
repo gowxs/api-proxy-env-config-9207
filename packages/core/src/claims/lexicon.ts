@@ -85,7 +85,15 @@ export const CONCEPTS: Record<ConceptGroup, Lexicon> = {
     nl: ['op voorraad', 'leverbaar', 'uitverkocht', 'beschikbaar'],
     fr: ['en stock', 'disponibles?', 'épuisée?s?', 'rupture de stock'],
     es: ['en stock', 'disponibles?', 'agotad[oa]s?', 'en existencias?'],
-    lv: ['noliktavā', 'pieejam\\p{L}*', 'izpārdot\\p{L}*', 'ir uz vietas'],
+    // "pieejams" alone is ordinary Latvian ("three modes are available"): it only counts as a
+    // stock/delivery statement next to goods words or a time cue.
+    lv: [
+      'noliktavā',
+      'izpārdot\\p{L}*',
+      'ir uz vietas',
+      'pieejam\\p{L}*\\s+(?:noliktavā|pasūtīšanai|piegādei|uzreiz|tūlīt|nekavējoties|izņemšanai|iegādei)',
+      '(?:šobrīd|pašlaik|tagad|vēl)\\s+(?:ir\\s+)?pieejam\\p{L}*',
+    ],
   },
   guarantee: {
     en: [

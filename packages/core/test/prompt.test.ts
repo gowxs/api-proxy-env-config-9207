@@ -175,3 +175,24 @@ describe('excerpt sources (production case 2026-09-28)', () => {
     expect(p.system).toContain('escalate_reason (null unless action is "escalate"), conflicts.');
   });
 });
+
+describe('reply style', () => {
+  const base = {
+    businessName: 'Acme',
+    email: { fromName: 'A', subject: 's', bodyText: 'b' },
+    chunks: [],
+    inboundLanguage: 'lv',
+  };
+  it('defaults to short: 2-5 sentences, plain text, no lists, ends with a next step', () => {
+    const { system } = buildGenerationPrompt(base);
+    expect(system).toMatch(/2 to 5 sentences of plain text/);
+    expect(system).toMatch(/no bullet or numbered lists/);
+    expect(system).toMatch(/end with one short question or next step/);
+  });
+  it('detailed allows a fuller answer but still no unasked lists', () => {
+    const { system } = buildGenerationPrompt({ ...base, replyStyle: 'detailed' });
+    expect(system).not.toMatch(/2 to 5 sentences/);
+    expect(system).toMatch(/Answer completely/);
+    expect(system).toMatch(/only if the customer asked for one/);
+  });
+});

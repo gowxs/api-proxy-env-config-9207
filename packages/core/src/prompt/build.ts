@@ -138,11 +138,24 @@ export function buildClassificationPrompt(
   return { system, parts: [{ kind: 'untrusted_email', text: emailBlock(nonce, email) }] };
 }
 
+export type ReplyStyle = 'short' | 'detailed';
+
+/** Length and format rule for replies (owner setting "Reply style"). */
+export function replyStyleRule(style: ReplyStyle = 'short'): string {
+  return style === 'detailed'
+    ? 'Answer completely but stay focused: short paragraphs, plain text. Use a list only if the customer asked for one or the content is a true list (steps, items). ' +
+        'End with one short question or next step.'
+    : 'Answer in 2 to 5 sentences of plain text, with no bullet or numbered lists and no headings unless the customer asked for a list. ' +
+        'Give the direct answer first, leave out anything not asked, and end with one short question or next step.';
+}
+
 export function buildGenerationPrompt(input: {
   businessName: string;
   email: InboundForPrompt;
   chunks: KbChunkForPrompt[];
   inboundLanguage: string;
+  /** Owner's choice in Settings; "short" when not given. */
+  replyStyle?: ReplyStyle;
   nonce?: string;
   /**
    * The customer's words for the parts a separate quote does not cover
@@ -177,7 +190,7 @@ export function buildGenerationPrompt(input: {
       '"other": the labels that say something else}. Otherwise "conflicts" is [].',
     '4. Never offer discounts, refunds, free items, exceptions or deadlines unless an excerpt states them.',
     '5. Do not include links, email addresses or phone numbers unless they appear exactly in an excerpt.',
-    `6. Write the reply in ${language}, friendly, concise and professional. Address only the sender. ` +
+    `6. Write the reply in ${language}, friendly and professional. ${replyStyleRule(input.replyStyle)} Address only the sender. ` +
       'Do not add a signature or sign-off name; it is added automatically. ' +
       'Write as the business itself: never mention a knowledge base, excerpts, sources, an AI or an assistant, ' +
       'and never say the e-mail was forwarded to a team. If part of the question is not answered by the excerpts, ' +
