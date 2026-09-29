@@ -358,6 +358,11 @@ function SettingsForm({
         <form onSubmit={submit('account')}>
           <Card title="Privacy">
             <div className="space-y-3">
+              <p className="text-xs text-neutral-500">
+                Noctiv reads your Sent folder (read-only) and keeps only replies you send from your
+                own mail client that belong to a conversation it already has. It never changes
+                anything in your mailbox. Stored e-mail text is deleted after the retention period.
+              </p>
               <label className="flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"

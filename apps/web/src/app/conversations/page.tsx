@@ -19,6 +19,8 @@ interface Row {
   customer_name: string | null;
   pending_drafts: number;
   open_escalations: number;
+  /** An incoming e-mail is still unread in the owner's mailbox. */
+  unread: boolean;
   preview: string | null;
   /** The latest e-mail was skipped (newsletter, spam, automatic message). */
   ignored: boolean;
@@ -79,6 +81,13 @@ function List() {
                   className="block px-4 py-3 hover:bg-neutral-50"
                 >
                   <div className="flex items-center gap-2">
+                    {r.unread && (
+                      <span
+                        className="inline-block size-2 shrink-0 rounded-full bg-indigo-600"
+                        role="img"
+                        aria-label="Unread in your mailbox"
+                      />
+                    )}
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
                       {r.customer_name || r.customer_email || 'Unknown sender'}
                     </span>

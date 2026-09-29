@@ -37,6 +37,12 @@ interface Message {
   downgrade_reasons: string[] | null;
   skip_reason: string | null;
   summary: string | null;
+  message_id_header: string | null;
+  /** Read at the provider (null: unknown). */
+  seen: boolean | null;
+  /** 'owner': written in the owner's own mail client. */
+  sent_by: 'noctiv' | 'owner' | null;
+  attachment_meta: { filename: string | null; contentType: string; size: number }[] | null;
 }
 interface Draft {
   id: string;
@@ -78,6 +84,7 @@ interface Detail {
     customer_name: string | null;
     lead_stage: string | null;
     mailbox: string;
+    provider?: string;
   };
   messages: Message[];
   drafts: Draft[];
@@ -257,8 +264,20 @@ function DraftCard({
   );
 }
 
-function MessageItem({ m }: { m: Message }) {
+const size = (n: number) =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+
+/** Gmail / Google Workspace can open a message by its Message-ID; other providers have no such link. */
+function webmailUrl(mailbox: string, provider: string | undefined, id: string | null) {
+  if (!id || (provider !== 'gmail' && provider !== 'google_workspace')) return null;
+  const q = encodeURIComponent(`rfc822msgid:${id.replace(/^<|>$/g, '')}`);
+  return `https://mail.google.com/mail/u/${encodeURIComponent(mailbox)}/#search/${q}`;
+}
+
+function MessageItem({ m, mailbox, provider }: { m: Message; mailbox: string; provider?: string }) {
   const inbound = m.direction === 'inbound';
+  const link = webmailUrl(mailbox, provider, m.message_id_header);
+  const files = m.attachment_meta ?? [];
   const reasons = m.downgrade_reasons ?? [];
   return (
     <li
@@ -269,11 +288,35 @@ function MessageItem({ m }: { m: Message }) {
           {inbound ? m.from_name || m.from_address : 'You'}
         </span>
         <span>{fmt(m.received_at)}</span>
+        {inbound && m.seen === false && (
+          <span className="flex items-center gap-1 text-indigo-700">
+            <span className="inline-block size-2 rounded-full bg-indigo-600" aria-hidden />
+            Unread in your mailbox
+          </span>
+        )}
+        {m.sent_by === 'owner' && <span>sent from your own mail client</span>}
+        {link && (
+          <a className="text-indigo-700" href={link} target="_blank" rel="noopener noreferrer">
+            Open in Gmail
+          </a>
+        )}
       </div>
       {m.body_text ? (
         <div className="whitespace-pre-wrap text-sm">{m.body_text}</div>
       ) : (
         <p className="text-sm italic text-neutral-500">Text deleted after the retention period.</p>
+      )}
+      {files.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-1 text-xs text-neutral-600">
+          {files.map((f, i) => (
+            <li key={i} className="rounded bg-neutral-100 px-2 py-0.5">
+              📎 {f.filename || 'attachment'} ({size(f.size)})
+            </li>
+          ))}
+          <li className="self-center text-neutral-500">
+            {link ? 'Open in Gmail to download.' : 'Open it in your mail app to download.'}
+          </li>
+        </ul>
       )}
       {inbound && m.processing_status && (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -411,7 +454,12 @@ function ConversationView() {
 
       <ul className="space-y-3">
         {data.messages.map((m) => (
-          <MessageItem key={m.id} m={m} />
+          <MessageItem
+            key={m.id}
+            m={m}
+            mailbox={data.thread.mailbox}
+            provider={data.thread.provider}
+          />
         ))}
       </ul>
 

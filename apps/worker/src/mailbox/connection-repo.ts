@@ -13,6 +13,11 @@ export interface StoredConnection {
   lastUid: number | null;
   /** When the mailbox was connected: mail that arrived earlier is never processed. */
   connectedAt: Date;
+  /** Sent-folder sync (owner replies from their own mail client). */
+  sentFolder: string | null;
+  sentUidValidity: string | null;
+  sentLastUid: number | null;
+  sentSyncStartedAt: Date | null;
 }
 
 // Runs inside withTenant(); RLS scopes every query to the tenant.
@@ -40,9 +45,14 @@ export async function loadConnection(
       inbox_uidvalidity: string | null;
       inbox_last_uid: string | null;
       created_at: Date;
+      sent_folder_path: string | null;
+      sent_uidvalidity: string | null;
+      sent_last_uid: string | null;
+      sent_sync_started_at: Date | null;
     }[]
   >`select id, tenant_id, provider, email_address, username, imap_host, imap_port, imap_secure, smtp_host, smtp_port,
-           smtp_security, credentials_ciphertext, status, is_test_mailbox, inbox_uidvalidity::text, inbox_last_uid::text, created_at
+           smtp_security, credentials_ciphertext, status, is_test_mailbox, inbox_uidvalidity::text, inbox_last_uid::text, created_at,
+           sent_folder_path, sent_uidvalidity::text, sent_last_uid::text, sent_sync_started_at
     from public.email_connections where id = ${connectionId}`;
   if (!r) return undefined;
   return {
@@ -61,6 +71,10 @@ export async function loadConnection(
     uidValidity: r.inbox_uidvalidity,
     lastUid: r.inbox_last_uid === null ? null : Number(r.inbox_last_uid),
     connectedAt: r.created_at,
+    sentFolder: r.sent_folder_path,
+    sentUidValidity: r.sent_uidvalidity,
+    sentLastUid: r.sent_last_uid === null ? null : Number(r.sent_last_uid),
+    sentSyncStartedAt: r.sent_sync_started_at,
   };
 }
 
@@ -77,6 +91,30 @@ export async function saveInboxState(
         inbox_last_uid = case when inbox_uidvalidity::text = ${uidValidity} then greatest(coalesce(inbox_last_uid, 0), ${lastUid}) else ${lastUid} end,
         last_checked_at = now(), last_ok_at = now()
     where id = ${connectionId}`;
+}
+
+export async function saveSentState(
+  tx: TransactionSql,
+  connectionId: string,
+  s: { uidValidity: string; lastUid: number; startedAt?: Date | null; folder?: string | null },
+): Promise<void> {
+  // Never move backwards within the same UIDVALIDITY.
+  await tx`
+    update public.email_connections
+    set sent_uidvalidity = ${s.uidValidity},
+        sent_last_uid = case when sent_uidvalidity::text = ${s.uidValidity} then greatest(coalesce(sent_last_uid, 0), ${s.lastUid}) else ${s.lastUid} end,
+        sent_sync_started_at = coalesce(sent_sync_started_at, ${s.startedAt ?? null}),
+        sent_folder_path = coalesce(sent_folder_path, ${s.folder ?? null}),
+        sent_sync_error = null
+    where id = ${connectionId}`;
+}
+
+export async function saveSentError(
+  tx: TransactionSql,
+  connectionId: string,
+  code: string | null,
+): Promise<void> {
+  await tx`update public.email_connections set sent_sync_error = ${code} where id = ${connectionId}`;
 }
 
 /** Codes that mean the saved password no longer works: stop and ask the owner to reconnect. */

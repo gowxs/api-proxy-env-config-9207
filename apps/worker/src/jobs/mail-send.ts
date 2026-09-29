@@ -724,10 +724,12 @@ async function finalizeSent(
   await tx`update public.drafts set status = 'sent' where id = ${plan.draft.id}`;
   await tx`
     insert into public.messages (tenant_id, connection_id, thread_id, direction, message_id_header, in_reply_to,
-                                 reference_ids, from_address, to_addresses, subject, body_text, received_at)
+                                 reference_ids, from_address, to_addresses, subject, body_text, received_at,
+                                 seen, mailbox_folder, sent_by)
     values (${tenantId}, ${plan.connection.id}, ${plan.threadId}, 'outbound', ${plan.outbound.messageId}, ${plan.inReplyTo},
             ${[...plan.references, ...(plan.inReplyTo ? [plan.inReplyTo] : [])]}, ${plan.connection.settings.emailAddress},
-            ${[plan.draft.to]}, ${plan.draft.subject}, ${plan.draft.text}, ${now})
+            ${[plan.draft.to]}, ${plan.draft.subject}, ${plan.draft.text}, ${now},
+            true, 'sent', 'noctiv')
     on conflict (connection_id, message_id_header) do nothing`;
 
   if (plan.draft.kind === 'acknowledgement') {

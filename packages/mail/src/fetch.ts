@@ -9,7 +9,7 @@ export interface FetchBatch {
   uidValidity: string;
   /** True when this call only recorded the starting point (first run or UIDVALIDITY reset without history). */
   baselineOnly: boolean;
-  messages: { uid: number; source: Buffer; size: number }[];
+  messages: { uid: number; source: Buffer; size: number; seen: boolean }[];
   /** Highest UID seen; store it after the messages are saved. */
   lastUid: number;
   more: boolean;
@@ -29,10 +29,10 @@ export const MAX_MESSAGE_BYTES = 15 * 1024 * 1024;
 export async function fetchNewMessages(
   client: ImapFlow,
   state: InboxState,
-  opts: { max?: number; resyncDays?: number; notBefore?: Date } = {},
+  opts: { max?: number; resyncDays?: number; notBefore?: Date; folder?: string } = {},
 ): Promise<FetchBatch> {
   const max = opts.max ?? 50;
-  const box = await client.mailboxOpen('INBOX', { readOnly: true });
+  const box = await client.mailboxOpen(opts.folder ?? 'INBOX', { readOnly: true });
   const uidValidity = String(box.uidValidity);
   const uidNext = Number(box.uidNext);
 
@@ -66,7 +66,13 @@ export async function fetchNewMessages(
   if (batch.length) {
     for await (const msg of client.fetch(
       batch.join(','),
-      { uid: true, size: true, internalDate: true, source: { maxLength: MAX_MESSAGE_BYTES } },
+      {
+        uid: true,
+        size: true,
+        flags: true,
+        internalDate: true,
+        source: { maxLength: MAX_MESSAGE_BYTES },
+      },
       { uid: true },
     )) {
       // SEARCH SINCE is day-granular: drop anything that arrived before the mailbox was connected.
@@ -75,7 +81,12 @@ export async function fetchNewMessages(
           ? msg.internalDate
           : new Date(msg.internalDate ?? Date.now());
       if (changed && opts.notBefore && arrived < opts.notBefore) continue;
-      messages.push({ uid: msg.uid, source: msg.source ?? Buffer.alloc(0), size: msg.size ?? 0 });
+      messages.push({
+        uid: msg.uid,
+        source: msg.source ?? Buffer.alloc(0),
+        size: msg.size ?? 0,
+        seen: msg.flags?.has('\\Seen') ?? false,
+      });
     }
   }
   messages.sort((a, b) => a.uid - b.uid);
@@ -90,4 +101,23 @@ export async function fetchNewMessages(
     more: uids.length > batch.length,
     uidValidityChanged: changed,
   };
+}
+
+/**
+ * Current \Seen state of some INBOX messages (UID FETCH FLAGS, read-only).
+ * Null when the folder's UIDVALIDITY changed: the stored UIDs no longer mean anything.
+ */
+export async function fetchSeenFlags(
+  client: ImapFlow,
+  uids: number[],
+  uidValidity: string,
+  folder = 'INBOX',
+): Promise<Map<number, boolean> | null> {
+  const out = new Map<number, boolean>();
+  if (uids.length === 0) return out;
+  const box = await client.mailboxOpen(folder, { readOnly: true });
+  if (String(box.uidValidity) !== uidValidity) return null;
+  for await (const m of client.fetch(uids.join(','), { uid: true, flags: true }, { uid: true }))
+    out.set(m.uid, m.flags?.has('\\Seen') ?? false);
+  return out;
 }

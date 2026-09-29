@@ -29,6 +29,7 @@ export async function addGreenmailConnection(
     sentAppendMode?: 'append' | 'provider_auto' | 'none';
     sentFolder?: string;
     displayName?: string;
+    provider?: 'generic' | 'yahoo' | 'hostinger' | 'gmail' | 'google_workspace';
   },
 ): Promise<string> {
   const id = randomUUID();
@@ -43,7 +44,7 @@ export async function addGreenmailConnection(
       (id, tenant_id, provider, email_address, imap_host, imap_port, imap_secure, smtp_host, smtp_port, smtp_security,
        username, credentials_ciphertext, credentials_key_id, status, is_test_mailbox, sent_append_mode, sent_folder_path,
        display_name)
-    values (${id}, ${args.tenantId}, 'generic', ${args.address}, ${gm.host}, ${gm.imapPort}, false,
+    values (${id}, ${args.tenantId}, ${args.provider ?? 'generic'}, ${args.address}, ${gm.host}, ${gm.imapPort}, false,
             ${args.smtpHost ?? gm.host}, ${args.smtpPort ?? gm.smtpPort}, 'starttls', ${args.address}, ${ciphertext}, ${keyId},
             'connected', ${args.isTest ?? false}, ${args.sentAppendMode ?? 'none'}, ${args.sentFolder ?? null},
             ${args.displayName ?? null})`;

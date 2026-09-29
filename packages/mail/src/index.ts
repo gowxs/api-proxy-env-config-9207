@@ -17,7 +17,13 @@ export {
 } from './presets.ts';
 export { testMailConnection, type ConnectionTestResult } from './test-connection.ts';
 export type { ConnectOptions, MailProvider, MailServerSettings } from './types.ts';
-export { fetchNewMessages, MAX_MESSAGE_BYTES, type FetchBatch, type InboxState } from './fetch.ts';
+export {
+  fetchNewMessages,
+  fetchSeenFlags,
+  MAX_MESSAGE_BYTES,
+  type FetchBatch,
+  type InboxState,
+} from './fetch.ts';
 export { parseInbound, type InboundMessage } from './parse.ts';
 export {
   appendToFolder,

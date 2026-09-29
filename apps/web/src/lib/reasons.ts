@@ -64,6 +64,7 @@ export const THREAD_STATUS: Record<
   open: { text: 'Open', tone: 'gray' },
   awaiting_customer: { text: 'Waiting for customer', tone: 'blue' },
   customer_replied: { text: 'Customer replied', tone: 'amber' },
+  owner_replied: { text: 'You replied', tone: 'gray' },
   escalated: { text: 'Needs you', tone: 'red' },
   closed: { text: 'Closed', tone: 'gray' },
 };

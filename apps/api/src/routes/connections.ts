@@ -214,8 +214,36 @@ export function connectionRoutes(app: FastifyInstance, deps: AppDeps): void {
       deps.sql,
       tenantId,
       (tx) => tx`
-      select id, provider, email_address, display_name, status, last_error_code, last_checked_at, last_ok_at, is_test_mailbox
+      select id, provider, email_address, display_name, status, last_error_code, last_checked_at, last_ok_at, is_test_mailbox,
+             sent_folder_path, sent_append_mode, sent_sync_error
       from public.email_connections order by created_at`,
     );
+  });
+
+  // The Sent folder, entered once when the provider has no \Sent marker. The worker
+  // starts reading it afresh (no history) and reports a wrong name in sent_sync_error.
+  app.patch('/v1/tenants/:tenantId/connections/:id', async (req, reply) => {
+    const { tenantId } = tenantParams.parse(req.params);
+    const { id } = z.object({ id: z.uuid() }).parse(req.params);
+    const body = z
+      .object({ sentFolder: z.string().trim().min(1).max(200) })
+      .strict()
+      .parse(req.body);
+    await deps.requireMember(tenantId, req.user!.userId);
+    const ok = await withTenant(deps.sql, tenantId, async (tx) => {
+      const rows = await tx`
+        update public.email_connections
+        set sent_folder_path = ${body.sentFolder}, sent_uidvalidity = null, sent_last_uid = null,
+            sent_sync_started_at = null, sent_sync_error = null,
+            sent_append_mode = case when sent_append_mode = 'none' then 'append' else sent_append_mode end
+        where id = ${id}
+        returning id`;
+      if (rows.length === 0) return false;
+      await tx`insert into public.audit_log (tenant_id, actor, actor_user_id, action, target_type, target_id)
+               values (${tenantId}, 'owner', ${req.user!.userId}, 'connection.sent_folder_set', 'email_connection', ${id})`;
+      return true;
+    });
+    if (!ok) return reply.code(404).send({ error: 'not found' });
+    return { ok: true };
   });
 }

@@ -81,3 +81,7 @@ Emails in the tenant's own mailbox are not touched: they belong to the tenant.
 
 A tenant handles requests from its own customers. Today: delete the lead in the dashboard
 or delete the tenant. Per-customer erasure (all messages of one address) is a follow-up.
+
+## Sent folder and read state
+
+The worker reads the owner's Sent folder read-only (EXAMINE). A message is stored only if it references a conversation Noctiv already holds (`In-Reply-To`/`References` match a stored message or one of ours); everything else, including its Message-ID, is dropped. Noctiv's own sent copies are recognised by Message-ID and skipped. The first run records a position and imports no history. `messages.seen` mirrors the provider's `\Seen` flag for recent inbound mail; nothing is ever written back. Stored text, subject and attachment names of these messages fall under the normal retention purge.

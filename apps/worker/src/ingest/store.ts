@@ -17,6 +17,8 @@ export async function storeInbound(
     uid: number;
     msg: InboundMessage;
     tooLarge?: boolean;
+    /** \Seen flag at the provider when the message was read. */
+    seen?: boolean;
   },
 ): Promise<string | null> {
   const { msg } = args;
@@ -38,11 +40,11 @@ export async function storeInbound(
     insert into public.messages
       (tenant_id, connection_id, direction, message_id_header, in_reply_to, reference_ids, from_address, from_name,
        reply_to, to_addresses, cc_addresses, subject, body_text, loop_headers, attachment_meta, imap_uid, received_at,
-       html_hidden_text)
+       html_hidden_text, seen, mailbox_folder)
     values (${args.tenantId}, ${args.connectionId}, 'inbound', ${msg.messageId}, ${msg.inReplyTo}, ${msg.references},
             ${msg.from.address}, ${msg.from.name}, ${msg.replyTo[0] ?? null}, ${msg.to}, ${msg.cc}, ${msg.subject},
             ${args.tooLarge ? null : msg.text}, ${tx.json(msg.loopHeaders as never)}, ${tx.json(msg.attachments as never)},
-            ${args.uid}, ${msg.date}, ${msg.htmlHiddenText})
+            ${args.uid}, ${msg.date}, ${msg.htmlHiddenText}, ${args.seen ?? null}, 'inbox')
     on conflict (connection_id, message_id_header) do nothing
     returning id`;
   if (!inserted) return null;
