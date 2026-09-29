@@ -20,6 +20,8 @@ export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' |
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Honeypot: people never see or fill it; simple bots do.
+  const [website, setWebsite] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -36,6 +38,11 @@ export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' |
     setBusy(true);
     setError(null);
     setInfo(null);
+    if (mode === 'signup' && website) {
+      // A bot filled the hidden field: look like success, create nothing.
+      setBusy(false);
+      return setInfo('Check your inbox and confirm your email address, then sign in.');
+    }
     const res =
       mode === 'signin'
         ? await sb.auth.signInWithPassword({ email, password })
@@ -99,6 +106,21 @@ export function LoginForm({ initialMode = 'signin' }: { initialMode?: 'signin' |
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
+          {mode === 'signup' && (
+            <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px' }}>
+              <label>
+                Website
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={website}
+                  onChange={(e) => setWebsite(e.target.value)}
+                />
+              </label>
+            </div>
+          )}
           <ErrorText>{error}</ErrorText>
           {info && <Notice>{info}</Notice>}
           <Button type="submit" disabled={busy} className="w-full">

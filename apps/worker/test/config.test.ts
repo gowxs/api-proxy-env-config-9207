@@ -49,18 +49,12 @@ describe('api config: action links', () => {
     CREDENTIALS_PUBLIC_KEY: 'a'.repeat(43),
   };
   const prod = { ...api, NODE_ENV: 'production', DATA_REGION_IN_EU: 'true' };
-  it('production needs the link secret; invite codes are optional; dev login is refused', () => {
+  it('production needs the link secret; sign-up is open; dev login is refused', () => {
     expect(loadApiConfig(api).ACTION_LINK_SECRET).toBeUndefined();
-    expect(loadApiConfig(api).SIGNUP_INVITE_CODES).toEqual([]);
-    expect(() => loadApiConfig({ ...prod, SIGNUP_INVITE_CODES: 'A1' })).toThrow(
-      /ACTION_LINK_SECRET/,
-    );
-    // Self-serve sign-up: production runs without invite codes too.
-    expect(
-      loadApiConfig({ ...prod, ACTION_LINK_SECRET: 'y'.repeat(32) }).SIGNUP_INVITE_CODES,
-    ).toEqual([]);
-    const ok = { ...prod, ACTION_LINK_SECRET: 'y'.repeat(32), SIGNUP_INVITE_CODES: ' A1 , B2 ' };
-    expect(loadApiConfig(ok).SIGNUP_INVITE_CODES).toEqual(['A1', 'B2']);
+    expect(() => loadApiConfig(prod)).toThrow(/ACTION_LINK_SECRET/);
+    // A leftover SIGNUP_INVITE_CODES is ignored, not an error.
+    const ok = { ...prod, ACTION_LINK_SECRET: 'y'.repeat(32), SIGNUP_INVITE_CODES: 'A1,B2' };
+    expect(loadApiConfig(ok)).not.toHaveProperty('SIGNUP_INVITE_CODES');
     expect(() =>
       loadApiConfig({ ...ok, DEV_LOGIN_USER_ID: 'd0e10000-0000-4000-8000-000000000001' }),
     ).toThrow(/DEV_LOGIN_USER_ID/);

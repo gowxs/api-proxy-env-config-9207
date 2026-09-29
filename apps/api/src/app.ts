@@ -55,8 +55,6 @@ export interface AppDeps {
   appUrl?: string;
   /** Public base URL of this API (customer quote links: <url>/q/<token>). */
   publicApiUrl?: string;
-  /** Signup gate: creating a business needs one of these codes (empty = open). */
-  inviteCodes?: string[];
   /** Development only: extra routes (the dev login). */
   devRoutes?: (app: FastifyInstance) => void;
   /** Behind Caddy in production: take the client IP from X-Forwarded-For. */
@@ -149,7 +147,7 @@ export function buildApp(
   });
 
   connectionRoutes(app, full);
-  meRoutes(app, { ...full, inviteCodes: deps.inviteCodes ?? [] });
+  meRoutes(app, full);
   webRoutes(app, full);
   quoteRoutes(app, { ...full, publicApiUrl: publicApiUrl(deps) });
   documentRoutes(app, full);

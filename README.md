@@ -42,8 +42,8 @@ than 3 minutes or a mailbox has not been checked for an hour), UptimeRobot check
 (`scripts/uptime-monitors.ts`), and an admin digest e-mail at 08:00 Riga. Nightly encrypted
 database backups go to Cloudflare R2; restore with `docs/backup-restore.md`.
 
-Secrets live only in the hosts' environment settings and the local `.env`. Signup needs the invite
-code in `SIGNUP_INVITE_CODES` (API). Owner notification emails stay queued until Brevo SMTP is set
+Secrets live only in the hosts' environment settings and the local `.env`. Sign-up is open (email +
+password + confirmation e-mail; a hidden honeypot field and a per-IP limit guard it). Owner notification emails stay queued until Brevo SMTP is set
 (`SYSTEM_MAILER_PENDING=true`). Only operator-flagged test mailboxes are processed (free AI tier).
 
 ## Try it locally (one command)
@@ -120,7 +120,7 @@ origin; `/api/*` is forwarded to the API (`API_INTERNAL_URL`). Sign-in is Supaba
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The API verifies the token and membership on
 every request; the browser never reads the database directly.
 
-- **Onboarding:** business + time zone (+ optional invite code) → your brand (logo, colour) → mailbox (provider, App Password
+- **Onboarding:** business + time zone → your brand (logo, colour) → mailbox (provider, App Password
   guide with screenshot placeholders, live test with the exact error) → knowledge (website,
   files, notes) → summary. Every business starts in mode 1 (approve everything); modes 2
   (auto-reply to grounded questions) and 3 (fully automatic) are chosen in Settings.

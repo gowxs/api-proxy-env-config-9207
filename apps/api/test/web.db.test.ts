@@ -23,7 +23,6 @@ beforeAll(async () => {
     verifyToken: createTokenVerifier({ jwks: auth.jwks }),
     credentialsPublicKey: generateSealingKeyPair().publicKey,
     connectionTestWaitMs: 1_000,
-    inviteCodes: ['EARLY-2026'],
   });
   A = await seedTenant(owner, 'web-a', { embeddingAxis: 100 });
   B = await seedTenant(owner, 'web-b', { embeddingAxis: 101 });
@@ -47,41 +46,26 @@ async function call(
 const t = (s: SeededTenant, path = '') => `/v1/tenants/${s.tenantId}${path}`;
 
 describe('account and onboarding', () => {
-  it('a new user creates their business (invite code optional); it starts in draft-only mode', async () => {
+  it('a new user creates their business (open sign-up, no code); it starts in draft-only mode', async () => {
     const userId = randomUUID();
     await owner`insert into auth.users (id, email, aud, role) values (${userId}, ${`new-${userId.slice(0, 8)}@example.test`}, 'authenticated', 'authenticated')`;
-    expect((await call('GET', '/v1/me', userId)).json).toMatchObject({
-      tenants: [],
-      inviteRequired: false,
-      inviteCodes: true,
-    });
+    const before = (await call('GET', '/v1/me', userId)).json;
+    expect(before).toMatchObject({ tenants: [] });
+    expect(before).not.toHaveProperty('inviteRequired');
+    expect(before).not.toHaveProperty('inviteCodes');
 
     const body = {
       name: 'Lumen Studio',
       timezone: 'Europe/Riga',
       websiteUrl: 'https://lumen.example',
     };
-    // A mistyped code is pointed out; no code at all is fine (self-serve sign-up).
     expect(
-      (await call('POST', '/v1/tenants', userId, { ...body, inviteCode: 'EARLY-2O26' })).status,
+      (await call('POST', '/v1/tenants', userId, { ...body, timezone: 'Mars/Base' })).status,
     ).toBe(400);
-    expect(
-      (
-        await call('POST', '/v1/tenants', userId, {
-          ...body,
-          inviteCode: 'EARLY-2026',
-          timezone: 'Mars/Base',
-        })
-      ).status,
-    ).toBe(400);
-    const created = await call('POST', '/v1/tenants', userId, {
-      ...body,
-      inviteCode: 'EARLY-2026',
-    });
+    // An old app version may still send an invite code: it is ignored, whatever it says.
+    const created = await call('POST', '/v1/tenants', userId, { ...body, inviteCode: 'WHATEVER' });
     expect(created).toMatchObject({ status: 201, json: { mode: 'draft_only' } });
-    expect(
-      (await call('POST', '/v1/tenants', userId, { ...body, inviteCode: 'EARLY-2026' })).status,
-    ).toBe(409);
+    expect((await call('POST', '/v1/tenants', userId, body)).status).toBe(409);
 
     const me = (await call('GET', '/v1/me', userId)).json;
     expect(me.tenants).toEqual([

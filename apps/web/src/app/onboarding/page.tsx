@@ -35,13 +35,11 @@ function timezones(): string[] {
 }
 
 function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> }) {
-  const { me } = useSession();
   const guess = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const [name, setName] = useState('');
   const [website, setWebsite] = useState('');
   // The device's time zone is almost always the right one; it can be changed.
   const [timezone, setTimezone] = useState(guess ?? '');
-  const [invite, setInvite] = useState('');
   const { busy, error, run } = useAction();
   const zones = useMemo(timezones, []);
 
@@ -58,7 +56,6 @@ function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> 
               name: name.trim(),
               timezone,
               websiteUrl: w ? (/^https?:\/\//i.test(w) ? w : `https://${w}`) : null,
-              ...(invite.trim() ? { inviteCode: invite.trim() } : {}),
             },
           });
           await onDone(created.id);
@@ -103,18 +100,6 @@ function BusinessStep({ onDone }: { onDone: (tenantId: string) => Promise<void> 
           ))}
         </select>
       </Field>
-      {(me.inviteRequired || me.inviteCodes) && (
-        <Field
-          label="Invite code (optional)"
-          hint="Got one from us? Enter it here. You can sign up without one."
-        >
-          <input
-            className={inputClass}
-            value={invite}
-            onChange={(e) => setInvite(e.target.value)}
-          />
-        </Field>
-      )}
       <ErrorText>{error}</ErrorText>
       <Button type="submit" disabled={busy} className="w-full">
         Continue
@@ -306,7 +291,7 @@ function ChoosePath({ onChoose }: { onChoose: (p: 'assistant' | 'manual') => voi
   );
 }
 
-/** The assistant path: the business is created first (name, time zone, invite code), then the chat. */
+/** The assistant path: the business is created first (name, time zone), then the chat. */
 function AssistantSetup({ onManual }: { onManual: () => void }) {
   const router = useRouter();
   const { tenant, refresh } = useSession();

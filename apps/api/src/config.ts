@@ -24,16 +24,6 @@ export const apiEnvSchema = z
     PUBLIC_SITE_URL: z.url().default('https://noctiv.io'),
     /** Founder's bearer token for GET /admin/waitlist.csv; unset = export off. */
     WAITLIST_EXPORT_TOKEN: z.string().min(32).optional(),
-    /** Comma-separated invite codes; optional at sign-up (self-serve since 2026-10-02). */
-    SIGNUP_INVITE_CODES: z
-      .string()
-      .default('')
-      .transform((v) =>
-        v
-          .split(',')
-          .map((c) => c.trim())
-          .filter(Boolean),
-      ),
     /** Local development only: enables POST /dev/login for this (seeded) user. */
     DEV_LOGIN_USER_ID: z.uuid().optional(),
     DEV_LOGIN_EMAIL: z.email().default('owner@noctiv.local'),

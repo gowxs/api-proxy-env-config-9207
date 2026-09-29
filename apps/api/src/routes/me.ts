@@ -6,23 +6,27 @@ import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
 import { HttpError, isTimezone } from './web.ts';
 
-const createBody = z
-  .object({
-    name: z.string().trim().min(1).max(200),
-    websiteUrl: z.url().max(500).nullable().optional(),
-    timezone: z.string().refine(isTimezone, 'unknown time zone'),
-    inviteCode: z.string().trim().max(100).optional(),
-  })
-  .strict();
+const createBody = z.preprocess(
+  // Sign-up is open. Older app versions may still send an invite code: it is ignored.
+  (body) => {
+    if (body && typeof body === 'object' && 'inviteCode' in body) {
+      const { inviteCode: _ignored, ...rest } = body as Record<string, unknown>;
+      return rest;
+    }
+    return body;
+  },
+  z
+    .object({
+      name: z.string().trim().min(1).max(200),
+      websiteUrl: z.url().max(500).nullable().optional(),
+      timezone: z.string().refine(isTimezone, 'unknown time zone'),
+    })
+    .strict(),
+);
 
 /** Standard VAT rate and currency by time zone, for new businesses (QA 2026-09-26). */
 
-export interface MeDeps extends AppDeps {
-  /** Phase 1 signup gate (PLAN.md Q12): creating an account needs one of these codes. Empty = open (dev). */
-  inviteCodes: string[];
-}
-
-export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
+export function meRoutes(app: FastifyInstance, deps: AppDeps): void {
   app.get('/v1/me', async (req) => {
     const user = req.user!;
     const tenants = await deps.sql<{ tenant_id: string; name: string }[]>`
@@ -49,9 +53,6 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
     return {
       userId: user.userId,
       email: user.email ?? null,
-      // Self-serve sign-up (founder decision 2026-10-02): an invite code is optional.
-      inviteRequired: false,
-      inviteCodes: deps.inviteCodes.length > 0,
       tenants: withState,
     };
   });
@@ -104,13 +105,6 @@ export function meRoutes(app: FastifyInstance, deps: MeDeps): void {
   app.post('/v1/tenants', async (req, reply) => {
     const user = req.user!;
     const b = createBody.parse(req.body);
-    // Optional; a code that was typed must be a real one (a typo is pointed out, not ignored).
-    const invite = b.inviteCode?.trim() || null;
-    if (invite && !deps.inviteCodes.includes(invite))
-      throw new HttpError(
-        400,
-        'That invite code is not valid. Check it, or leave the field empty: you can sign up without one.',
-      );
     const existing = await deps.sql`select 1 from app.user_tenants(${user.userId})`;
     if (existing.length) throw new HttpError(409, 'You already have a business account.');
     const id = randomUUID();

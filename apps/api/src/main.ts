@@ -41,7 +41,6 @@ const app = buildApp({
   actionSecret: config.ACTION_LINK_SECRET,
   appUrl: config.PUBLIC_APP_URL,
   ...(config.PUBLIC_API_URL ? { publicApiUrl: config.PUBLIC_API_URL } : {}),
-  inviteCodes: config.SIGNUP_INVITE_CODES,
   siteUrl: config.PUBLIC_SITE_URL,
   ...(config.WAITLIST_EXPORT_TOKEN ? { waitlistExportToken: config.WAITLIST_EXPORT_TOKEN } : {}),
   trustProxy: config.API_TRUST_PROXY,

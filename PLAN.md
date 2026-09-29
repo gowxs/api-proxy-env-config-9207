@@ -562,7 +562,7 @@ placeholders), Q15 sender-only replies (default: yes).
 ### Decisions made during step 12 (web app)
 
 - **The browser talks only to our API** (through a same-origin `/api` proxy), not to Supabase's database API. One place checks membership and RLS context; no CORS. Supabase is used in the browser for sign-in only.
-- **Signup is self-serve since 2026-10-02** (app.noctiv.io/signup; an invite code is optional, and a mistyped one is pointed out). Previously **invite-only (Q12 default):** creating a business needs one of `SIGNUP_INVITE_CODES`; required in production. One business per account in Phase 1.
+- **Signup is self-serve since 2026-10-02** (app.noctiv.io/signup; **invite codes were removed entirely:** field, API check, `SIGNUP_INVITE_CODES` and the production requirement; a code sent by an old client is ignored). Abuse guard instead: e-mail confirmation, a hidden honeypot field on the sign-up form (client-side only) and the per-IP limit of 5/hour on business creation. Previously invite-only (Q12 default). One business per account in Phase 1.
 - **Onboarding** can skip the mailbox and the knowledge base (connect later in Settings); it always ends in draft-only mode. App Password screenshots are placeholders (Q13 default).
 - **Auto-send switch:** a dialog explaining what changes plus a confirmation checkbox; the API also requires `confirmAutoSend: true` and a connected mailbox, and audits the change. Switching back needs no confirmation.
 - **Editing** a draft marks it `edited` and sends the owner's text as written (owner text is trusted). Approving an unverified suggestion closes its escalation.
@@ -607,7 +607,7 @@ placeholders), Q15 sender-only replies (default: yes).
 - **Region guard:** production must set `DATA_REGION` and `DATA_REGION_IN_EU`; non-EU logs a warning at every start and the worker emails the admin (once the system mailer exists).
 - **One image** (`Dockerfile`, `SERVICE=api|worker`), Node 22 running the TypeScript sources; base image from the public ECR mirror of the official Node image (Docker Hub rate limits).
 - **Found while deploying:** (1) the worker's `nodemailer` was a dev dependency (tests hid it); (2) Netlify needs the Next.js plugin declared explicitly for a monorepo base directory; (3) from Northflank, the Supabase key set came back gzip-compressed without a `Content-Encoding` header when requested with `Accept: application/json`, which broke `jose`'s fetcher; the API now loads the key set itself (no Accept header, gzip-tolerant, cached, reload on key rotation, fail closed), with tests.
-- **Live check:** sign-in → `/v1/me` → wrong invite refused → business created (draft-only) → dashboard → "Delete all data" → the worker erased the business and the Supabase login. Database left empty except one erasure-proof row.
+- **Live check:** sign-in → `/v1/me` → business created (draft-only) → dashboard → "Delete all data" → the worker erased the business and the Supabase login. Database left empty except one erasure-proof row.
 - **Pending for real use:** Brevo SMTP (owner emails and Supabase Auth emails), an EU host for api + worker, Vertex AI (paid) for non-test mailboxes.
 
 ## 18. Three sending modes, one plan (founder decision 2026-09-25)
@@ -930,7 +930,7 @@ QA.md lists the findings; these are the decisions and how they were built.
   - The mailbox is connected from the setup chat ("Connect mailbox", the same form as the manual step), because Settings opens only after setup.
 - **Where:**
   - A floating button on every app page opens it: full screen on a phone, a 400×640 panel on a desktop.
-  - It is also the first screen of onboarding: "Set up with the assistant" or "Set up manually". The assistant path first creates the business (name, time zone, invite code), then opens the setup chat with a "Finish setup" button.
+  - It is also the first screen of onboarding: "Set up with the assistant" or "Set up manually". The assistant path first creates the business (name, time zone), then opens the setup chat with a "Finish setup" button.
 - **Language:** the six supported languages (en, de, lv, nl, fr, es).
   - The first guess comes from the browser.
   - The model then answers in the language of the owner's message, and the conversation's locale follows.

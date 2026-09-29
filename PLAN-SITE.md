@@ -127,7 +127,7 @@ Navigation: How it works · Pricing · Contact · Sign in (→ `https://app.noct
 3. **Copy vs. current setup** (content is approved; flagged so it stays true):
    - "Stored in the EU" / "a database in Frankfurt": the database is in Frankfurt, but the worker currently runs temporarily in London.
    - "Replies within minutes": the free AI tier is rate-limited. Fine once on the paid EU tier.
-4. **Trial CTA:** the approved pricing button is `mailto:contact@noctiv.io`, while app sign-up is invite-only. Keep the mailto until self-serve sign-up opens.
+4. **Trial CTA:** the approved pricing button is `mailto:contact@noctiv.io`, while app sign-up is now open (email + password); the CTAs link to the app sign-up.
 5. **E-mail authentication:**
    - DMARC exists (`p=none`, reports to Brevo; added 24 Sep 18:10 UTC).
    - The three Hostinger DKIM records (`hostingermail-a/b/c._domainkey`) are **proxied** CNAMEs in Cloudflare, so their keys can't be looked up and DKIM fails for mail sent from contact@noctiv.io. They should be DNS-only; waiting for approval, since it changes mail DNS.

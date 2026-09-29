@@ -60,4 +60,26 @@ describe('API rate limits', () => {
     }
     expect(codes).toEqual([400, 400, 400, 400, 400, 429]);
   });
+
+  it('business creation (sign-up): 5 per hour per address, then 429', async () => {
+    const app = buildApp({
+      logger: createLogger({ service: 'api-test', level: 'silent' }),
+      sql: {} as Sql,
+      checkDatabase: async () => true,
+      verifyToken: async () => ({ userId: 'u' }),
+      credentialsPublicKey: 'x'.repeat(43),
+      connectionTestWaitMs: 1_000,
+    });
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const r = await app.inject({
+        method: 'POST',
+        url: '/v1/tenants',
+        headers: { authorization: 'Bearer t' },
+        payload: {},
+      });
+      codes.push(r.statusCode);
+    }
+    expect(codes).toEqual([400, 400, 400, 400, 400, 429]);
+  });
 });

@@ -162,10 +162,6 @@ async function main() {
     DEV_LOGIN_USER_ID: DEV.userId,
     DEV_LOGIN_EMAIL: DEV.ownerEmail,
     CONNECTION_TEST_WAIT_MS: '25000',
-    // Try the invite-code gate locally: SIGNUP_INVITE_CODES=CODE pnpm dev:stack --empty
-    ...(process.env.SIGNUP_INVITE_CODES
-      ? { SIGNUP_INVITE_CODES: process.env.SIGNUP_INVITE_CODES }
-      : {}),
   });
   start('worker', 'apps/worker', process.execPath, ['src/main.ts'], {
     ...common,
