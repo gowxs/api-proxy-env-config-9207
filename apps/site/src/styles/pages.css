@@ -644,10 +644,6 @@ dl.facts {
   margin: 0;
   color: var(--text);
 }
-.pending {
-  color: var(--text-3);
-  font-style: italic;
-}
 
 /* ---------- Contact ---------- */
 .contact-mail {

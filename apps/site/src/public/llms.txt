@@ -46,7 +46,7 @@ Works with any business mailbox over IMAP/SMTP: Gmail, Google Workspace, Yahoo, 
 
 ## Data and privacy
 
-- Data stored in the EU (Frankfurt, Germany). AI processing by Google Cloud Vertex AI in the EU. Application servers temporarily in the United Kingdom (EU adequacy decision).
+- Database in the EU (Frankfurt, Germany). AI processing by Google Cloud Vertex AI in the EU. Application servers temporarily in the United Kingdom (EU adequacy decision).
 - E-mail text kept 90 days by default (can be shortened); one button deletes all data.
 - E-mails are never used to train AI models. No cookies or tracking on the website.
 
