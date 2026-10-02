@@ -9,7 +9,7 @@ import {
   ShopifyError,
   signToken,
   toStored,
-  verifyQueryHmac,
+  explainQueryHmac,
   verifyToken,
   verifyWebhookHmac,
   type AppCredentials,
@@ -162,57 +162,142 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
 
   // ---------------------------------------------- Shopify → us (no user token)
   /**
+   * One line per request to /shopify/app and /shopify/callback with what happened and why, so a
+   * failed install can be diagnosed from the logs. Only names, codes and public values: never the
+   * hmac, code, state, cookie or any secret.
+   */
+  const outcome = (
+    req: FastifyRequest,
+    route: 'app' | 'callback',
+    status: number,
+    reason: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const host = String(req.headers.host ?? '');
+    req.log[status >= 400 ? 'warn' : 'info'](
+      {
+        shopify: {
+          route,
+          status,
+          reason,
+          requestHost: host,
+          publicHost: new URL(deps.publicApiUrl).host,
+          ...extra,
+        },
+      },
+      `shopify ${route} ${status} ${reason}`,
+    );
+  };
+  const hmacInfo = (q: Record<string, string>) => {
+    const h = explainQueryHmac(q, creds.clientSecret);
+    return { h, extra: { hmacVariant: h.variant, signedParams: h.names } };
+  };
+  // The nonce cookie only travels back if it is set for the path the callback is served under
+  // (behind the web app's /api proxy that is /api/shopify, directly on the API it is /shopify).
+  const cookiePath = `${new URL(deps.publicApiUrl).pathname.replace(/\/+$/, '')}/shopify`;
+
+  /**
    * The app URL Shopify opens after "Install". The install is a Shopify-initiated
    * flow: we verify the request is Shopify's and go straight to OAuth.
    */
-  app.get<{ Querystring: Record<string, string> }>('/shopify/app', async (req, reply) => {
-    const shop = req.query.shop ?? '';
-    if (
-      !normalizeShopDomain(shop) ||
-      normalizeShopDomain(shop) !== shop ||
-      !verifyQueryHmac(req.query, creds.clientSecret)
-    )
-      return reply.code(400).send({ error: 'invalid request' });
-    const nonce = newNonce();
-    const state = signToken({ kind: 'oauth', shop, nonce }, deps.secret, 600);
-    return reply
-      .code(302)
-      .header(
-        'set-cookie',
-        `${COOKIE}=${nonce}; HttpOnly; SameSite=Lax; Path=/shopify; Max-Age=600${secureCookie}`,
-      )
-      .header(
-        'location',
-        authorizeUrl({
-          shop,
-          clientId: creds.clientId,
-          redirectUri: shopifyCallbackUrl(deps.publicApiUrl),
-          state,
-        }),
-      )
-      .send();
-  });
+  /**
+   * `hop` is false on /shopify/app/start, the only place a request is sent on to the public host,
+   * so the redirect can never loop.
+   */
+  const startInstall =
+    (hop: boolean) =>
+    async (req: FastifyRequest<{ Querystring: Record<string, string> }>, reply: FastifyReply) => {
+      const shop = req.query.shop ?? '';
+      if (!shop) {
+        outcome(req, 'app', 400, 'missing_shop');
+        return reply.code(400).send({ error: 'invalid request' });
+      }
+      if (!normalizeShopDomain(shop) || normalizeShopDomain(shop) !== shop) {
+        outcome(req, 'app', 400, 'bad_shop_domain', { shop: shop.slice(0, 80) });
+        return reply.code(400).send({ error: 'invalid request' });
+      }
+      const { h, extra } = hmacInfo(req.query);
+      if (!h.ok) {
+        outcome(req, 'app', 400, h.reason, { shop, ...extra });
+        return reply.code(400).send({ error: 'invalid request' });
+      }
+      const publicBase = deps.publicApiUrl.replace(/\/+$/, '');
+      const seenHost = String(req.headers['x-forwarded-host'] ?? req.headers.host ?? '')
+        .split(',')[0]!
+        .trim();
+      const query = new URLSearchParams(req.query).toString();
+      if (hop && seenHost !== new URL(deps.publicApiUrl).host) {
+        // Shopify was pointed at another address than the one the callback is served from (for
+        // example the platform's own host name). The nonce cookie only works on one host, so the
+        // whole install continues on the public one (the signed query is unchanged).
+        outcome(req, 'app', 302, 'hop_to_public_host', { shop, seenHost, ...extra });
+        return reply
+          .code(302)
+          .header('location', `${publicBase}/shopify/app/start?${query}`)
+          .send();
+      }
+      const nonce = newNonce();
+      const state = signToken({ kind: 'oauth', shop, nonce }, deps.secret, 600);
+      const redirectUri = shopifyCallbackUrl(deps.publicApiUrl);
+      const dest = String(req.headers['sec-fetch-dest'] ?? '');
+      if (dest === 'iframe' || dest === 'frame') {
+        // Opened inside the Shopify admin (the app is set to embedded): the consent screen cannot be
+        // framed and the nonce cookie must be set in a top-level visit, so reload this URL on top.
+        outcome(req, 'app', 200, 'breakout_iframe', { shop, ...extra, redirectUri });
+        return reply
+          .code(200)
+          .header('content-type', 'text/html; charset=utf-8')
+          .send(
+            `<!doctype html><meta charset="utf-8"><title>Noctiv</title><p>Opening Noctiv…</p><script>window.top.location.href=${JSON.stringify(`${publicBase}/shopify/app/start?${query}`)}</script>`,
+          );
+      }
+      outcome(req, 'app', 302, 'redirect_to_authorize', {
+        shop,
+        ...extra,
+        redirectUri,
+        embeddedParam: req.query.embedded ?? null,
+      });
+      return reply
+        .code(302)
+        .header(
+          'set-cookie',
+          `${COOKIE}=${nonce}; HttpOnly; SameSite=Lax; Path=${cookiePath}; Max-Age=600${secureCookie}`,
+        )
+        .header('location', authorizeUrl({ shop, clientId: creds.clientId, redirectUri, state }))
+        .send();
+    };
+  app.get<{ Querystring: Record<string, string> }>('/shopify/app', startInstall(true));
+  app.get<{ Querystring: Record<string, string> }>('/shopify/app/start', startInstall(false));
 
   app.get<{ Querystring: Record<string, string> }>('/shopify/callback', async (req, reply) => {
     const q = req.query;
-    const clear = `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/shopify; Max-Age=0${secureCookie}`;
+    const clear = `${COOKIE}=; HttpOnly; SameSite=Lax; Path=${cookiePath}; Max-Age=0${secureCookie}`;
     reply.header('set-cookie', clear);
     const shop = q.shop ?? '';
+    const fail = (reason: string, extra: Record<string, unknown> = {}, browser = 'state') => {
+      outcome(req, 'callback', 302, reason, { shop: shop.slice(0, 80), ...extra });
+      return back(reply, { reason: browser });
+    };
+    if (normalizeShopDomain(shop) !== shop) return fail('bad_shop_domain');
+    const { h, extra } = hmacInfo(q);
+    if (!h.ok) return fail(h.reason, extra);
     const state = verifyToken<{ kind: string; shop: string; nonce: string }>(
       q.state ?? '',
       deps.secret,
     );
-    if (
-      normalizeShopDomain(shop) !== shop ||
-      !verifyQueryHmac(q, creds.clientSecret) ||
-      !state ||
-      state.kind !== 'oauth' ||
-      state.shop !== shop ||
-      state.nonce !== cookieOf(req, COOKIE)
-    )
-      return back(reply, { reason: 'state' });
-    if (q.error || !q.code)
-      return back(reply, { reason: q.error === 'access_denied' ? 'denied' : 'shopify' });
+    if (!state) return fail('state_invalid', { hasState: Boolean(q.state) });
+    if (state.kind !== 'oauth' || state.shop !== shop) return fail('state_shop_mismatch');
+    const cookie = cookieOf(req, COOKIE);
+    if (!cookie) return fail('nonce_cookie_missing', { cookiePath });
+    if (state.nonce !== cookie) return fail('nonce_mismatch');
+    if (q.error || !q.code) {
+      const denied = q.error === 'access_denied';
+      return fail(
+        q.error ? 'shopify_error' : 'missing_code',
+        { shopifyError: q.error ?? null },
+        denied ? 'denied' : 'shopify',
+      );
+    }
     try {
       const tokens = await client.exchangeCode(shop, creds, q.code);
       // Never keep a connection that could change the store, or that cannot read orders.
@@ -221,13 +306,15 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
       await deps.sql`
         select app.shopify_install_store(${shop}, ${sealed.ciphertext}, ${sealed.keyId}, ${tokens.scopes})`;
       const claim = signToken({ kind: 'claim', shop }, deps.secret, 1800);
+      outcome(req, 'callback', 302, 'installed', { shop, scopes: tokens.scopes });
       return back(reply, { claim });
     } catch (e) {
       const code: ShopifyErrorCode = e instanceof ShopifyError ? e.code : 'UNAVAILABLE';
-      req.log.warn({ code }, 'shopify install failed');
-      return back(reply, {
-        reason: code === 'WRITE_SCOPES' || code === 'MISSING_SCOPE' ? 'scopes' : 'shopify',
-      });
+      return fail(
+        code === 'WRITE_SCOPES' || code === 'MISSING_SCOPE' ? 'scopes_rejected' : 'exchange_failed',
+        { shopifyCode: code },
+        code === 'WRITE_SCOPES' || code === 'MISSING_SCOPE' ? 'scopes' : 'shopify',
+      );
     }
   });
 

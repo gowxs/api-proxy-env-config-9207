@@ -18,16 +18,47 @@ export function verifyQueryHmac(
   query: Record<string, string | string[] | undefined>,
   clientSecret: string,
 ): boolean {
+  return explainQueryHmac(query, clientSecret).ok;
+}
+
+/**
+ * Shopify's documentation and its libraries differ on how values enter the signed message
+ * (decoded as they are, with "%" and "&" escaped, or URL-encoded), so a request is accepted
+ * if the signature matches any of the three. Each is an HMAC keyed with the client secret, so
+ * accepting all of them does not weaken the check. `variant` says which one matched; `names` is
+ * the sorted list of parameter names that were signed (never values) for diagnosing failures.
+ */
+export function explainQueryHmac(
+  query: Record<string, string | string[] | undefined>,
+  clientSecret: string,
+): {
+  ok: boolean;
+  reason: 'ok' | 'hmac_missing' | 'hmac_invalid';
+  variant: string | null;
+  names: string[];
+} {
   const { hmac, signature: _signature, ...rest } = query;
-  if (typeof hmac !== 'string' || !hmac) return false;
-  const message = Object.keys(rest)
-    .sort()
-    .map((k) => {
-      const v = rest[k];
-      return `${k}=${Array.isArray(v) ? v.join(',') : (v ?? '')}`;
-    })
-    .join('&');
-  return eq(createHmac('sha256', clientSecret).update(message).digest('hex'), hmac);
+  const names = Object.keys(rest).sort();
+  if (typeof hmac !== 'string' || !hmac)
+    return { ok: false, reason: 'hmac_missing', variant: null, names };
+  const val = (k: string) => {
+    const v = rest[k];
+    return Array.isArray(v) ? v.join(',') : (v ?? '');
+  };
+  const variants: Record<string, string> = {
+    decoded: names.map((k) => `${k}=${val(k)}`).join('&'),
+    escaped: names
+      .map(
+        (k) =>
+          `${k.replace(/%/g, '%25').replace(/=/g, '%3D')}=${val(k).replace(/%/g, '%25').replace(/&/g, '%26')}`,
+      )
+      .join('&'),
+    urlencoded: new URLSearchParams(names.map((k) => [k, val(k)] as [string, string])).toString(),
+  };
+  for (const [variant, message] of Object.entries(variants))
+    if (eq(createHmac('sha256', clientSecret).update(message).digest('hex'), hmac.toLowerCase()))
+      return { ok: true, reason: 'ok', variant, names };
+  return { ok: false, reason: 'hmac_invalid', variant: null, names };
 }
 
 /** Webhooks are signed with the base64 HMAC-SHA256 of the raw body (X-Shopify-Hmac-Sha256). */

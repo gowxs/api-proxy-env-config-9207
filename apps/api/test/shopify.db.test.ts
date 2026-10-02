@@ -27,6 +27,16 @@ let A: SeededTenant;
 let B: SeededTenant;
 const logs: string[] = [];
 let n = 0;
+/** Requests as Shopify's redirect reaches the API: on the public host (the App URL's host). */
+const hit = (
+  o: { method: string; url: string; headers?: Record<string, string>; payload?: string | object },
+  a: ReturnType<typeof buildApp> = app,
+) =>
+  a.inject({
+    ...o,
+    method: o.method as 'GET',
+    headers: { host: 'api.example.test', ...o.headers },
+  });
 /** The shared fixture seeds a connection per tenant; these tests connect their own. */
 async function seedBare(label: string, embeddingAxis: number) {
   const t = await seedTenant(owner, label, { embeddingAxis });
@@ -88,7 +98,7 @@ async function call(
   userId: string,
   body?: unknown,
 ) {
-  const res = await app.inject({
+  const res = await hit({
     method,
     url,
     headers: { authorization: `Bearer ${await auth.token(userId)}` },
@@ -102,7 +112,7 @@ async function install(
   shop: string,
   over: { code?: string; state?: string; cookie?: string; tamper?: boolean } = {},
 ) {
-  const start = await app.inject({
+  const start = await hit({
     method: 'GET',
     url: `/shopify/app?${qs(signed({ shop, timestamp: '1790000000', host: 'abc' }))}`,
   });
@@ -116,7 +126,7 @@ async function install(
     state: over.state ?? state,
     timestamp: '1790000001',
   });
-  const res = await app.inject({
+  const res = await hit({
     method: 'GET',
     url: `/shopify/callback?${qs(over.tamper ? { ...q, shop: 'other.myshopify.com' } : q)}`,
     headers: { cookie: `noctiv_shopify_oauth=${over.cookie ?? cookie}` },
@@ -158,7 +168,7 @@ async function runWorkerJobs(queue: string) {
 describe('Shopify opens our app URL', () => {
   const shop = 'noctiv-nvojutjr.myshopify.com';
   it('a signed request goes straight to OAuth for read_orders, with a state and a cookie', async () => {
-    const r = await app.inject({
+    const r = await hit({
       method: 'GET',
       url: `/shopify/app?${qs(signed({ shop, timestamp: '1', host: 'h' }))}`,
     });
@@ -180,14 +190,14 @@ describe('Shopify opens our app URL', () => {
       (q: Record<string, string>) => qs({ ...signed(q), shop: 'evil.myshopify.com' }),
     ],
   ])('refuses %s', async (_n, build) => {
-    const r = await app.inject({
+    const r = await hit({
       method: 'GET',
       url: `/shopify/app?${build({ shop, timestamp: '1' })}`,
     });
     expect(r.statusCode).toBe(400);
   });
   it('refuses a shop that is not *.myshopify.com, even when correctly signed', async () => {
-    const r = await app.inject({
+    const r = await hit({
       method: 'GET',
       url: `/shopify/app?${qs(signed({ shop: 'evil.example.com', timestamp: '1' }))}`,
     });
@@ -243,7 +253,7 @@ describe('the OAuth callback', () => {
   });
   it('the merchant declining ends cleanly', async () => {
     const shop = shopName();
-    const start = await app.inject({
+    const start = await hit({
       method: 'GET',
       url: `/shopify/app?${qs(signed({ shop, timestamp: '1' }))}`,
     });
@@ -251,7 +261,7 @@ describe('the OAuth callback', () => {
     const cookie = /noctiv_shopify_oauth=([a-f0-9]+)/.exec(
       String(start.headers['set-cookie']),
     )![1]!;
-    const res = await app.inject({
+    const res = await hit({
       method: 'GET',
       url: `/shopify/callback?${qs(signed({ shop, error: 'access_denied', state, timestamp: '1' }))}`,
       headers: { cookie: `noctiv_shopify_oauth=${cookie}` },
@@ -461,7 +471,7 @@ describe('webhooks from Shopify', () => {
     expect(
       (await post('app/uninstalled', shop, { shop_domain: shop }, 'wrong-secret')).statusCode,
     ).toBe(401);
-    const r = await app.inject({
+    const r = await hit({
       method: 'POST',
       url: '/shopify/webhooks',
       headers: {
@@ -542,5 +552,202 @@ describe('secrets never reach the logs', () => {
     expect(all.length).toBeGreaterThan(0); // the capture works
     for (const s of ['shpat_', 'shprt_', APP.clientSecret, 'code_', 'hmac='])
       expect(all).not.toContain(s);
+  });
+});
+
+describe('every request to the install routes leaves one line saying what happened', () => {
+  const shop = 'noctiv-nvojutjr.myshopify.com';
+  const SECRETISH = ['hmac=', 'code=', 'state=', 'nonce'];
+  const lastOutcome = () => {
+    const lines = logs
+      .join('')
+      .split('\n')
+      .filter((l) => l.includes('"shopify":{'))
+      .map((l) => JSON.parse(l) as { shopify: Record<string, unknown>; msg: string });
+    return lines[lines.length - 1]!;
+  };
+
+  it('/shopify/app: missing shop, bad domain, missing and wrong signature', async () => {
+    const cases: [string, string][] = [
+      [`/shopify/app?${qs(signed({ timestamp: '1' }))}`, 'missing_shop'],
+      [
+        `/shopify/app?${qs(signed({ shop: 'evil.example.com', timestamp: '1' }))}`,
+        'bad_shop_domain',
+      ],
+      [`/shopify/app?${qs({ shop, timestamp: '1' })}`, 'hmac_missing'],
+      [`/shopify/app?${qs({ shop, timestamp: '1', hmac: 'ab'.repeat(32) })}`, 'hmac_invalid'],
+    ];
+    for (const [url, reason] of cases) {
+      const r = await hit({ method: 'GET', url });
+      expect(r.statusCode).toBe(400);
+      const l = lastOutcome();
+      expect(l.shopify).toMatchObject({ route: 'app', status: 400, reason });
+      expect(l.msg).toBe(`shopify app 400 ${reason}`);
+    }
+    // For a bad signature the names of the signed parameters are logged (never values) to help diagnosis.
+    expect(lastOutcome().shopify.signedParams).toEqual(['shop', 'timestamp']);
+  });
+
+  it('/shopify/app: a good request logs the redirect with the callback address it sent Shopify to', async () => {
+    const r = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs(signed({ shop, timestamp: '1', host: 'YWRtaW4', embedded: '1' }))}`,
+    });
+    expect(r.statusCode).toBe(302);
+    expect(lastOutcome().shopify).toMatchObject({
+      status: 302,
+      reason: 'redirect_to_authorize',
+      shop,
+      redirectUri: `${API_URL}/shopify/callback`,
+      requestHost: 'api.example.test',
+      publicHost: 'api.example.test',
+      hmacVariant: 'decoded',
+    });
+  });
+
+  it('/shopify/app on another host (the platform address) continues on the public host, once', async () => {
+    const url = `/shopify/app?${qs(signed({ shop, timestamp: '1' }))}`;
+    const first = await hit({ method: 'GET', url, headers: { host: 'http--api--abc.code.run' } });
+    expect(first.statusCode).toBe(302);
+    const next = new URL(String(first.headers.location));
+    expect(`${next.origin}${next.pathname}`).toBe(`${API_URL}/shopify/app/start`);
+    expect(lastOutcome().shopify).toMatchObject({
+      reason: 'hop_to_public_host',
+      seenHost: 'http--api--abc.code.run',
+    });
+    // The signed query is untouched, so Shopify's signature still holds on the next hop, which never hops again.
+    const second = await hit({ method: 'GET', url: `${next.pathname}${next.search}` });
+    expect(second.statusCode).toBe(302);
+    expect(new URL(String(second.headers.location)).host).toBe(shop);
+    const third = await hit({
+      method: 'GET',
+      url: `${next.pathname}${next.search}`,
+      headers: { host: 'http--api--abc.code.run' },
+    });
+    expect(third.statusCode).toBe(302);
+    expect(new URL(String(third.headers.location)).host).toBe(shop);
+  });
+
+  it('/shopify/app opened inside the admin (embedded) breaks out to the top window instead of a blocked redirect', async () => {
+    const r = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs(signed({ shop, timestamp: '1', embedded: '1' }))}`,
+      headers: { 'sec-fetch-dest': 'iframe' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toMatch(/text\/html/);
+    expect(r.headers['set-cookie']).toBeUndefined();
+    expect(r.body).toContain('window.top.location.href=');
+    expect(r.body).toContain(`${API_URL}/shopify/app/start?`);
+    expect(lastOutcome().shopify).toMatchObject({ reason: 'breakout_iframe' });
+  });
+
+  it('/shopify/callback: each failure has its own reason (the browser only sees "state")', async () => {
+    const good = await install(shopName());
+    expect(lastOutcome().shopify).toMatchObject({
+      route: 'callback',
+      status: 302,
+      reason: 'installed',
+    });
+    expect(good.location.searchParams.get('claim')).toBeTruthy();
+
+    const reason = async (over: Parameters<typeof install>[1]) => {
+      await install(shopName(), over);
+      return lastOutcome().shopify.reason;
+    };
+    expect(await reason({ tamper: true })).toBe('hmac_invalid');
+    expect(await reason({ cookie: 'wrong' })).toBe('nonce_mismatch');
+    expect(await reason({ state: 'nonsense' })).toBe('state_invalid');
+    const noCookie = await hit({
+      method: 'GET',
+      url: `/shopify/callback?${qs(signed({ shop, code: 'c', state: signToken({ kind: 'oauth', shop, nonce: 'n' }, SECRET, 600), timestamp: '1' }))}`,
+    });
+    expect(noCookie.statusCode).toBe(302);
+    expect(lastOutcome().shopify.reason).toBe('nonce_cookie_missing');
+    const denied = await hit({
+      method: 'GET',
+      url: `/shopify/callback?${qs(signed({ shop, error: 'access_denied', state: signToken({ kind: 'oauth', shop, nonce: 'n' }, SECRET, 600), timestamp: '1' }))}`,
+      headers: { cookie: 'noctiv_shopify_oauth=n' },
+    });
+    expect(new URL(String(denied.headers.location)).searchParams.get('reason')).toBe('denied');
+    expect(lastOutcome().shopify.reason).toBe('shopify_error');
+  });
+
+  it('the nonce cookie is set for the path the callback is served under (also behind the /api proxy)', async () => {
+    const proxied = buildApp({
+      logger: createLogger({ service: 'x', level: 'silent' }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: keys.publicKey,
+      connectionTestWaitMs: 100,
+      actionSecret: SECRET,
+      appUrl: APP_URL,
+      publicApiUrl: `${APP_URL}/api`,
+      rateLimits: false,
+      shopify: {
+        app: APP,
+        client: createShopifyClient({ baseUrl: mock.baseUrl }),
+        installUrl: null,
+      },
+    });
+    const r = await hit(
+      {
+        method: 'GET',
+        url: `/shopify/app?${qs(signed({ shop, timestamp: '1' }))}`,
+        headers: { host: 'app.example.test', 'x-forwarded-host': 'app.example.test' },
+      },
+      proxied,
+    );
+    expect(r.statusCode).toBe(302);
+    expect(String(r.headers['set-cookie'])).toContain('Path=/api/shopify;');
+    expect(new URL(String(r.headers.location)).searchParams.get('redirect_uri')).toBe(
+      `${APP_URL}/api/shopify/callback`,
+    );
+  });
+
+  it('logs the completion of every request with its URL (redacted) and status, at the normal level', async () => {
+    await hit({ method: 'GET', url: `/shopify/app?${qs(signed({ shop, timestamp: '1' }))}` });
+    const lines = logs
+      .join('')
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+    const done = lines.filter((l) => l.msg === 'request completed').pop();
+    expect(done).toMatchObject({
+      level: 30,
+      req: { method: 'GET', url: '/shopify/app?[REDACTED]' },
+      res: { statusCode: 302 },
+    });
+    expect(typeof done.responseTime).toBe('number');
+  });
+
+  it('with Shopify not configured the routes say so in the log and answer 503', async () => {
+    const lines: string[] = [];
+    const off = buildApp({
+      logger: createLogger({
+        service: 'x',
+        level: 'debug',
+        destination: new Writable({ write: (c, _e, cb) => (lines.push(String(c)), cb()) }),
+      }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: keys.publicKey,
+      connectionTestWaitMs: 100,
+      actionSecret: SECRET,
+      rateLimits: false,
+    });
+    const r = await hit({ method: 'GET', url: '/shopify/app?shop=x.myshopify.com' }, off);
+    expect(r.statusCode).toBe(503);
+    expect(lines.join('')).toContain('"reason":"routes_disabled"');
+  });
+
+  it('none of these lines holds the signature, code, state, cookie or client secret', () => {
+    const all = logs.join('');
+    expect(all).not.toContain(APP.clientSecret);
+    expect(all).not.toMatch(/"hmac":|hmac=[0-9a-f]{20}|state=eyJ|noctiv_shopify_oauth=[0-9a-f]{8}/);
+    for (const s of SECRETISH) expect(all).not.toContain(`${s}${'x'.repeat(40)}`);
+    expect(JSON.stringify(mock.codes)).not.toBe('');
   });
 });

@@ -8,6 +8,7 @@ import {
   normalizeShopDomain,
   ShopifyError,
   signToken,
+  explainQueryHmac,
   verifyQueryHmac,
   verifyToken,
   verifyWebhookHmac,
@@ -220,6 +221,47 @@ describe('signatures', () => {
     );
     expect(verifyQueryHmac({ ...q }, SECRET)).toBe(false);
     expect(verifyQueryHmac({ ...q, hmac: sign(q) }, 'other')).toBe(false);
+  });
+  it('accepts the signature however the signed message was written, and says which way', () => {
+    const q = {
+      shop: SHOP,
+      timestamp: '1790000000',
+      host: 'YWRtaW4/c3RvcmU=',
+      note: '100%&more',
+      embedded: '1',
+    };
+    const mac = (msg: string) => createHmac('sha256', SECRET).update(msg).digest('hex');
+    const names = Object.keys(q).sort() as (keyof typeof q)[];
+    const decoded = names.map((k) => `${k}=${q[k]}`).join('&');
+    const escaped = names
+      .map((k) => `${k}=${q[k].replace(/%/g, '%25').replace(/&/g, '%26')}`)
+      .join('&');
+    const encoded = new URLSearchParams(names.map((k) => [k, q[k]] as [string, string])).toString();
+    expect(explainQueryHmac({ ...q, hmac: mac(decoded) }, SECRET)).toMatchObject({
+      ok: true,
+      variant: 'decoded',
+    });
+    expect(explainQueryHmac({ ...q, hmac: mac(escaped) }, SECRET)).toMatchObject({
+      ok: true,
+      variant: 'escaped',
+    });
+    expect(explainQueryHmac({ ...q, hmac: mac(encoded).toUpperCase() }, SECRET)).toMatchObject({
+      ok: true,
+      variant: 'urlencoded',
+    });
+    // The signed names are reported, never the values; a wrong secret or a missing signature is told apart.
+    const bad = explainQueryHmac({ ...q, hmac: mac(decoded) }, 'other-secret');
+    expect(bad).toMatchObject({ ok: false, reason: 'hmac_invalid', names: [...names] });
+    expect(JSON.stringify(bad)).not.toContain('100%');
+    expect(explainQueryHmac({ ...q }, SECRET)).toMatchObject({ ok: false, reason: 'hmac_missing' });
+    // Extra parameters Shopify may add (id_token, locale, session) are part of the message like any other.
+    const more = { ...q, session: 'abc', locale: 'en' };
+    const msg = Object.keys(more)
+      .sort()
+      .map((k) => `${k}=${more[k as keyof typeof more]}`)
+      .join('&');
+    expect(explainQueryHmac({ ...more, hmac: mac(msg) }, SECRET).ok).toBe(true);
+    expect(explainQueryHmac({ ...q, hmac: mac(msg) }, SECRET).ok).toBe(false);
   });
   it('accepts a webhook signature over the raw body only', () => {
     const body = JSON.stringify({ shop_domain: SHOP });

@@ -70,3 +70,24 @@ If production sets `PUBLIC_API_URL`, use that host instead of `https://app.nocti
   `https://app.noctiv.io/api/shopify/webhooks` (the topic arrives in the `X-Shopify-Topic` header)
 - Embed app in Shopify admin: off. Use legacy install flow: on (the code sends `scope=read_orders` in the authorize URL).
 - `SHOPIFY_INSTALL_URL`: the install link Shopify generates for the app (Dev Dashboard → Distribution). It is not a Noctiv URL.
+
+## Reading the install logs
+
+`/shopify/app` and `/shopify/callback` write one line per request: `shopify <route> <status> <reason>` with a `shopify` object
+(`reason`, `status`, `requestHost`, `publicHost`, `redirectUri`, `signedParams` = parameter names only). No signature, code, state or cookie is logged.
+Every request also logs `request completed` with the URL (query redacted), status and time.
+
+| reason                                                                           | meaning                                                                                                                                           |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `missing_shop`, `bad_shop_domain`                                                | the request did not name a `*.myshopify.com` store                                                                                                |
+| `hmac_missing`, `hmac_invalid`                                                   | not signed by Shopify with this client secret (wrong secret in Northflank, or a hand-made URL)                                                    |
+| `hop_to_public_host`                                                             | Shopify called another host than `PUBLIC_API_URL` (e.g. the platform address); the install continues on the public host so the nonce cookie works |
+| `breakout_iframe`                                                                | the app is set to embedded and Shopify framed it; the page reloads itself on top                                                                  |
+| `redirect_to_authorize`                                                          | OK: sent to Shopify's consent screen with `redirectUri` (this must be in the app's Allowed redirection URLs)                                      |
+| `state_invalid`, `state_shop_mismatch`, `nonce_cookie_missing`, `nonce_mismatch` | callback state or cookie failed (callback opened on another host than the install, or after 10 minutes)                                           |
+| `shopify_error`, `missing_code`, `scopes_rejected`, `exchange_failed`            | Shopify refused, or the granted scopes are not exactly `read_orders`                                                                              |
+| `installed`                                                                      | OK: tokens sealed, the owner links the store in Integrations                                                                                      |
+| `routes_disabled`                                                                | `SHOPIFY_APP_CLIENT_ID/SECRET` or `ACTION_LINK_SECRET` missing on the API                                                                         |
+
+If `/shopify/app` shows `redirect_to_authorize` and `/shopify/callback` never follows, Shopify did not accept `redirectUri`:
+make the Dev Dashboard's Allowed redirection URL identical to it (scheme, host, path).

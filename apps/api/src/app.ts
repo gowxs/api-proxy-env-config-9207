@@ -107,6 +107,17 @@ export function buildApp(
     // Signed action tokens are ~250 characters.
     routerOptions: { maxParamLength: 512 },
     trustProxy: deps.trustProxy ?? false,
+    // Fastify's own lines carry no URL on completion; both lines are written below instead.
+    disableRequestLogging: true,
+  });
+  app.addHook('onRequest', async (req) => {
+    req.log.info({ req }, 'incoming request');
+  });
+  app.addHook('onResponse', async (req, reply) => {
+    req.log.info(
+      { req, res: { statusCode: reply.statusCode }, responseTime: Math.round(reply.elapsedTime) },
+      'request completed',
+    );
   });
 
   if (deps.rateLimits !== false) registerRateLimits(app);
@@ -177,6 +188,23 @@ export function buildApp(
       await full.requireMember(tenantId, req.user!.userId);
       return { configured: false, installUrl: null, staleDays: 14, connection: null };
     });
+  if (!deps.shopify || !deps.actionSecret)
+    for (const path of ['/shopify/app', '/shopify/callback', '/shopify/webhooks'])
+      app.all(path, async (req, reply) => {
+        req.log.warn(
+          {
+            shopify: {
+              route: path,
+              status: 503,
+              reason: 'routes_disabled',
+              hasClient: Boolean(deps.shopify),
+              hasActionSecret: Boolean(deps.actionSecret),
+            },
+          },
+          'shopify routes are off: SHOPIFY_APP_CLIENT_ID/SECRET or ACTION_LINK_SECRET missing',
+        );
+        return reply.code(503).send({ error: 'not configured' });
+      });
   if (deps.woo) woocommerceRoutes(app, { ...full, woo: deps.woo });
   else
     app.get('/v1/tenants/:tenantId/woocommerce', async (req) => {
