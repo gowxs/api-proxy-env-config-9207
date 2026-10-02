@@ -63,7 +63,7 @@ function QuoteList() {
             aria-selected={filter === x.id}
             onClick={() => setFilter(x.id)}
             className={cx(
-              'shrink-0 rounded-full px-3 py-1.5 text-sm',
+              'inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm',
               filter === x.id
                 ? 'bg-indigo-700 text-white'
                 : 'bg-white text-neutral-700 ring-1 ring-neutral-200',

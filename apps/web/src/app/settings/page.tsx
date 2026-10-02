@@ -152,7 +152,7 @@ function SettingsForm({
           <a
             key={x.id}
             href={`#${x.id}`}
-            className="shrink-0 rounded-full bg-white px-3 py-1.5 text-sm text-neutral-700 ring-1 ring-neutral-200 hover:bg-neutral-100"
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full bg-white px-4 text-sm text-neutral-700 ring-1 ring-neutral-200 hover:bg-neutral-100"
           >
             {x.label}
           </a>
@@ -223,7 +223,10 @@ function SettingsForm({
           <p className="text-sm text-neutral-600">
             The mailbox Noctiv reads and replies from, its connection health and test mailboxes.
           </p>
-          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/mailboxes">
+          <Link
+            className="mt-1 inline-flex min-h-11 items-center text-sm text-indigo-700"
+            href="/settings/mailboxes"
+          >
             Manage connected mailboxes →
           </Link>
         </Card>
@@ -344,7 +347,10 @@ function SettingsForm({
           <p className="text-sm text-neutral-600">
             {designInfo(t.email_template).title}: {designInfo(t.email_template).line}
           </p>
-          <Link className="mt-2 inline-block text-sm text-indigo-700" href="/settings/email-design">
+          <Link
+            className="inline-flex min-h-11 items-center text-sm text-indigo-700"
+            href="/settings/email-design"
+          >
             Choose a design and preview it →
           </Link>
         </Card>
@@ -366,7 +372,7 @@ function SettingsForm({
               <label className="flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-1 h-5 w-5"
+                  className="mt-1 h-5 w-5 shrink-0"
                   checked={form.notify_full_text}
                   onChange={(e) => set('notify_full_text', e.target.checked)}
                 />
@@ -381,7 +387,7 @@ function SettingsForm({
               <label className="flex items-start gap-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-1 h-5 w-5"
+                  className="mt-1 h-5 w-5 shrink-0"
                   checked={form.weekly_report_enabled ?? true}
                   onChange={(e) => set('weekly_report_enabled', e.target.checked)}
                 />

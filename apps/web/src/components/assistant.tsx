@@ -791,6 +791,7 @@ export function AssistantLauncher({
     <>
       {!open && (
         <button
+          data-assistant-fab
           className="fixed right-4 bottom-24 z-30 flex h-14 items-center gap-2 rounded-full bg-indigo-700 px-5 font-medium text-white shadow-lg lg:bottom-6"
           onClick={() => setOpen(true)}
           aria-label={w.title}
@@ -850,7 +851,7 @@ export function AssistantLauncher({
               {...(onApplied ? { onApplied } : {})}
             />
           </div>
-          <p className="border-t border-neutral-100 px-4 py-2 text-center text-[11px] text-neutral-400">
+          <p className="border-t border-neutral-100 px-4 py-2 text-center text-xs text-neutral-400">
             {w.cannot}
           </p>
         </div>

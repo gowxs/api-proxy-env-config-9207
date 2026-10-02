@@ -52,9 +52,9 @@ interface Dashboard {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-neutral-50 p-3">
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="text-xs text-neutral-500">{label}</div>
+    <div className="rounded-lg bg-neutral-50 p-3 max-lg:p-4">
+      <div className="text-2xl font-semibold tabular-nums max-lg:text-3xl">{value}</div>
+      <div className="text-xs text-neutral-500 max-lg:text-sm">{label}</div>
     </div>
   );
 }
@@ -136,7 +136,7 @@ function NeedsYou({ data }: { data: Dashboard }) {
             <li key={x.key}>
               <Link
                 href={x.href}
-                className="flex min-h-12 items-center gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50"
+                className="flex min-h-14 items-center gap-3 rounded-lg px-2 py-2 hover:bg-neutral-50 lg:min-h-12"
               >
                 <span
                   className={cx(
@@ -149,7 +149,8 @@ function NeedsYou({ data }: { data: Dashboard }) {
                   <Icon name={x.icon} width={18} height={18} />
                 </span>
                 <span className="min-w-0 flex-1 text-sm">
-                  <span className="font-semibold tabular-nums">{x.n}</span> {x.title}
+                  <span className="text-lg font-semibold tabular-nums lg:text-sm">{x.n}</span>{' '}
+                  {x.title}
                   {x.detail && <span className="block text-xs text-neutral-500">{x.detail}</span>}
                 </span>
                 <span aria-hidden className="text-neutral-400">
@@ -160,6 +161,18 @@ function NeedsYou({ data }: { data: Dashboard }) {
           ))}
         </ul>
       )}
+      {open.length > 0 && (
+        <Link
+          href={open[0]!.href}
+          className="mt-3 flex min-h-12 items-center justify-center rounded-lg bg-indigo-700 px-4 text-base font-semibold text-white hover:bg-indigo-800 lg:hidden"
+        >
+          {open[0]!.key === 'drafts'
+            ? open[0]!.n === 1
+              ? 'Review the draft'
+              : `Review ${open[0]!.n} drafts`
+            : 'See what needs you'}
+        </Link>
+      )}
     </Card>
   );
 }
@@ -168,7 +181,7 @@ function Today({ data }: { data: Dashboard }) {
   const pct = Math.min(100, Math.round((data.budget.usedTokens / data.budget.dailyTokens) * 100));
   return (
     <Card title={`Today (${data.timezone})`}>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-2">
         <Stat label="Emails in" value={data.today.received} />
         <Stat label="Sent automatically" value={data.today.auto_sent} />
         <Stat label="Sent after approval" value={data.today.approved_sent} />
@@ -211,7 +224,10 @@ function MailboxHealth({ data }: { data: Dashboard }) {
     <Card
       title="Mailbox health"
       action={
-        <Link className="text-sm text-indigo-700" href="/settings/mailboxes">
+        <Link
+          className="-my-2 inline-flex min-h-11 items-center text-sm text-indigo-700"
+          href="/settings/mailboxes"
+        >
           Manage
         </Link>
       }
@@ -267,13 +283,13 @@ function HomeView() {
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <Loading />;
   return (
-    <div className="grid gap-4 lg:grid-cols-5">
-      <div className="space-y-4 lg:col-span-3">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+      <div className="min-w-0 space-y-4 lg:col-span-3">
         <NeedsYou data={data} />
         {data.value && <ValueCard tenantId={tenantId} value={data.value} reload={reload} />}
         <Today data={data} />
       </div>
-      <div className="space-y-4 lg:col-span-2">
+      <div className="min-w-0 space-y-4 lg:col-span-2">
         <MailboxHealth data={data} />
         <BillingCard />
       </div>

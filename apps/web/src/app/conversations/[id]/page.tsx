@@ -212,7 +212,10 @@ function DraftCard({
       <p className="mt-1 text-xs text-neutral-500">Your signature is added when it is sent.</p>
       <ErrorText>{error}</ErrorText>
       {decidable && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div
+          data-sticky-actions
+          className="mt-3 flex flex-wrap gap-2 max-lg:sticky max-lg:bottom-[calc(3.75rem+env(safe-area-inset-bottom))] max-lg:z-10 max-lg:-mx-4 max-lg:-mb-4 max-lg:rounded-b-xl max-lg:border-t max-lg:border-amber-200 max-lg:bg-white/95 max-lg:px-4 max-lg:py-3 max-lg:backdrop-blur [&>button]:max-lg:flex-1 [&>button]:max-lg:px-2 [&>button]:max-lg:whitespace-nowrap [&>button:first-child]:max-lg:flex-[2]"
+        >
           <Button
             disabled={busy || !body.trim()}
             onClick={() =>
@@ -367,6 +370,7 @@ function ConversationView() {
   );
   const otherDrafts = data.drafts.filter((d) => !openDrafts.includes(d) && d.status !== 'sent');
   const openEsc = data.escalations.filter((e) => !e.resolved_at);
+  const latestInbound = [...data.messages].reverse().find((m) => m.direction === 'inbound');
 
   return (
     <div className="space-y-4">
@@ -420,6 +424,20 @@ function ConversationView() {
           </Button>
         </Card>
       ))}
+
+      {openDrafts.length > 0 && latestInbound?.body_text && (
+        <details open className="rounded-xl bg-white p-4 ring-1 ring-neutral-200 lg:hidden">
+          <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
+            <span className="min-w-0 flex-1 truncate">
+              {latestInbound.from_name || latestInbound.from_address} wrote
+            </span>
+            <span className="text-xs font-normal text-neutral-500">
+              {fmt(latestInbound.received_at)}
+            </span>
+          </summary>
+          <p className="mt-1 text-sm whitespace-pre-wrap">{latestInbound.body_text}</p>
+        </details>
+      )}
 
       {openDrafts.map((d) => (
         <DraftCard

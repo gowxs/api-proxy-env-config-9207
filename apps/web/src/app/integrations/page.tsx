@@ -107,7 +107,7 @@ function Integrations() {
           action={c.beta ? <Badge tone="blue">Beta</Badge> : <Badge tone="green">On</Badge>}
         >
           <p className="text-sm text-neutral-600">{c.line}</p>
-          <Link className="mt-2 inline-block text-sm text-indigo-700" href={c.href}>
+          <Link className="inline-flex min-h-11 items-center text-sm text-indigo-700" href={c.href}>
             {c.link}
           </Link>
         </Card>

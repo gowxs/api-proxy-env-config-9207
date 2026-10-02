@@ -247,7 +247,7 @@ export function PlanChip({ className }: { className?: string }) {
         trial ? `Free trial ends on ${fmtEnd(billing.trialEndsAt, billing.timezone)}` : undefined
       }
       className={cx(
-        'inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
+        'inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap max-lg:min-h-11 max-lg:px-3',
         tone,
         className,
       )}

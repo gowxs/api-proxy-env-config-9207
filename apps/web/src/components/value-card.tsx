@@ -139,7 +139,10 @@ export function ValueCard({
         <p className="mt-3 text-xs text-neutral-500">
           Hours saved assumes {v.assumptions.minutesPerReply} min per reply and{' '}
           {v.assumptions.minutesPerFollowup} min per follow-up.{' '}
-          <button className="text-indigo-700 underline" onClick={() => setEditing(true)}>
+          <button
+            className="-my-3 inline-flex min-h-11 items-center px-1 text-indigo-700 underline"
+            onClick={() => setEditing(true)}
+          >
             Change
           </button>
         </p>

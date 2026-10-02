@@ -75,7 +75,7 @@ export function KnowledgeAdd({
               setTab(t);
               setDone(null);
             }}
-            className={`min-h-10 rounded-md ${tab === t ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
+            className={`min-h-11 rounded-md ${tab === t ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
           >
             {t === 'website' ? 'Website' : t === 'file' ? 'Files' : 'Note'}
           </button>
@@ -219,7 +219,7 @@ export function SourceList({
                 {timeAgo(s.updated_at)}
                 {s.type !== 'file' && (
                   <button
-                    className="text-indigo-700"
+                    className="inline-flex min-h-11 items-center px-2 text-indigo-700"
                     disabled={busy}
                     onClick={() =>
                       void run(async () => {
@@ -235,7 +235,7 @@ export function SourceList({
                   </button>
                 )}
                 <button
-                  className="text-red-700"
+                  className="inline-flex min-h-11 items-center px-2 text-red-700"
                   disabled={busy}
                   onClick={() => {
                     if (!confirm(`Delete "${s.title}" from the knowledge base?`)) return;

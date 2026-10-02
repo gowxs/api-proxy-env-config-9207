@@ -24,7 +24,10 @@ function Knowledge() {
       <Card
         title="Sources"
         action={
-          <button className="text-sm text-indigo-700" onClick={() => void reload()}>
+          <button
+            className="-my-2 inline-flex min-h-11 items-center px-2 text-sm text-indigo-700"
+            onClick={() => void reload()}
+          >
             Refresh
           </button>
         }

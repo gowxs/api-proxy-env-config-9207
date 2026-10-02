@@ -91,7 +91,7 @@ function Count({ b, small = false }: { b: Badge; small?: boolean }) {
       title={`${b.n} ${b.label}`}
       className={cx(
         'inline-flex items-center justify-center rounded-full font-semibold tabular-nums',
-        small ? 'h-4 min-w-4 px-1 text-[10px]' : 'h-5 min-w-5 px-1.5 text-xs',
+        small ? 'h-[18px] min-w-[18px] px-1 text-xs' : 'h-5 min-w-5 px-1.5 text-xs',
         b.tone === 'amber' ? 'bg-amber-500 text-white' : 'bg-indigo-600 text-white',
       )}
     >
@@ -189,7 +189,7 @@ function Sidebar() {
       <nav aria-label="Main" className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
         {SECTIONS.map((s) => (
           <div key={s.title}>
-            <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-neutral-400 uppercase">
+            <p className="px-3 pb-1.5 text-xs font-semibold tracking-wider text-neutral-400 uppercase">
               {s.title}
             </p>
             <ul className="space-y-0.5">
@@ -355,7 +355,7 @@ function BottomBar() {
   const moreCount = MORE.flatMap((i) => badgesOf(i, nav)).reduce((t, b) => t + b.n, 0);
   const tab = (active: boolean) =>
     cx(
-      'relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px]',
+      'relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs',
       active ? 'font-medium text-indigo-800' : 'text-neutral-500',
     );
   return (
@@ -378,7 +378,7 @@ function BottomBar() {
               <span className="relative">
                 <Icon name={item.icon} width={22} height={22} />
                 {n > 0 && (
-                  <span className="absolute -top-1.5 left-3.5">
+                  <span className="absolute -top-2 left-3">
                     <Count small b={{ n, tone: amber ? 'amber' : 'blue', label: 'waiting' }} />
                   </span>
                 )}
@@ -396,7 +396,7 @@ function BottomBar() {
           <span className="relative">
             <Icon name="more" width={22} height={22} />
             {moreCount > 0 && (
-              <span className="absolute -top-1.5 left-3.5">
+              <span className="absolute -top-2 left-3">
                 <Count small b={{ n: moreCount, tone: 'amber', label: 'waiting' }} />
               </span>
             )}
@@ -445,13 +445,17 @@ function Chrome({ title, children }: { title: string; children: ReactNode }) {
           <Sidebar />
           <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur lg:hidden">
             <div className="flex h-14 items-center gap-3 px-4">
-              <Link href="/home" className="shrink-0" aria-label="Noctiv, home">
+              <Link
+                href="/home"
+                className="flex min-h-11 shrink-0 items-center"
+                aria-label="Noctiv, home"
+              >
                 <Logo height={24} />
               </Link>
               <PlanChip className="ml-auto" />
             </div>
           </header>
-          <div className="pb-24 lg:pb-0 lg:pl-60">
+          <div className="pb-44 lg:pb-0 lg:pl-60">
             <main className="mx-auto max-w-5xl px-4 py-5 lg:px-8 lg:py-8">
               <BillingBanner />
               <DelayedBanner />

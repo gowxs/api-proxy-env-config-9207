@@ -70,7 +70,7 @@ export function Field({
 }
 
 export const inputClass =
-  'block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-base outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100';
+  'block min-h-11 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-base outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100';
 
 const TONES: Record<string, string> = {
   green: 'bg-green-50 text-green-800 ring-green-200',

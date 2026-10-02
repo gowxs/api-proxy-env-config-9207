@@ -4,3 +4,25 @@
 html[data-session] .public-only {
   display: none;
 }
+
+/* Phones: body text is 16 px (Tailwind's text-sm), small print is 13 px; nothing is under 12 px.
+   Desktop keeps the compact scale. */
+@media (max-width: 1023.98px) {
+  :root {
+    --text-xs: 0.8125rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 1rem;
+    --text-sm--line-height: 1.5rem;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+/* A draft's Approve / Edit / Reject bar is pinned above the tab bar: lift the assistant button clear of it. */
+@media (max-width: 1023.98px) {
+  body:has([data-sticky-actions]) [data-assistant-fab] {
+    bottom: calc(9.25rem + env(safe-area-inset-bottom));
+  }
+}

@@ -96,16 +96,27 @@ function LeadRow({
     });
   return (
     <li className="px-4 py-3">
-      <button className="flex w-full items-center gap-2 text-left" onClick={() => setOpen(!open)}>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{lead.name || lead.email}</span>
+      <button
+        className="flex min-h-12 w-full items-start gap-x-2 text-left max-lg:flex-wrap max-lg:py-1 lg:items-center"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span className="min-w-0 flex-1 max-lg:basis-full">
+          <span className="block text-sm font-semibold break-words lg:truncate lg:font-medium">
+            {lead.name || lead.email}
+          </span>
           {lead.name && (
-            <span className="block truncate text-xs text-neutral-500">{lead.email}</span>
+            <span className="block text-xs break-all text-neutral-500 lg:truncate">
+              {lead.email}
+            </span>
           )}
         </span>
         <Badge tone={STAGE_TONE[lead.stage]}>{STAGE_TEXT[lead.stage]}</Badge>
-        <span className="w-16 text-right text-xs text-neutral-500">
+        <span className="text-xs text-neutral-500 max-lg:flex-1 max-lg:self-center lg:w-16 lg:text-right">
           {timeAgo(lead.last_activity_at)}
+        </span>
+        <span aria-hidden className="text-neutral-400 lg:hidden">
+          {open ? '▴' : '▾'}
         </span>
       </button>
       {open && (
@@ -236,7 +247,7 @@ function Leads() {
           <button
             key={s || 'all'}
             onClick={() => setStage(s)}
-            className={`min-h-9 shrink-0 rounded-full px-3 text-sm ring-1 ${stage === s ? 'bg-indigo-700 text-white ring-indigo-700' : 'bg-white text-neutral-700 ring-neutral-300'}`}
+            className={`min-h-11 shrink-0 rounded-full px-4 text-sm ring-1 ${stage === s ? 'bg-indigo-700 text-white ring-indigo-700' : 'bg-white text-neutral-700 ring-neutral-300'}`}
           >
             {s ? STAGE_TEXT[s] : 'All'}
             {s && data?.counts[s] ? ` (${data.counts[s]})` : ''}

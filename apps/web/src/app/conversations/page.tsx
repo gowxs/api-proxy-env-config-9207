@@ -52,7 +52,7 @@ function List() {
                   f === 'all' ? '/conversations' : '/conversations?filter=needs_action',
                 )
               }
-              className={`min-h-10 rounded-md ${filter === f ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
+              className={`min-h-11 rounded-md ${filter === f ? 'bg-white font-medium shadow-sm' : 'text-neutral-600'}`}
             >
               {f === 'needs_action' ? 'Needs you' : 'All'}
             </button>
@@ -83,7 +83,7 @@ function List() {
               <li key={r.id}>
                 <Link
                   href={`/conversations/${r.id}`}
-                  className="block px-4 py-3 hover:bg-neutral-50"
+                  className="block min-h-14 px-4 py-3.5 hover:bg-neutral-50 lg:py-3"
                 >
                   <div className="flex items-center gap-2">
                     {r.unread && (
@@ -93,18 +93,20 @@ function List() {
                         aria-label="Unread in your mailbox"
                       />
                     )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                       {r.customer_name || r.customer_email || 'Unknown sender'}
                     </span>
                     <span className="text-xs text-neutral-500">
                       {timeAgo(r.last_inbound_at ?? r.created_at)}
                     </span>
                   </div>
-                  <div className="truncate text-sm">{r.subject || '(no subject)'}</div>
+                  <div className="line-clamp-2 text-sm lg:truncate">
+                    {r.subject || '(no subject)'}
+                  </div>
                   {r.preview && (
                     <div className="truncate text-xs text-neutral-500">{r.preview}</div>
                   )}
-                  <div className="mt-1 flex flex-wrap gap-1">
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {r.open_escalations > 0 ? (
                       <Badge tone="red">Reply yourself</Badge>
                     ) : r.pending_drafts > 0 ? (

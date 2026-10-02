@@ -475,7 +475,7 @@ function Wizard() {
               className={`h-1.5 rounded-full ${i <= step ? 'bg-indigo-700' : 'bg-neutral-200'}`}
             />
             <span
-              className={`mt-1 block text-[11px] ${i === step ? 'font-medium text-neutral-900' : 'text-neutral-500'}`}
+              className={`mt-1 block text-xs ${i === step ? 'font-medium text-neutral-900' : 'text-neutral-500'}`}
             >
               {s}
             </span>

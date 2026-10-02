@@ -81,7 +81,7 @@ function DocumentList() {
         <span className="text-sm text-neutral-500">
           For goods:{' '}
           <button
-            className="text-indigo-700 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center px-1 text-indigo-700 disabled:opacity-50"
             disabled={a.busy}
             onClick={() => create('delivery_note')}
           >
@@ -89,7 +89,7 @@ function DocumentList() {
           </button>{' '}
           ·{' '}
           <button
-            className="text-indigo-700 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center px-1 text-indigo-700 disabled:opacity-50"
             disabled={a.busy}
             onClick={() => create('cmr')}
           >
@@ -98,7 +98,7 @@ function DocumentList() {
         </span>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <Link className="text-indigo-700" href="/payments">
+        <Link className="inline-flex min-h-11 items-center text-indigo-700" href="/payments">
           Incoming payments →
         </Link>
         {unpaidOnly && (
@@ -118,7 +118,7 @@ function DocumentList() {
             aria-selected={tab === x.id}
             onClick={() => setTab(x.id)}
             className={cx(
-              'shrink-0 rounded-full px-3 py-1.5 text-sm',
+              'inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm',
               tab === x.id
                 ? 'bg-indigo-700 text-white'
                 : 'bg-white text-neutral-700 ring-1 ring-neutral-200',
