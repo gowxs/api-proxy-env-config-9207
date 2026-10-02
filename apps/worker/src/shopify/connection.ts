@@ -1,6 +1,7 @@
 import { withTenant } from '@noctiv/db';
 import {
   accessNeedsRefresh,
+  clientCredentialsExpired,
   openTokens,
   sealTokens,
   ShopifyError,
@@ -19,6 +20,8 @@ export interface ShopifyConnectionDeps {
   shopify: ShopifyClient;
   /** Noctiv's own Shopify app credentials (needed to renew tokens). */
   app: AppCredentials | null;
+  /** DEVELOPMENT ONLY: the one store whose client-credentials token is re-minted when it lapses. */
+  devClientCredentialsShop?: string | null;
 }
 
 interface Row {
@@ -50,6 +53,28 @@ export async function openConnection(
       tokens = openTokens(row.credentials_ciphertext, deps.keys, row.shop_domain);
     } catch {
       return { error: 'auth' } as const;
+    }
+    if (
+      deps.app &&
+      deps.devClientCredentialsShop === row.shop_domain &&
+      clientCredentialsExpired(tokens)
+    ) {
+      // The development store's 24-hour token: ask again with the app's own credentials.
+      try {
+        const next = toStored(await deps.shopify.clientCredentials(row.shop_domain, deps.app));
+        const sealed = sealTokens(next, deps.keys.publicKey, row.shop_domain);
+        await tx`
+          update public.shopify_connections
+          set credentials_ciphertext = ${sealed.ciphertext}, credentials_key_id = ${sealed.keyId},
+              status = 'connected', last_error_code = null, tokens_renewed_at = now()`;
+        return { shop: row.shop_domain, tokens: next };
+      } catch (e) {
+        if (e instanceof ShopifyError && e.code === 'AUTH_FAILED') {
+          await tx`update public.shopify_connections set status = 'error', last_error_code = 'AUTH_FAILED', last_checked_at = now()`;
+          return { error: 'auth' } as const;
+        }
+        return { error: 'unavailable' } as const;
+      }
     }
     if (!accessNeedsRefresh(tokens)) return { shop: row.shop_domain, tokens };
     if (!deps.app || !tokens.refreshToken) return { error: 'auth' } as const;

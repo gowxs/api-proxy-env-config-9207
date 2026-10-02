@@ -111,6 +111,8 @@ export interface MockShopify {
   orders: MockOrder[];
   /** Access scopes the "app" has (default: read_orders only). */
   scopes: string[];
+  /** How the client credentials grant answers: 'ok' (default), or the errors Shopify gives. */
+  clientCredentials: 'ok' | 'not_permitted' | 'not_installed';
   /** Token values the server accepts as an Admin API access token. */
   validTokens: Set<string>;
   /** The app's own credentials (what the token endpoint checks). */
@@ -167,6 +169,7 @@ export async function startMockShopify(
     requests: [],
     orders: devStoreOrders(),
     scopes: ['read_orders'],
+    clientCredentials: 'ok',
     validTokens: new Set([token]),
     app: {
       clientId: opts.clientId ?? 'client-id-1',
@@ -209,6 +212,18 @@ export async function startMockShopify(
           p.get('client_id') === m.app.clientId && p.get('client_secret') === m.app.clientSecret;
         const code = p.get('code');
         const rt = p.get('refresh_token');
+        if (appOk && p.get('grant_type') === 'client_credentials') {
+          if (m.clientCredentials === 'not_permitted')
+            return json(res, 400, {
+              error: 'shop_not_permitted',
+              error_description: 'Client credentials cannot be performed on this shop.',
+            });
+          if (m.clientCredentials === 'not_installed')
+            return json(res, 400, { error: 'app_not_installed' });
+          const at = `shpat_cc_${m.requests.length}`;
+          m.validTokens.add(at);
+          return json(res, 200, { access_token: at, scope: m.scopes.join(','), expires_in: 86399 });
+        }
         const granted =
           appOk &&
           ((code && m.codes.delete(code)) ||

@@ -67,6 +67,7 @@ const app = buildApp({
           },
           client: createShopifyClient(),
           installUrl: config.SHOPIFY_INSTALL_URL ?? null,
+          devShop: config.SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP ?? null,
         },
       }
     : {}),

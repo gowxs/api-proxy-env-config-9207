@@ -186,7 +186,13 @@ export function buildApp(
     app.get('/v1/tenants/:tenantId/shopify', async (req) => {
       const { tenantId } = z.object({ tenantId: z.uuid() }).parse(req.params);
       await full.requireMember(tenantId, req.user!.userId);
-      return { configured: false, installUrl: null, staleDays: 14, connection: null };
+      return {
+        configured: false,
+        installUrl: null,
+        devConnectShop: null,
+        staleDays: 14,
+        connection: null,
+      };
     });
   if (!deps.shopify || !deps.actionSecret)
     for (const path of ['/shopify/app', '/shopify/callback', '/shopify/webhooks'])

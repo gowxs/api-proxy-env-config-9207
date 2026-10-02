@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { factsForModel, toFacts, OrderLookupError } from '@noctiv/orders';
 import {
+  clientCredentialsExpired,
+  toStored,
   accessNeedsRefresh,
   authorizeUrl,
   checkScopes,
@@ -201,6 +203,51 @@ describe('OAuth: code exchange and refresh (expiring offline tokens)', () => {
     expect(accessNeedsRefresh(t('2026-10-02T12:03:00Z'), now)).toBe(true);
     expect(accessNeedsRefresh(t(null), now)).toBe(true);
     expect(accessNeedsRefresh(t(null, null), now)).toBe(false);
+  });
+});
+
+describe('client credentials grant (the development store only)', () => {
+  it('asks with the app id and secret, no code, and gets a 24-hour token without a refresh token', async () => {
+    const t = await client().clientCredentials(SHOP, APP);
+    const req = mock.requests.filter((r) => r.path === '/admin/oauth/access_token').pop()!;
+    const body = new URLSearchParams(req.body);
+    expect(body.get('grant_type')).toBe('client_credentials');
+    expect(body.get('client_id')).toBe(APP.clientId);
+    expect(body.has('code')).toBe(false);
+    expect(t).toMatchObject({ refreshToken: null, scopes: ['read_orders'] });
+    expect(Date.parse(t.accessExpiresAt!) - Date.now()).toBeGreaterThan(23 * 3600_000);
+    expect(clientCredentialsExpired(toStored(t))).toBe(false); // fresh; re-minted only once it lapses
+    expect(
+      clientCredentialsExpired({
+        ...toStored(t),
+        accessExpiresAt: new Date(Date.now() - 1).toISOString(),
+      }),
+    ).toBe(true);
+    expect(
+      clientCredentialsExpired({
+        ...toStored(t),
+        accessExpiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    ).toBe(false);
+  });
+  it("carries Shopify's own error name (for example shop_not_permitted) and a wrong secret is refused", async () => {
+    mock.clientCredentials = 'not_permitted';
+    try {
+      await expect(client().clientCredentials(SHOP, APP)).rejects.toMatchObject({
+        code: 'AUTH_FAILED',
+        detail: 'shop_not_permitted',
+      });
+    } finally {
+      mock.clientCredentials = 'ok';
+    }
+    await expect(
+      client().clientCredentials(SHOP, { ...APP, clientSecret: 'wrong' }),
+    ).rejects.toMatchObject({
+      code: 'AUTH_FAILED',
+    });
+    await expect(client().clientCredentials('evil.example.com', APP)).rejects.toMatchObject({
+      code: 'INVALID_SHOP',
+    });
   });
 });
 

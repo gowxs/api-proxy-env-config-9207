@@ -86,6 +86,7 @@ const shopifyConn = {
   sql: db.sql,
   keys,
   shopify,
+  devClientCredentialsShop: config.SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP ?? null,
   app:
     config.SHOPIFY_APP_CLIENT_ID && config.SHOPIFY_APP_CLIENT_SECRET
       ? { clientId: config.SHOPIFY_APP_CLIENT_ID, clientSecret: config.SHOPIFY_APP_CLIENT_SECRET }

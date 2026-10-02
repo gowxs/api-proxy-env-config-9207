@@ -89,6 +89,12 @@ export function defaultRules(): Rule[] {
       limiter: new RateLimiter({ max: 60, windowMs: 10 * MIN }),
     },
     {
+      name: 'shopify-dev-connect',
+      match: (req) =>
+        post(req) && /\/shopify\/dev-connect$/.test(req.url) ? `shdc:${tenantOf(req.url)}` : null,
+      limiter: new RateLimiter({ max: 10, windowMs: 10 * MIN }),
+    },
+    {
       name: 'connection-test',
       match: (req) =>
         post(req) && /\/connections\/test$/.test(req.url) ? `ct:${tenantOf(req.url)}` : null,

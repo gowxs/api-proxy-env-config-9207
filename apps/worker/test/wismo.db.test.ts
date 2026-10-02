@@ -68,13 +68,20 @@ interface Ctx {
 let n = 0;
 async function setup(
   mode: 'draft_only' | 'auto_send' | 'full_auto',
-  opts: { connect?: boolean; tokens?: Partial<StoredTokens>; classify?: string } = {},
+  opts: {
+    connect?: boolean;
+    tokens?: Partial<StoredTokens>;
+    classify?: string;
+    /** The store is the configured development store (client credentials token, no refresh token). */
+    devCc?: boolean;
+  } = {},
 ): Promise<Ctx> {
   const T = await seedTenant(owner, `wismo-${n++}`, { embeddingAxis: 230 + n });
   await owner`update public.tenants set mode = ${mode}, name = 'Nordlicht Candles' where id = ${T.tenantId}`;
   // The shared fixture seeds a connection per tenant; these tests bring their own.
   await owner`delete from public.shopify_connections where tenant_id = ${T.tenantId}`;
   await owner`delete from public.woocommerce_connections where tenant_id = ${T.tenantId}`;
+  const shop = `wismo${n}-${SHOP}`;
   if (opts.connect !== false) {
     const tokens: StoredTokens = {
       accessToken: [...mock.validTokens][0]!,
@@ -83,7 +90,6 @@ async function setup(
       refreshExpiresAt: new Date(Date.now() + 80 * DAY).toISOString(),
       ...opts.tokens,
     };
-    const shop = `wismo${n}-${SHOP}`;
     const sealed = sealTokens(tokens, keys.publicKey, shop);
     await owner`insert into public.shopify_connections (tenant_id, shop_domain, credentials_ciphertext, credentials_key_id, scopes)
                 values (${T.tenantId}, ${shop}, ${sealed.ciphertext}, ${sealed.keyId}, ${['read_orders']})`;
@@ -94,6 +100,7 @@ async function setup(
     keys,
     shopify: createShopifyClient({ baseUrl: mock.baseUrl }),
     app: APP,
+    devClientCredentialsShop: opts.devCc ? shop : null,
   });
   return {
     T,
@@ -407,6 +414,56 @@ describe('the connection', () => {
       0,
     );
     expect(after!.credentials_ciphertext.toString('latin1')).not.toContain('shpat_minted');
+  });
+});
+
+describe('the development store (client credentials, no refresh token)', () => {
+  const expired = {
+    accessToken: 'shpat_cc_old',
+    refreshToken: null,
+    refreshExpiresAt: null,
+    accessExpiresAt: new Date(Date.now() - 1000).toISOString(),
+  };
+  const exchanges = () =>
+    mock.requests.filter((r) => r.path === '/admin/oauth/access_token').length;
+
+  it('a lapsed 24-hour token is minted again with the app credentials, once, and saved sealed', async () => {
+    const c = await setup('auto_send', { devCc: true, tokens: expired });
+    const x0 = exchanges();
+    const [a, b] = await Promise.all([
+      c.ask({ text: 'Where is order #1002?' }),
+      c.ask({ text: 'Where is order #1003?' }),
+    ]);
+    expect([a.outcome.status, b.outcome.status]).toEqual(['auto_send', 'auto_send']);
+    expect(exchanges() - x0).toBe(1);
+    const grant = mock.requests.filter((r) => r.path === '/admin/oauth/access_token').pop()!;
+    expect(grant.body).toContain('grant_type=client_credentials');
+    const [row] = await owner<
+      { credentials_ciphertext: Buffer }[]
+    >`select credentials_ciphertext from public.shopify_connections where tenant_id = ${c.T.tenantId}`;
+    expect(row!.credentials_ciphertext.toString('latin1')).not.toContain('shpat_cc_');
+  });
+
+  it('any other store with a lapsed token and no refresh token is never re-minted: it needs attention', async () => {
+    const c = await setup('auto_send', { tokens: expired }); // not the configured development store
+    const x0 = exchanges();
+    const { outcome } = await c.ask({ text: 'Where is order #1002?' });
+    expect(outcome.status).toBe('escalated');
+    expect(exchanges()).toBe(x0);
+  });
+
+  it('when Shopify refuses (the app is not installed) the connection is marked and the e-mail goes to the owner', async () => {
+    const c = await setup('auto_send', { devCc: true, tokens: expired });
+    mock.clientCredentials = 'not_installed';
+    try {
+      const { outcome } = await c.ask({ text: 'Where is order #1002?' });
+      expect(outcome.status).toBe('escalated');
+    } finally {
+      mock.clientCredentials = 'ok';
+    }
+    const [conn] =
+      await owner`select status, last_error_code from public.shopify_connections where tenant_id = ${c.T.tenantId}`;
+    expect(conn).toMatchObject({ status: 'error', last_error_code: 'AUTH_FAILED' });
   });
 });
 

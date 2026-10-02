@@ -110,3 +110,16 @@ the callback. Things to check, in this order:
 2. Does the Dev Dashboard version (active) hold exactly `application_url`, `redirect_urls` and `scopes = read_orders` from the log's `authorize` line?
 3. Is the store in the same organization as the app, and does the staff account you are logged in as own the store (not a collaborator without app permission)?
 4. Is a distribution method needed for this app to be installed on this store? The Dev Dashboard decides; Noctiv does not pick it.
+
+## Development store without the consent screen (client credentials) — DEVELOPMENT ONLY
+
+If the consent screen never appears (Shopify's authorize step returns to the admin home), the one development store that is in the **same
+Shopify organization** as the app can be connected with the
+[client credentials grant](https://shopify.dev/docs/apps/build/authentication-authorization/client-credentials-grant): the app's own id and secret
+are exchanged for a 24-hour token, and the worker mints a new one when it lapses. Shopify's page lists "You've installed your app on your store" as
+a requirement, so if the app cannot be installed this may be refused; the refusal reason (`shop_not_permitted`, …) is shown to the owner.
+
+Set on **both** the API and the worker (never anywhere a merchant could choose a shop): `SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP=noctiv-nvojutjr.myshopify.com`
+(together with `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET`). Then Integrations → Shopify shows a "Development only" box with
+**Connect the development store**. The store is never taken from the request, only this one store can be connected this way, and merchants
+are unaffected (they use the install flow). Remove the variable to switch it off.

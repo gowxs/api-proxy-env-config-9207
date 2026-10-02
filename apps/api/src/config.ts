@@ -42,6 +42,14 @@ export const apiEnvSchema = z
     SHOPIFY_APP_CLIENT_ID: z.string().min(4).optional(),
     SHOPIFY_APP_CLIENT_SECRET: z.string().min(8).optional(),
     SHOPIFY_INSTALL_URL: z.url().optional(),
+    /**
+     * DEVELOPMENT ONLY. One development store (same Shopify organization as the app) that may be
+     * connected with the client credentials grant instead of the consent screen. Never a merchant.
+     */
+    SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/)
+      .optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
     /** Development and tests only: a fake Google Calendar (no network). */
@@ -66,6 +74,10 @@ export const apiEnvSchema = z
   .refine((e) => Boolean(e.SHOPIFY_APP_CLIENT_ID) === Boolean(e.SHOPIFY_APP_CLIENT_SECRET), {
     path: ['SHOPIFY_APP_CLIENT_SECRET'],
     message: 'set both SHOPIFY_APP_CLIENT_ID and SHOPIFY_APP_CLIENT_SECRET, or neither',
+  })
+  .refine((e) => !e.SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP || Boolean(e.SHOPIFY_APP_CLIENT_ID), {
+    path: ['SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP'],
+    message: 'needs SHOPIFY_APP_CLIENT_ID and SHOPIFY_APP_CLIENT_SECRET',
   })
   .refine((e) => Boolean(e.GOOGLE_OAUTH_CLIENT_ID) === Boolean(e.GOOGLE_OAUTH_CLIENT_SECRET), {
     path: ['GOOGLE_OAUTH_CLIENT_SECRET'],

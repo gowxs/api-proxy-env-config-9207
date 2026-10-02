@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { createLogger, generateSealingKeyPair } from '@noctiv/core';
 import { seedTenant, type SeededTenant } from '@noctiv/db/testing';
-import { createShopifyClient, signToken } from '@noctiv/shopify';
+import { createShopifyClient, openTokens, signToken } from '@noctiv/shopify';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { startMockShopify } from '../../../packages/shopify/test/mock-shopify.ts';
@@ -891,5 +891,105 @@ describe('the log shows exactly where Shopify was sent', () => {
     expect(line).not.toContain(state);
     expect(line).not.toContain('secret=nope');
     expect(line).not.toContain(APP.clientSecret);
+  });
+});
+
+describe('DEVELOPMENT ONLY: connecting the configured development store with client credentials', () => {
+  const DEV = 'noctiv-dev-cc.myshopify.com';
+  let devApp: ReturnType<typeof buildApp>;
+  let t: SeededTenant;
+  beforeAll(async () => {
+    devApp = buildApp({
+      logger: createLogger({ service: 'x', level: 'silent' }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: keys.publicKey,
+      connectionTestWaitMs: 100,
+      actionSecret: SECRET,
+      appUrl: APP_URL,
+      publicApiUrl: API_URL,
+      rateLimits: false,
+      shopify: {
+        app: APP,
+        client: createShopifyClient({ baseUrl: mock.baseUrl }),
+        installUrl: null,
+        devShop: DEV,
+      },
+    });
+    t = await seedBare('shopify-dev', 245);
+  });
+  const post = async (userId: string, tenantId: string, body: unknown = {}, a = devApp) =>
+    a.inject({
+      method: 'POST',
+      url: `/v1/tenants/${tenantId}/shopify/dev-connect`,
+      headers: { authorization: `Bearer ${await auth.token(userId)}` },
+      payload: body as object,
+    });
+
+  it('the status tells the app which store it is (and nothing for a normal setup)', async () => {
+    const on = await devApp.inject({
+      method: 'GET',
+      url: `/v1/tenants/${t.tenantId}/shopify`,
+      headers: { authorization: `Bearer ${await auth.token(t.userId)}` },
+    });
+    expect(on.json().devConnectShop).toBe(DEV);
+    const off = await call('GET', `/v1/tenants/${A.tenantId}/shopify`, A.userId);
+    expect(off.json.devConnectShop).toBeNull();
+  });
+
+  it('without the flag the route does not exist for this business', async () => {
+    const r = await post(A.userId, A.tenantId, {}, app);
+    expect(r.statusCode).toBe(404);
+  });
+
+  it('gets a token with the app credentials, seals it (no refresh token) and links the store', async () => {
+    const r = await post(t.userId, t.tenantId);
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ ok: true, shopDomain: DEV });
+    const grant = mock.requests.filter((x) => x.path === '/admin/oauth/access_token').pop()!;
+    expect(grant.body).toContain('grant_type=client_credentials');
+    const [c] = await owner<{ shop_domain: string; credentials_ciphertext: Buffer }[]>`
+      select shop_domain, credentials_ciphertext from public.shopify_connections where tenant_id = ${t.tenantId}`;
+    expect(c!.shop_domain).toBe(DEV);
+    expect(c!.credentials_ciphertext.toString('latin1')).not.toContain('shpat_cc_');
+    const tokens = openTokens(c!.credentials_ciphertext, keys, DEV);
+    expect(tokens).toMatchObject({ refreshToken: null });
+    expect(tokens.accessToken).toMatch(/^shpat_cc_/);
+    expect(Date.parse(tokens.accessExpiresAt!) - Date.now()).toBeGreaterThan(23 * 3600_000);
+    expect(JSON.stringify(r.json())).not.toContain('shpat_cc_');
+  });
+
+  it('the store comes from the server setting, never from the request', async () => {
+    const other = await seedBare('shopify-dev-2', 246);
+    const r = await post(other.userId, other.tenantId, { shop: 'victim.myshopify.com' });
+    expect(r.statusCode).toBe(409); // the configured store is linked to another business already
+    expect(
+      await owner`select 1 from public.shopify_connections where shop_domain = 'victim.myshopify.com'`,
+    ).toHaveLength(0);
+  });
+
+  it('only a member of the business can use it', async () => {
+    expect((await post(B.userId, t.tenantId)).statusCode).toBe(403);
+  });
+
+  it.each([
+    ['not_permitted', /shop_not_permitted/],
+    ['not_installed', /app_not_installed/],
+  ] as const)('says why Shopify refused (%s) and stores nothing', async (mode, text) => {
+    const fresh = await seedBare(`shopify-dev-${mode.replace(/_/g, '-')}`, 247);
+    await owner`delete from public.shopify_connections where shop_domain = ${DEV}`;
+    mock.clientCredentials = mode;
+    try {
+      const r = await post(fresh.userId, fresh.tenantId);
+      expect(r.statusCode).toBe(422);
+      expect(r.json().error).toMatch(text);
+      expect(r.json().error).toMatch(/same organization/);
+    } finally {
+      mock.clientCredentials = 'ok';
+    }
+    expect(
+      await owner`select 1 from public.shopify_connections where tenant_id = ${fresh.tenantId}`,
+    ).toHaveLength(0);
   });
 });

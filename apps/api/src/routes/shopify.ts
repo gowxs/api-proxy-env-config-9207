@@ -31,6 +31,8 @@ export interface ShopifyAppDeps {
   client: ShopifyClient;
   /** Where merchants install from (the App Store listing or the install link); shown as "Connect Shopify". */
   installUrl: string | null;
+  /** DEVELOPMENT ONLY: the one store that may be connected with client credentials (no consent screen). */
+  devShop?: string | null;
 }
 
 export interface ShopifyRouteDeps extends AppDeps {
@@ -83,6 +85,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
       return {
         configured: true,
         installUrl: deps.shopify.installUrl,
+        devConnectShop: deps.shopify.devShop ?? null,
         staleDays: t?.days ?? 14,
         connection: c
           ? {
@@ -133,6 +136,60 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
                          ${tx.json({ revoked: false })})`;
     });
     return { status: 'disconnected', revoked: false };
+  });
+
+  /**
+   * DEVELOPMENT ONLY. For the one configured development store (same organization as the app): a token from
+   * the client credentials grant instead of the consent screen, sealed and linked like an install. The store
+   * is never taken from the request, so this cannot be used for a merchant's store.
+   */
+  app.post('/v1/tenants/:tenantId/shopify/dev-connect', async (req) => {
+    const { tenantId } = tenantParams.parse(req.params);
+    await deps.requireMember(tenantId, req.user!.userId);
+    const shop = deps.shopify.devShop;
+    if (!shop) throw new HttpError(404, 'Not available.');
+    let tokens;
+    try {
+      tokens = await client.clientCredentials(shop, creds);
+      checkScopes(tokens.scopes);
+    } catch (e) {
+      const code: ShopifyErrorCode = e instanceof ShopifyError ? e.code : 'UNAVAILABLE';
+      const detail = e instanceof ShopifyError ? e.detail : undefined;
+      req.log.warn(
+        {
+          shopify: {
+            route: 'dev-connect',
+            reason: 'client_credentials_failed',
+            shopifyCode: code,
+            shopifyError: detail ?? null,
+            status: e instanceof ShopifyError ? (e.status ?? null) : null,
+          },
+        },
+        'shopify dev-connect failed',
+      );
+      throw new HttpError(
+        422,
+        code === 'AUTH_FAILED'
+          ? `Shopify refused the client credentials${detail ? ` (${detail})` : ''}. The app must be installed on ${shop} and belong to the same organization.`
+          : (MESSAGES[code] ?? MESSAGES.UNAVAILABLE!),
+      );
+    }
+    const sealed = sealTokens(toStored(tokens), deps.credentialsPublicKey, shop);
+    await deps.sql`select app.shopify_install_store(${shop}, ${sealed.ciphertext}, ${sealed.keyId}, ${tokens.scopes})`;
+    const [r] = await deps.sql<{ r: string }[]>`
+      select app.shopify_install_claim(${shop}, ${tenantId}, ${req.user!.userId}) as r`;
+    if (r?.r === 'forbidden') throw new HttpError(403, 'Only the owner can connect a store.');
+    if (r?.r === 'taken')
+      throw new HttpError(409, 'That store is already connected to another Noctiv account.');
+    if (r?.r !== 'ok') throw new HttpError(404, 'Could not link the store. Try again.');
+    await withTenant(deps.sql, tenantId, (tx) =>
+      enqueue(tx, { tenantId, queue: 'shopify.test', payload: {}, maxAttempts: 1 }),
+    );
+    req.log.info(
+      { shopify: { route: 'dev-connect', reason: 'connected', shop } },
+      'shopify dev-connect connected',
+    );
+    return { ok: true, shopDomain: shop };
   });
 
   /** After installing, the owner links the store to this business. */

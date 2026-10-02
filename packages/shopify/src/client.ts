@@ -36,11 +36,14 @@ export type ShopifyErrorCode =
 export class ShopifyError extends Error {
   readonly code: ShopifyErrorCode;
   readonly status: number | undefined;
-  constructor(code: ShopifyErrorCode, status?: number) {
-    super(`shopify: ${code}${status ? ` (HTTP ${status})` : ''}`);
+  /** Shopify's own error name from a token request (for example "shop_not_permitted"); never a secret. */
+  readonly detail: string | undefined;
+  constructor(code: ShopifyErrorCode, status?: number, detail?: string) {
+    super(`shopify: ${code}${status ? ` (HTTP ${status})` : ''}${detail ? ` ${detail}` : ''}`);
     this.name = 'ShopifyError';
     this.code = code;
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -159,6 +162,12 @@ export interface ShopifyClient {
   /** Refresh token → a new access token AND a new refresh token (the old one is spent). */
   refresh(shop: string, app: AppCredentials, refreshToken: string): Promise<TokenSet>;
   shopInfo(shop: string, accessToken: string): Promise<{ shopName: string; scopes: string[] }>;
+  /**
+   * Client credentials grant: the app's own id and secret for a token (24 hours, no refresh token).
+   * Shopify only allows it for stores in the same organization as the app and after the app is installed.
+   * Used for one configured development store, never for merchants.
+   */
+  clientCredentials(shop: string, app: AppCredentials): Promise<TokenSet>;
   /** Uninstalls the app from the store, which revokes the token (best effort). */
   revoke(shop: string, accessToken: string): Promise<void>;
   /** The read-only order lookup for this store, in the neutral shape. */
@@ -213,8 +222,15 @@ export function createShopifyClient(opts: ClientOptions = {}): ShopifyClient {
       headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
       body: new URLSearchParams(form).toString(),
     });
-    if (res.status >= 400 && res.status < 500 && res.status !== 429)
-      throw new ShopifyError('AUTH_FAILED', res.status);
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+      const body = obj(await res.json().catch(() => null));
+      const name = str(body?.error) ?? str(body?.error_description);
+      throw new ShopifyError(
+        'AUTH_FAILED',
+        res.status,
+        name && /^[\w .,:'-]{1,100}$/.test(name) ? name : undefined,
+      );
+    }
     if (!res.ok)
       throw new ShopifyError(res.status === 429 ? 'RATE_LIMITED' : 'UNAVAILABLE', res.status);
     const j = obj(await res.json().catch(() => null));
@@ -285,6 +301,12 @@ export function createShopifyClient(opts: ClientOptions = {}): ShopifyClient {
         client_secret: app.clientSecret,
         code,
         expiring: '1',
+      }),
+    clientCredentials: (shop, app) =>
+      tokens(shop, {
+        grant_type: 'client_credentials',
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
       }),
     refresh: (shop, app, refreshToken) =>
       tokens(shop, {

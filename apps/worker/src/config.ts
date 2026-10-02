@@ -46,6 +46,11 @@ export const workerEnvSchema = z
     /** Noctiv's Shopify app (Partner Dashboard): needed to renew the expiring tokens of connected stores. */
     SHOPIFY_APP_CLIENT_ID: z.string().min(4).optional(),
     SHOPIFY_APP_CLIENT_SECRET: z.string().min(8).optional(),
+    /** DEVELOPMENT ONLY: the one store whose 24-hour client-credentials token is renewed with the app's own credentials. */
+    SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$/)
+      .optional(),
     /** Admin alerts (disconnects, budget). Without it admin notifications fail as 'no_recipient'. */
     ADMIN_EMAIL: z.email().optional(),
     /** Public base URLs used in notification links. */

@@ -64,3 +64,14 @@ export function accessNeedsRefresh(t: StoredTokens, now = Date.now()): boolean {
     (t.accessExpiresAt === null || Date.parse(t.accessExpiresAt) - 300_000 <= now)
   );
 }
+
+/**
+ * A client-credentials token (24 hours, no refresh token) that has lapsed or is about to: it is
+ * renewed with the app's own credentials, but only for the one configured development store.
+ */
+export function clientCredentialsExpired(t: StoredTokens, now = Date.now()): boolean {
+  return (
+    t.refreshToken === null &&
+    (t.accessExpiresAt === null || Date.parse(t.accessExpiresAt) - 300_000 <= now)
+  );
+}

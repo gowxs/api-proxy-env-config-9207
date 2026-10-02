@@ -16,6 +16,8 @@ import { api } from '@/lib/api';
 export interface ShopifyStatus {
   configured: boolean;
   installUrl: string | null;
+  /** DEVELOPMENT ONLY: the one development store that can be connected without the consent screen. */
+  devConnectShop?: string | null;
   staleDays: number;
   connection: null | {
     shopDomain: string;
@@ -85,6 +87,7 @@ export function ShopifyCard({
   const link = useAction();
   const test = useAction();
   const off = useAction();
+  const dev = useAction();
   const [tested, setTested] = useState<string | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
   const claimed = useRef(false);
@@ -231,6 +234,31 @@ export function ShopifyCard({
               </p>
             )}
           </>
+        )}
+        {status.devConnectShop && (!c || c.status === 'error') && (
+          <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+            <p>
+              <b>Development only.</b> Connect the test store <b>{status.devConnectShop}</b> with
+              the app&apos;s own credentials, without the consent screen. It works only for a store
+              in the same Shopify organization as the app, and never for a merchant.
+            </p>
+            <ErrorText>{dev.error}</ErrorText>
+            <Button
+              variant="secondary"
+              disabled={dev.busy}
+              onClick={() =>
+                void dev.run(async () => {
+                  await api(`/v1/tenants/${tenantId}/shopify/dev-connect`, {
+                    method: 'POST',
+                    body: {},
+                  });
+                  await reload();
+                })
+              }
+            >
+              {dev.busy ? 'Connecting…' : 'Connect the development store'}
+            </Button>
+          </div>
         )}
       </div>
     </Card>
