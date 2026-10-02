@@ -27,3 +27,15 @@ jobs:
       # Starts a supabase/postgres container via testcontainers (Docker is available on ubuntu runners).
       - run: pnpm test:db
       - run: pnpm --filter @noctiv/web build
+
+  # Builds the production image from the repository Dockerfile and boots the API and the worker from it,
+  # so a workspace package missing from the image fails here and not in production.
+  docker-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: scripts/docker-smoke.sh

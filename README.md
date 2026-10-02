@@ -302,3 +302,7 @@ To ingest one source by hand (until step 7 adds the job queue):
 
 Run a real mailbox check in development with `MAIL_ALLOW_INSECURE=false`; GreenMail needs `true`.
 Hand-picked real-model pipeline run: `LIVE_PIPELINE=1 pnpm test:live apps/worker` (free-tier quota applies).
+
+## Production image
+
+One `Dockerfile` serves the API and the worker (`SERVICE=api|worker`). It copies every workspace package by pattern, so new packages need no Dockerfile change. `pnpm docker:smoke` (also a CI job) builds it and boots both services with fake values; run it before pushing anything that adds a package or an import.

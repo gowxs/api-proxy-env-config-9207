@@ -26,7 +26,8 @@
     "services:up": "docker compose -f docker/compose.dev.yml up -d",
     "services:down": "docker compose -f docker/compose.dev.yml down -v",
     "test:live": "node --env-file-if-exists=.env ./node_modules/vitest/vitest.mjs run --project live",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "docker:smoke": "scripts/docker-smoke.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
