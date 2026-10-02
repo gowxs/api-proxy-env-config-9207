@@ -78,6 +78,8 @@ export interface AppDeps {
   bookingWaitMs?: number;
   /** Noctiv's Shopify app (order lookup). Without it the Shopify routes are off. */
   shopify?: ShopifyAppDeps;
+  /** Public, non-secret switches shown by GET /healthz, to tell which build and settings are live. */
+  features?: Record<string, boolean>;
   /** WooCommerce REST client (order lookup). Without it the WooCommerce routes are off. */
   woo?: WooClient;
 }
@@ -133,7 +135,10 @@ export function buildApp(
     },
   );
 
-  app.get('/healthz', async () => ({ status: 'ok' }));
+  app.get('/healthz', async () => ({
+    status: 'ok',
+    ...(deps.features ? { features: deps.features } : {}),
+  }));
   healthRoutes(app, deps.workerHealth ?? (() => readWorkerHealth(deps.sql)));
 
   app.get('/readyz', async (_req, reply) => {

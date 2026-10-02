@@ -58,6 +58,10 @@ const app = buildApp({
     : {}),
   ...(devAuth ? { devRoutes: devAuth.routes } : {}),
   woo: createWooClient(),
+  features: {
+    shopifyRoutes: Boolean(config.SHOPIFY_APP_CLIENT_ID && config.SHOPIFY_APP_CLIENT_SECRET),
+    shopifyDevConnect: Boolean(config.SHOPIFY_DEV_CLIENT_CREDENTIALS_SHOP),
+  },
   ...(config.SHOPIFY_APP_CLIENT_ID && config.SHOPIFY_APP_CLIENT_SECRET
     ? {
         shopify: {

@@ -154,13 +154,27 @@ async function customerAsks(subject: string, messageId: string): Promise<string>
 
 /** The owner's notification email for a draft, with its action paths. */
 async function ownerEmailFor(draftId: string) {
-  await deliver();
-  const [n] = await owner<{ id: string; status: string }[]>`
-    select id, status from public.notifications where tenant_id = ${tenantId} and kind = 'draft_ready'
-      and payload->>'draftId' = ${draftId}`;
-  expect(n!.status).toBe('sent');
+  const row = async () =>
+    (
+      await owner<{ id: string; status: string; error: string | null; attempts: number }[]>`
+        select id, status, error, attempts from public.notifications where tenant_id = ${tenantId} and kind = 'draft_ready'
+          and payload->>'draftId' = ${draftId}`
+    )[0]!;
+  // A first send to the test mail server can fail transiently (the notification then waits for its
+  // backoff); try again right away a few times instead of waiting a minute.
+  for (let i = 0; i < 4; i++) {
+    await deliver();
+    if ((await row()).status === 'sent') break;
+    await owner`update public.notifications set next_attempt_at = now() where id = ${(await row()).id} and status = 'pending'`;
+  }
+  const done = await row();
+  // On failure the message shows the stored error code (never a secret) instead of just "pending".
+  expect(
+    done.status,
+    JSON.stringify({ status: done.status, error: done.error, attempts: done.attempts }),
+  ).toBe('sent');
   const mail = (await readFolder(gm, U.customer)).find(
-    (m) => header(m.raw, 'Message-ID') === `<notify.${n!.id}@noctiv.test>`,
+    (m) => header(m.raw, 'Message-ID') === `<notify.${done.id}@noctiv.test>`,
   );
   const text = (await parseInbound(Buffer.from(mail!.raw))).text;
   const path = (label: string) =>

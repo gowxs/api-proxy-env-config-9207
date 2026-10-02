@@ -938,6 +938,25 @@ describe('DEVELOPMENT ONLY: connecting the configured development store with cli
     expect(off.json.devConnectShop).toBeNull();
   });
 
+  it('/healthz says which switches are live (public, no values)', async () => {
+    const withFeatures = buildApp({
+      logger: createLogger({ service: 'x', level: 'silent' }),
+      sql: apiSql,
+      checkDatabase: async () => true,
+      verifyToken: createTokenVerifier({ jwks: auth.jwks }),
+      credentialsPublicKey: keys.publicKey,
+      connectionTestWaitMs: 100,
+      rateLimits: false,
+      features: { shopifyRoutes: true, shopifyDevConnect: true },
+    });
+    const r = await withFeatures.inject({ method: 'GET', url: '/healthz' });
+    expect(r.json()).toEqual({
+      status: 'ok',
+      features: { shopifyRoutes: true, shopifyDevConnect: true },
+    });
+    expect((await app.inject({ method: 'GET', url: '/healthz' })).json()).toEqual({ status: 'ok' });
+  });
+
   it('without the flag the route does not exist for this business', async () => {
     const r = await post(A.userId, A.tenantId, {}, app);
     expect(r.statusCode).toBe(404);
