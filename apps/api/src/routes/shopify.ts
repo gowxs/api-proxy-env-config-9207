@@ -216,8 +216,13 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
         outcome(req, 'app', 400, 'bad_shop_domain', { shop: shop.slice(0, 80) });
         return reply.code(400).send({ error: 'invalid request' });
       }
+      // Starting the install only sends the merchant to Shopify's consent screen, so a request that
+      // names a valid store is enough (the Dev Dashboard's "Install app" sends just ?shop=). If a
+      // signature IS present it must be right. Nothing is stored or linked here: the callback, where
+      // tokens are involved, is always fully verified.
+      const signed = typeof req.query.hmac === 'string';
       const { h, extra } = hmacInfo(req.query);
-      if (!h.ok) {
+      if (signed && !h.ok) {
         outcome(req, 'app', 400, h.reason, { shop, ...extra });
         return reply.code(400).send({ error: 'invalid request' });
       }
@@ -230,7 +235,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
         // Shopify was pointed at another address than the one the callback is served from (for
         // example the platform's own host name). The nonce cookie only works on one host, so the
         // whole install continues on the public one (the signed query is unchanged).
-        outcome(req, 'app', 302, 'hop_to_public_host', { shop, seenHost, ...extra });
+        outcome(req, 'app', 302, 'hop_to_public_host', { shop, seenHost, signed, ...extra });
         return reply
           .code(302)
           .header('location', `${publicBase}/shopify/app/start?${query}`)
@@ -243,7 +248,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
       if (dest === 'iframe' || dest === 'frame') {
         // Opened inside the Shopify admin (the app is set to embedded): the consent screen cannot be
         // framed and the nonce cookie must be set in a top-level visit, so reload this URL on top.
-        outcome(req, 'app', 200, 'breakout_iframe', { shop, ...extra, redirectUri });
+        outcome(req, 'app', 200, 'breakout_iframe', { shop, signed, ...extra, redirectUri });
         return reply
           .code(200)
           .header('content-type', 'text/html; charset=utf-8')
@@ -253,6 +258,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
       }
       outcome(req, 'app', 302, 'redirect_to_authorize', {
         shop,
+        signed,
         ...extra,
         redirectUri,
         embeddedParam: req.query.embedded ?? null,

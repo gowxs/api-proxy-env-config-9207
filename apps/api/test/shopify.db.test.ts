@@ -183,7 +183,6 @@ describe('Shopify opens our app URL', () => {
     expect(String(r.headers['set-cookie'])).toMatch(/Secure/);
   });
   it.each([
-    ['no signature', (q: Record<string, string>) => qs(q)],
     ['a forged signature', (q: Record<string, string>) => qs({ ...q, hmac: 'a'.repeat(64) })],
     [
       'a signature for another shop',
@@ -567,14 +566,13 @@ describe('every request to the install routes leaves one line saying what happen
     return lines[lines.length - 1]!;
   };
 
-  it('/shopify/app: missing shop, bad domain, missing and wrong signature', async () => {
+  it('/shopify/app: missing shop, bad domain, wrong signature', async () => {
     const cases: [string, string][] = [
       [`/shopify/app?${qs(signed({ timestamp: '1' }))}`, 'missing_shop'],
       [
         `/shopify/app?${qs(signed({ shop: 'evil.example.com', timestamp: '1' }))}`,
         'bad_shop_domain',
       ],
-      [`/shopify/app?${qs({ shop, timestamp: '1' })}`, 'hmac_missing'],
       [`/shopify/app?${qs({ shop, timestamp: '1', hmac: 'ab'.repeat(32) })}`, 'hmac_invalid'],
     ];
     for (const [url, reason] of cases) {
@@ -584,6 +582,20 @@ describe('every request to the install routes leaves one line saying what happen
       expect(l.shopify).toMatchObject({ route: 'app', status: 400, reason });
       expect(l.msg).toBe(`shopify app 400 ${reason}`);
     }
+    // A signature that is present but wrong is refused, whatever else the request holds.
+    const wrong = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs({ shop, timestamp: '1', hmac: 'ab'.repeat(32) })}`,
+    });
+    expect(wrong.statusCode).toBe(400);
+    expect(lastOutcome().shopify.reason).toBe('hmac_invalid');
+    const tampered = signed({ shop, timestamp: '1' });
+    const t = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs({ ...tampered, shop: 'other-store.myshopify.com' })}`,
+    });
+    expect(t.statusCode).toBe(400);
+    expect(lastOutcome().shopify.reason).toBe('hmac_invalid');
     // For a bad signature the names of the signed parameters are logged (never values) to help diagnosis.
     expect(lastOutcome().shopify.signedParams).toEqual(['shop', 'timestamp']);
   });
@@ -749,5 +761,96 @@ describe('every request to the install routes leaves one line saying what happen
     expect(all).not.toMatch(/"hmac":|hmac=[0-9a-f]{20}|state=eyJ|noctiv_shopify_oauth=[0-9a-f]{8}/);
     for (const s of SECRETISH) expect(all).not.toContain(`${s}${'x'.repeat(40)}`);
     expect(JSON.stringify(mock.codes)).not.toBe('');
+  });
+});
+
+describe('starting the install with only ?shop= (the Dev Dashboard "Install app" link)', () => {
+  const shop = 'noctiv-nvojutjr.myshopify.com';
+  const lastOutcome = () => {
+    const l = logs
+      .join('')
+      .split('\n')
+      .filter((x) => x.includes('"shopify":{'))
+      .pop()!;
+    return JSON.parse(l) as { shopify: Record<string, unknown> };
+  };
+  const rows = async () => ({
+    installs: (await owner`select 1 from app.shopify_installs`).length,
+    conns: (await owner`select 1 from public.shopify_connections`).length,
+  });
+
+  it('redirects to the consent screen with a state and a cookie, and changes nothing', async () => {
+    const before = await rows();
+    const r = await hit({ method: 'GET', url: `/shopify/app?${qs({ shop })}` });
+    expect(r.statusCode).toBe(302);
+    const u = new URL(String(r.headers.location));
+    expect(`${u.host}${u.pathname}`).toBe(`${shop}/admin/oauth/authorize`);
+    expect(u.searchParams.get('scope')).toBe('read_orders');
+    expect(u.searchParams.get('redirect_uri')).toBe(`${API_URL}/shopify/callback`);
+    expect(u.searchParams.get('state')).toBeTruthy();
+    expect(String(r.headers['set-cookie'])).toMatch(/^noctiv_shopify_oauth=[0-9a-f]{32}; HttpOnly/);
+    expect(lastOutcome().shopify).toMatchObject({
+      status: 302,
+      reason: 'redirect_to_authorize',
+      signed: false,
+    });
+    expect(await rows()).toEqual(before); // nothing stored, nothing linked
+    expect(r.body).toBe('');
+  });
+
+  it('shows nothing else: no data, no difference for a store that is not ours', async () => {
+    const a = await hit({ method: 'GET', url: `/shopify/app?${qs({ shop })}` });
+    const b = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs({ shop: 'some-other-store.myshopify.com' })}`,
+    });
+    expect([a.statusCode, b.statusCode]).toEqual([302, 302]);
+    expect(a.body).toBe(b.body);
+  });
+
+  it.each([
+    'evil.example.com',
+    'noctiv-nvojutjr.myshopify.com.evil.com',
+    'https://noctiv-nvojutjr.myshopify.com',
+    'noctiv nvojutjr.myshopify.com',
+    '-bad.myshopify.com',
+    '../x.myshopify.com',
+    '',
+  ])('refuses the store name %j', async (bad) => {
+    const r = await hit({ method: 'GET', url: `/shopify/app?${qs({ shop: bad })}` });
+    expect(r.statusCode).toBe(400);
+    expect(r.headers.location).toBeUndefined();
+  });
+
+  it('on the platform host it continues once on the public host', async () => {
+    const first = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs({ shop })}`,
+      headers: { host: 'http--api--abc.code.run' },
+    });
+    expect(first.statusCode).toBe(302);
+    const next = new URL(String(first.headers.location));
+    expect(`${next.origin}${next.pathname}`).toBe(`${API_URL}/shopify/app/start`);
+    const second = await hit({ method: 'GET', url: `${next.pathname}${next.search}` });
+    expect(new URL(String(second.headers.location)).host).toBe(shop);
+  });
+
+  it("can never finish an install: the callback still needs Shopify's signature", async () => {
+    const before = await rows();
+    const start = await hit({ method: 'GET', url: `/shopify/app?${qs({ shop })}` });
+    const state = new URL(String(start.headers.location)).searchParams.get('state')!;
+    const cookie = /noctiv_shopify_oauth=([0-9a-f]+)/.exec(
+      String(start.headers['set-cookie']),
+    )![1]!;
+    const code = mock.newCode();
+    const res = await hit({
+      method: 'GET',
+      url: `/shopify/callback?${qs({ shop, code, state, timestamp: '1' })}`, // no hmac
+      headers: { cookie: `noctiv_shopify_oauth=${cookie}` },
+    });
+    expect(res.statusCode).toBe(302);
+    expect(new URL(String(res.headers.location)).searchParams.get('claim')).toBeNull();
+    expect(lastOutcome().shopify).toMatchObject({ route: 'callback', reason: 'hmac_missing' });
+    expect(await rows()).toEqual(before);
   });
 });

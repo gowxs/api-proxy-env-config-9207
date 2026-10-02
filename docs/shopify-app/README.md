@@ -80,7 +80,7 @@ Every request also logs `request completed` with the URL (query redacted), statu
 | reason                                                                           | meaning                                                                                                                                           |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `missing_shop`, `bad_shop_domain`                                                | the request did not name a `*.myshopify.com` store                                                                                                |
-| `hmac_missing`, `hmac_invalid`                                                   | not signed by Shopify with this client secret (wrong secret in Northflank, or a hand-made URL)                                                    |
+| `hmac_invalid` (and `hmac_missing` on the callback)                              | not signed by Shopify with this client secret (wrong secret in Northflank, or a hand-made URL)                                                    |
 | `hop_to_public_host`                                                             | Shopify called another host than `PUBLIC_API_URL` (e.g. the platform address); the install continues on the public host so the nonce cookie works |
 | `breakout_iframe`                                                                | the app is set to embedded and Shopify framed it; the page reloads itself on top                                                                  |
 | `redirect_to_authorize`                                                          | OK: sent to Shopify's consent screen with `redirectUri` (this must be in the app's Allowed redirection URLs)                                      |
@@ -91,3 +91,11 @@ Every request also logs `request completed` with the URL (query redacted), statu
 
 If `/shopify/app` shows `redirect_to_authorize` and `/shopify/callback` never follows, Shopify did not accept `redirectUri`:
 make the Dev Dashboard's Allowed redirection URL identical to it (scheme, host, path).
+
+### Install start without a signature
+
+The Dev Dashboard's "Install app" opens the App URL with only `?shop=<store>.myshopify.com` (no `hmac`). `/shopify/app` therefore starts
+the OAuth flow for any request that names a valid `*.myshopify.com` store: it only redirects to Shopify's consent screen (signed
+state + nonce cookie) and stores, links and reveals nothing (`signed: false` in the log). If an `hmac` is present it must be correct.
+`/shopify/callback` always requires Shopify's signature, and the pending install can only be linked by a signed-in owner with the signed claim.
+Shopify's authorization-code-grant page only requires the HMAC check on the callback; it does not say whether the install start is signed.

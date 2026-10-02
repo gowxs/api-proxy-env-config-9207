@@ -83,6 +83,12 @@ export function defaultRules(): Rule[] {
       limiter: new RateLimiter({ max: 30, windowMs: 10 * MIN }),
     },
     {
+      // The install start needs no signature (only a valid store name), so it is limited per address.
+      name: 'shopify-install',
+      match: (req) => (req.url.startsWith('/shopify/app') ? `shi:${req.ip}` : null),
+      limiter: new RateLimiter({ max: 60, windowMs: 10 * MIN }),
+    },
+    {
       name: 'connection-test',
       match: (req) =>
         post(req) && /\/connections\/test$/.test(req.url) ? `ct:${tenantOf(req.url)}` : null,
