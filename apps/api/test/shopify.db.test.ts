@@ -31,6 +31,7 @@ let n = 0;
 async function seedBare(label: string, embeddingAxis: number) {
   const t = await seedTenant(owner, label, { embeddingAxis });
   await owner`delete from public.shopify_connections where tenant_id = ${t.tenantId}`;
+  await owner`delete from public.woocommerce_connections where tenant_id = ${t.tenantId}`;
   return t;
 }
 const shopName = () => `api${n++}-store.myshopify.com`;

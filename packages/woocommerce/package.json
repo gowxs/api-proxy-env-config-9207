@@ -1,0 +1,17 @@
+{
+  "name": "@noctiv/woocommerce",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WooCommerce connection for order lookup: the read-only REST API (v3) client with the merchant's consumer key and secret, shipment tracking extraction and sealed credentials. Order logic lives in @noctiv/orders.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/core": "workspace:*",
+    "@noctiv/orders": "workspace:*"
+  }
+}

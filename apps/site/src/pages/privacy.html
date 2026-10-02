@@ -98,6 +98,26 @@
         the app in Shopify.
       </p>
 
+      <h2>WooCommerce order lookup</h2>
+      <p>
+        Order lookup (beta): if you connect a WooCommerce store, you create a REST API key with Read
+        access in your own store and paste it in Noctiv. Noctiv then answers "Where is my order?"
+        e-mails by asking your store live, read-only, and only when a customer writes about an
+        order. It uses only the order number, date, status, shipment tracking (from the Shipment
+        Tracking plugin or a customer note that states a tracking number) and the names of the
+        items. It never uses phone numbers, addresses or payment details. An order is used only if
+        the sender's e-mail matches the billing e-mail on the order; otherwise nothing about it is
+        revealed.
+      </p>
+      <p>
+        What we store: your key and secret, encrypted per store (only the background service can
+        decrypt them, and they are never written to logs), a short summary of what was found for
+        each message (deleted with that message under your retention period), and an access-log
+        entry without personal data each time an order was looked up. Order data itself is not
+        copied into our database. You can disconnect at any time in Integrations: we delete the key.
+        Only you can revoke the key in WooCommerce, so delete it there too.
+      </p>
+
       <h2>Why</h2>
       <ul>
         <li>To provide the service you signed up for (contract, Art. 6(1)(b) GDPR).</li>

@@ -1,4 +1,4 @@
-import { enqueue, getJob, withTenant } from '@noctiv/db';
+import { enqueue, withTenant } from '@noctiv/db';
 import {
   authorizeUrl,
   checkScopes,
@@ -20,9 +20,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppDeps } from '../app.ts';
 import { HttpError } from './http-error.ts';
+import { runJob as runJobFor } from './run-job.ts';
 
 const tenantParams = z.object({ tenantId: z.uuid() });
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const COOKIE = 'noctiv_shopify_oauth';
 
 export interface ShopifyAppDeps {
@@ -98,24 +98,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
     });
   });
 
-  /** Waits briefly for the worker (only it can open the tokens). */
-  async function runJob(
-    tenantId: string,
-    queue: string,
-  ): Promise<{ done: boolean; result?: unknown }> {
-    const jobId = await withTenant(deps.sql, tenantId, (tx) =>
-      enqueue(tx, { tenantId, queue, payload: {}, maxAttempts: 1 }),
-    );
-    const deadline = Date.now() + deps.connectionTestWaitMs;
-    while (Date.now() < deadline) {
-      const job = await withTenant(deps.sql, tenantId, (tx) => getJob(tx, jobId!));
-      if (job?.status === 'done') return { done: true, result: job.result };
-      if (job?.status === 'dead' || job?.status === 'failed')
-        return { done: true, result: { ok: false, code: 'UNAVAILABLE' } };
-      await sleep(250);
-    }
-    return { done: false };
-  }
+  const runJob = (tenantId: string, queue: string) => runJobFor(deps, tenantId, queue);
 
   app.post('/v1/tenants/:tenantId/shopify/test', async (req, reply) => {
     const { tenantId } = tenantParams.parse(req.params);

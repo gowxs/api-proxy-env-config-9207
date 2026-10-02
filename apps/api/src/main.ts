@@ -7,6 +7,7 @@ import { loadApiConfig } from './config.ts';
 import { createDevAuth } from './routes/dev.ts';
 import { createFakeGoogleCalendar, createGoogleCalendar } from '@noctiv/bookings';
 import { createShopifyClient } from '@noctiv/shopify';
+import { createWooClient } from '@noctiv/woocommerce';
 
 const config = loadApiConfig();
 const logger = createLogger({ service: 'api', level: config.LOG_LEVEL });
@@ -56,6 +57,7 @@ const app = buildApp({
     ? { paddle: createPaddleClient({ apiKey: config.PADDLE_API_KEY, env: config.PADDLE_ENV }) }
     : {}),
   ...(devAuth ? { devRoutes: devAuth.routes } : {}),
+  woo: createWooClient(),
   ...(config.SHOPIFY_APP_CLIENT_ID && config.SHOPIFY_APP_CLIENT_SECRET
     ? {
         shopify: {

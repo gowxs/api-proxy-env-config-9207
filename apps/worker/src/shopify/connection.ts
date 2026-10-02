@@ -9,18 +9,9 @@ import {
   type ShopifyClient,
   type StoredTokens,
 } from '@noctiv/shopify';
-import { OrderLookupError, type OrderProvider } from '@noctiv/orders';
+import { OrderLookupError } from '@noctiv/orders';
 import type { Sql } from 'postgres';
-
-/** What the pipeline needs to look orders up, whatever the shop platform (Shopify today, WooCommerce later). */
-export interface OrdersDeps {
-  /** The read-only lookup for this business, or why there is none. */
-  providerFor(
-    tenantId: string,
-  ): Promise<{ provider: OrderProvider } | { error: 'not_connected' | 'auth' | 'unavailable' }>;
-  /** The connection stopped working (token revoked, permission withdrawn): show it in Settings. */
-  markBroken(tenantId: string, code: string): Promise<void>;
-}
+import type { OrdersDeps } from '../orders/deps.ts';
 
 export interface ShopifyConnectionDeps {
   sql: Sql;
@@ -102,3 +93,4 @@ export function shopifyOrders(deps: ShopifyConnectionDeps): OrdersDeps {
 }
 
 export { OrderLookupError };
+export type { OrdersDeps };

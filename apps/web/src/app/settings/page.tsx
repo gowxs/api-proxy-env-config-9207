@@ -45,7 +45,7 @@ const SECTIONS = [
   { id: 'business', label: 'Business' },
   { id: 'mailboxes', label: 'Mailboxes' },
   { id: 'reply-mode', label: 'Reply mode' },
-  { id: 'shopify', label: 'Shopify' },
+  { id: 'shopify', label: 'Order lookup' },
   { id: 'email-design', label: 'E-mail design' },
   { id: 'billing', label: 'Billing' },
   { id: 'account', label: 'Account' },
@@ -345,12 +345,12 @@ function SettingsForm({
         </form>
       </Section>
 
-      <Section id="shopify" title="Shopify order lookup">
+      <Section id="shopify" title="Order lookup (Shopify, WooCommerce)">
         <form onSubmit={submit('shopify')}>
           <Card>
             <p className="text-sm text-neutral-600">
-              “Where is my order?” is answered from your Shopify store (read-only) when the sender
-              is the customer on the order. Everything unusual comes to you instead.
+              “Where is my order?” is answered from your Shopify or WooCommerce store (read-only)
+              when the sender is the customer on the order. Everything unusual comes to you instead.
             </p>
             <Link
               className="inline-flex min-h-11 items-center text-sm text-indigo-700"

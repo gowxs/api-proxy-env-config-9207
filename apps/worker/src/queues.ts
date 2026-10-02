@@ -19,4 +19,6 @@ export const QUEUES = {
   bookingsCancel: 'bookings.cancel',
   shopifyTest: 'shopify.test',
   shopifyDisconnect: 'shopify.disconnect',
+  woocommerceTest: 'woocommerce.test',
+  woocommerceDisconnect: 'woocommerce.disconnect',
 } as const;

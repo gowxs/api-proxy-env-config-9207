@@ -38,7 +38,7 @@ import { setLeadStage } from './leads.ts';
 import { bankDomainFor } from '@noctiv/documents';
 import { handleBankEmail } from './bank.ts';
 import { draftQuote } from './quote.ts';
-import type { OrdersDeps } from '../shopify/connection.ts';
+import type { OrdersDeps } from '../orders/deps.ts';
 import { answerOrderEmail, isOrderEmail } from './wismo.ts';
 
 export interface PipelineDeps {
@@ -87,7 +87,7 @@ export interface Loaded {
     quotesEnabled: boolean;
     documentsEnabled: boolean;
     bookingsEnabled: boolean;
-    /** A working shop connection (Shopify) exists. */
+    /** A working shop connection (Shopify or WooCommerce) exists. */
     ordersConnected: boolean;
     /** Days without a shipping update before an order e-mail goes to the owner. */
     orderStaleDays: number;
@@ -127,7 +127,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       quotes_enabled: boolean;
       documents_enabled: boolean;
       bookings_enabled: boolean;
-      shopify_connected: boolean;
+      orders_connected: boolean;
       shopify_stale_days: number;
       thread_status: string;
       entitled: boolean;
@@ -139,7 +139,8 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
            t.reply_style, t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
            t.shopify_stale_days,
-           exists (select 1 from public.shopify_connections sc where sc.status = 'connected') as shopify_connected,
+           (exists (select 1 from public.shopify_connections sc where sc.status = 'connected')
+            or exists (select 1 from public.woocommerce_connections wc where wc.status = 'connected')) as orders_connected,
            th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
@@ -184,7 +185,7 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       quotesEnabled: row.quotes_enabled,
       documentsEnabled: row.documents_enabled,
       bookingsEnabled: row.bookings_enabled,
-      ordersConnected: row.shopify_connected,
+      ordersConnected: row.orders_connected,
       orderStaleDays: row.shopify_stale_days,
     },
     bankDomains: banks.map((b) => b.domain),

@@ -89,7 +89,7 @@ export const ORDER_REASON_TEXT: Record<string, string> = {
   order_shipment_stale: 'No shipping update for a long time',
   order_change_request: 'The customer asks for a change, return or refund',
   order_chargeback: 'The customer mentions a chargeback or dispute',
-  order_lookup_unavailable: 'Shopify could not be asked',
+  order_lookup_unavailable: 'The online store could not be asked',
 };
 
 async function caps(deps: PipelineDeps, tenantId: string, to: string) {
@@ -104,10 +104,10 @@ async function caps(deps: PipelineDeps, tenantId: string, to: string) {
 }
 
 /**
- * Shopify order lookup (WISMO). Deterministic code finds the order, checks the
+ * Order lookup (WISMO, Shopify or WooCommerce). Deterministic code finds the order, checks the
  * sender is its customer, and decides: answer, or hand to the owner. The model
  * only words an answer from the minimal facts, and the same claim checks as any
- * reply hold it to them. Read-only: nothing is ever written to Shopify.
+ * reply hold it to them. Read-only: nothing is ever written to the store.
  */
 export async function answerOrderEmail(
   deps: PipelineDeps,
@@ -227,7 +227,7 @@ export async function answerOrderEmail(
           label: 'S1',
           chunkId: null,
           type: 'order',
-          title: `Shopify order ${facts.orderName}`,
+          title: `${platform === 'woocommerce' ? 'WooCommerce' : 'Shopify'} order ${facts.orderName}`,
           url: null,
           updatedAt: now.toISOString(),
           score: 1,
@@ -320,7 +320,8 @@ export async function answerOrderEmail(
     else if (refs.numbers.length === 0) byEmail = await provider.findByEmail(m.from.toLowerCase());
   } catch (e) {
     const code = e instanceof OrderLookupError ? e.code : 'UNAVAILABLE';
-    if (code === 'AUTH' || code === 'SCOPE') await orders.markBroken(tenantId, code);
+    if (code === 'AUTH' || code === 'SCOPE')
+      await orders.markBroken(tenantId, code, provider.platform);
     return handOver('order_lookup_unavailable', {});
   }
 
@@ -338,7 +339,7 @@ export async function answerOrderEmail(
     tenantId,
     (tx) => tx`
       insert into public.audit_log (tenant_id, actor, action, target_type, target_id, metadata)
-      values (${tenantId}, 'system', 'shopify.order_lookup', 'message', ${m.id},
+      values (${tenantId}, 'system', ${`${provider.platform}.order_lookup`}, 'message', ${m.id},
               ${tx.json({
                 by: refs.numbers.length === 1 ? 'number' : 'email',
                 matches: byNumber.length + byEmail.length,

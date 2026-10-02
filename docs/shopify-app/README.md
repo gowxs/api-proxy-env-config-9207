@@ -58,3 +58,15 @@ Remove the draft flag at the same time.
 - `packages/orders`, `packages/shopify` unit tests (parsing, identity, decisions, OAuth client against a mock Shopify).
 - `apps/worker/test/wismo.db.test.ts`, `apps/api/test/shopify.db.test.ts` (DB + mock Shopify end to end, token never logged).
 - Live dev-store test: only when `SHOPIFY_TEST_SHOP` and `SHOPIFY_TEST_ACCESS_TOKEN` are present in `.env`; skipped otherwise.
+
+## Dev Dashboard values (production base `https://app.noctiv.io/api`)
+
+The base is `PUBLIC_API_URL`, or `PUBLIC_APP_URL` + `/api` when that is unset (the web app proxies `/api/*` to the API).
+If production sets `PUBLIC_API_URL`, use that host instead of `https://app.noctiv.io/api` everywhere below.
+
+- App URL: `https://app.noctiv.io/api/shopify/app`
+- Allowed redirection URL: `https://app.noctiv.io/api/shopify/callback`
+- Compliance webhooks (`customers/data_request`, `customers/redact`, `shop/redact`) and `app/uninstalled`, all four:
+  `https://app.noctiv.io/api/shopify/webhooks` (the topic arrives in the `X-Shopify-Topic` header)
+- Embed app in Shopify admin: off. Use legacy install flow: on (the code sends `scope=read_orders` in the authorize URL).
+- `SHOPIFY_INSTALL_URL`: the install link Shopify generates for the app (Dev Dashboard → Distribution). It is not a Noctiv URL.

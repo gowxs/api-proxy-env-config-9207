@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { AppPage } from '@/components/shell';
 import { Badge, Card, ErrorText, Loading, useAction, useLoad } from '@/components/ui';
 import { ShopifyCard, type ShopifyStatus } from '@/components/shopify-card';
+import { WooCommerceCard, type WooStatus } from '@/components/woocommerce-card';
 import { api } from '@/lib/api';
 import { useSession, useTenantId } from '@/lib/session';
 
@@ -70,6 +71,8 @@ function Integrations() {
   const params = useSearchParams();
   const shopify = useLoad(() => api<ShopifyStatus>(`/v1/tenants/${tenantId}/shopify`), [tenantId]);
   const shopifyOn = Boolean(shopify.data?.configured);
+  const woo = useLoad(() => api<WooStatus>(`/v1/tenants/${tenantId}/woocommerce`), [tenantId]);
+  const wooOn = Boolean(woo.data?.configured);
   const t = useLoad(
     () => api<{ integrations_notify: Soon[] }>(`/v1/tenants/${tenantId}`),
     [tenantId],
@@ -118,6 +121,9 @@ function Integrations() {
           reload={() => shopify.reload()}
         />
       )}
+      {woo.data?.configured && (
+        <WooCommerceCard tenantId={tenantId} status={woo.data} reload={() => woo.reload()} />
+      )}
       {NOW.map((c) => (
         <Card
           key={c.title}
@@ -140,7 +146,9 @@ function Integrations() {
       {!t.data && !t.error ? (
         <Loading />
       ) : (
-        SOON.filter((c) => !(c.id === 'shopify' && shopifyOn)).map((c) => (
+        SOON.filter(
+          (c) => !(c.id === 'shopify' && shopifyOn) && !(c.id === 'woocommerce' && wooOn),
+        ).map((c) => (
           <Card key={c.id} title={c.name} action={<Badge>Coming soon</Badge>}>
             <p className="text-sm text-neutral-600">{c.line}</p>
             <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-medium">

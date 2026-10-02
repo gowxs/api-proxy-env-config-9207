@@ -1,9 +1,6 @@
-import { randomUUID } from 'node:crypto';
-import type { GenerateRequest } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import { seedTenant, type SeededTenant } from '@noctiv/db/testing';
 import { FakeProvider } from '@noctiv/llm';
-import type { InboundMessage } from '@noctiv/mail';
 import { createShopifyClient, sealTokens, type StoredTokens } from '@noctiv/shopify';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -16,6 +13,7 @@ import { storeInbound } from '../src/ingest/store.ts';
 import { processMessage } from '../src/pipeline/process.ts';
 import { shopifyOrders } from '../src/shopify/connection.ts';
 import { keys } from './helpers.ts';
+import { cls, inbound, kindOf, model } from './wismo-helpers.ts';
 import { inject } from 'vitest';
 
 const owner = postgres(inject('ownerDatabaseUrl'), { max: 2, onnotice: () => {} });
@@ -58,88 +56,6 @@ afterAll(async () => {
   await Promise.all([owner.end(), worker.end()]);
 });
 
-type Kind = 'classify' | 'generate' | 'verify';
-const kindOf = (req: GenerateRequest): Kind =>
-  req.system.startsWith('You classify')
-    ? 'classify'
-    : req.system.startsWith('You check a draft')
-      ? 'verify'
-      : 'generate';
-
-const cls = (patch: Record<string, unknown> = {}) =>
-  JSON.stringify({
-    category: 'order_status',
-    sentiment: 'neutral',
-    urgency: 'normal',
-    language: 'en',
-    summary: 'Customer asks where an order is.',
-    ...patch,
-  });
-
-/** A model that words whatever facts it is given, and refuses to invent. */
-function model(classify = cls()) {
-  return new FakeProvider({
-    responder: (req) => {
-      const kind = kindOf(req);
-      if (kind === 'classify') return classify;
-      if (kind === 'verify') return '{"supported":true,"unsupported_claims":[]}';
-      const base = {
-        intent: 'order status',
-        language: 'en',
-        confidence: 0.95,
-        action: 'auto_send',
-        escalate_reason: null,
-        conflicts: [],
-      };
-      if (req.system.includes('could not be matched'))
-        return JSON.stringify({
-          ...base,
-          action: 'draft',
-          reply:
-            'Hello,\n\nCould you send me your order number and the e-mail address you used at checkout? Then I can look into it.',
-          sources: [],
-        });
-      const kb = req.parts.find((p) => p.kind === 'kb_context')?.text ?? '';
-      const f = /\[S1\]\n([\s\S]*?)\n\n<<<END_KB_DATA/.exec(kb)?.[1] ?? '';
-      const get = (k: string) => new RegExp(`${k}: ([^;\\n]+)`).exec(f)?.[1];
-      const name = /^Order (#\d+)/.exec(f)?.[1];
-      const shipped = /Shipping: shipped/.test(f);
-      const parts = [
-        'Hello,',
-        `Your order ${name} ${shipped ? 'has shipped' : 'has not shipped yet'}.`,
-        ...(shipped
-          ? [
-              [
-                get('carrier') && `Carrier: ${get('carrier')}`,
-                get('tracking number') && `tracking number ${get('tracking number')}`,
-              ]
-                .filter(Boolean)
-                .join(', ') + '.',
-              get('tracking link') ? `Track it here: ${get('tracking link')}` : '',
-            ]
-          : []),
-      ].filter(Boolean);
-      return JSON.stringify({ ...base, reply: parts.join('\n\n'), sources: ['S1'] });
-    },
-  });
-}
-
-const inbound = (o: { from?: string; subject: string; text: string }): InboundMessage => ({
-  messageId: `<${randomUUID()}@wismo.test>`,
-  inReplyTo: null,
-  references: [],
-  from: { address: o.from ?? GVIDO, name: 'Gvido' },
-  replyTo: [],
-  to: ['shop@store.test'],
-  cc: [],
-  subject: o.subject,
-  text: o.text,
-  htmlHiddenText: false,
-  loopHeaders: {},
-  attachments: [],
-  date: new Date(),
-});
-
 interface Ctx {
   T: SeededTenant;
   llm: FakeProvider;
@@ -158,6 +74,7 @@ async function setup(
   await owner`update public.tenants set mode = ${mode}, name = 'Nordlicht Candles' where id = ${T.tenantId}`;
   // The shared fixture seeds a connection per tenant; these tests bring their own.
   await owner`delete from public.shopify_connections where tenant_id = ${T.tenantId}`;
+  await owner`delete from public.woocommerce_connections where tenant_id = ${T.tenantId}`;
   if (opts.connect !== false) {
     const tokens: StoredTokens = {
       accessToken: [...mock.validTokens][0]!,

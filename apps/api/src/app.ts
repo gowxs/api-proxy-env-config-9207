@@ -20,6 +20,8 @@ import { documentRoutes } from './routes/documents.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { bookingPageRoutes } from './routes/booking-page.ts';
 import { shopifyRoutes, type ShopifyAppDeps } from './routes/shopify.ts';
+import { woocommerceRoutes } from './routes/woocommerce.ts';
+import type { WooClient } from '@noctiv/woocommerce';
 import type { GoogleCalendarApi } from '@noctiv/bookings';
 import { HttpError, webRoutes } from './routes/web.ts';
 import { healthRoutes, readWorkerHealth, type WorkerHealth } from './routes/health.ts';
@@ -76,6 +78,8 @@ export interface AppDeps {
   bookingWaitMs?: number;
   /** Noctiv's Shopify app (order lookup). Without it the Shopify routes are off. */
   shopify?: ShopifyAppDeps;
+  /** WooCommerce REST client (order lookup). Without it the WooCommerce routes are off. */
+  woo?: WooClient;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -172,6 +176,13 @@ export function buildApp(
       const { tenantId } = z.object({ tenantId: z.uuid() }).parse(req.params);
       await full.requireMember(tenantId, req.user!.userId);
       return { configured: false, installUrl: null, staleDays: 14, connection: null };
+    });
+  if (deps.woo) woocommerceRoutes(app, { ...full, woo: deps.woo });
+  else
+    app.get('/v1/tenants/:tenantId/woocommerce', async (req) => {
+      const { tenantId } = z.object({ tenantId: z.uuid() }).parse(req.params);
+      await full.requireMember(tenantId, req.user!.userId);
+      return { configured: false, staleDays: 14, shopifyConnected: false, connection: null };
     });
   deps.devRoutes?.(app);
   if (deps.actionSecret) {

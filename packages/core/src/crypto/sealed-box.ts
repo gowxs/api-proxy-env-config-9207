@@ -144,3 +144,8 @@ export function shopifyCredentialsAssociatedData(shopDomain: string): string {
 export function calendarCredentialsAssociatedData(tenantId: string, connectionId: string): string {
   return `noctiv:calendar_credentials:v1:${tenantId}:${connectionId}`;
 }
+
+/** Additional data binding WooCommerce REST keys to the store they belong to. */
+export function woocommerceCredentialsAssociatedData(storeUrl: string): string {
+  return `noctiv:woocommerce_credentials:v1:${storeUrl}`;
+}

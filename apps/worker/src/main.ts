@@ -34,6 +34,10 @@ import { QUEUES } from './queues.ts';
 import { createShopifyClient } from '@noctiv/shopify';
 import { shopifyDisconnectHandler, shopifyTestHandler } from './jobs/shopify.ts';
 import { openConnection, shopifyOrders } from './shopify/connection.ts';
+import { createWooClient } from '@noctiv/woocommerce';
+import { woocommerceDisconnectHandler, woocommerceTestHandler } from './jobs/woocommerce.ts';
+import { combineOrders } from './orders/deps.ts';
+import { wooOrders } from './woocommerce/connection.ts';
 import { createFakeGoogleCalendar, createGoogleCalendar, signFormLink } from '@noctiv/bookings';
 import {
   bookingCancelHandler,
@@ -87,6 +91,7 @@ const shopifyConn = {
       ? { clientId: config.SHOPIFY_APP_CLIENT_ID, clientSecret: config.SHOPIFY_APP_CLIENT_SECRET }
       : null,
 };
+const wooConn = { sql: db.sql, keys, woo: createWooClient() };
 const bookings = {
   sql: db.sql,
   keys,
@@ -131,10 +136,15 @@ const runner = new JobRunner({
       logger,
       ...(quotes ? { quotes } : {}),
       bookings,
-      orders: shopifyOrders(shopifyConn),
+      orders: combineOrders([
+        { platform: 'shopify', deps: shopifyOrders(shopifyConn) },
+        { platform: 'woocommerce', deps: wooOrders(wooConn) },
+      ]),
     }),
     [QUEUES.shopifyTest]: shopifyTestHandler(shopifyConn),
     [QUEUES.shopifyDisconnect]: shopifyDisconnectHandler(shopifyConn),
+    [QUEUES.woocommerceTest]: woocommerceTestHandler(wooConn),
+    [QUEUES.woocommerceDisconnect]: woocommerceDisconnectHandler(wooConn),
     [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsPrefill]: documentsPrefillHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsAutomation]: documentsAutomationHandler({ sql: db.sql }),

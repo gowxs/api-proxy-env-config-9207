@@ -65,6 +65,9 @@ importers:
       '@noctiv/shopify':
         specifier: workspace:*
         version: link:../../packages/shopify
+      '@noctiv/woocommerce':
+        specifier: workspace:*
+        version: link:../../packages/woocommerce
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -162,6 +165,9 @@ importers:
       '@noctiv/shopify':
         specifier: workspace:*
         version: link:../../packages/shopify
+      '@noctiv/woocommerce':
+        specifier: workspace:*
+        version: link:../../packages/woocommerce
       age-encryption:
         specifier: 0.3.1
         version: 0.3.1
@@ -351,6 +357,15 @@ importers:
         version: 0.17.6
 
   packages/shopify:
+    dependencies:
+      '@noctiv/core':
+        specifier: workspace:*
+        version: link:../core
+      '@noctiv/orders':
+        specifier: workspace:*
+        version: link:../orders
+
+  packages/woocommerce:
     dependencies:
       '@noctiv/core':
         specifier: workspace:*

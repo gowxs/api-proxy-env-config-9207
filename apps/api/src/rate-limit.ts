@@ -89,6 +89,15 @@ export function defaultRules(): Rule[] {
       limiter: new RateLimiter({ max: 10, windowMs: 10 * MIN }),
     },
     {
+      // Connecting a store makes this server call a host the owner typed.
+      name: 'woocommerce-connect',
+      match: (req) =>
+        (req.method === 'PUT' || post(req)) && /\/woocommerce(\/test)?$/.test(req.url)
+          ? `woo:${tenantOf(req.url)}`
+          : null,
+      limiter: new RateLimiter({ max: 10, windowMs: 10 * MIN }),
+    },
+    {
       name: 'kb-add',
       match: (req) =>
         post(req) && /\/kb\/(website|files|notes|sources\/[^/]+\/refresh)$/.test(req.url)

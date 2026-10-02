@@ -1,0 +1,71 @@
+<script type="application/json" id="page">
+  {
+    "title": "Connect WooCommerce for order lookups · Noctiv Help",
+    "description": "How Noctiv answers 'Where is my order?' e-mails from your WooCommerce store with a read-only key: what it reads, what it needs for tracking, and how to disconnect.",
+    "crumb": "WooCommerce order lookup",
+    "draft": true
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Connect WooCommerce for order lookups.</h1>
+    <p class="lead">
+      Noctiv can answer "Where is my order?" from your live WooCommerce orders. It only reads. It
+      never changes anything in your store.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">
+      Create a read-only key (phone is fine)
+    </h2>
+    <ol>
+      <li>In WordPress open WooCommerce, Settings, Advanced, REST API and tap Add key.</li>
+      <li>Description: Noctiv. User: an administrator. Permissions: Read.</li>
+      <li>
+        Tap Generate API key. Copy the consumer key and the consumer secret. WooCommerce shows the
+        secret only once.
+      </li>
+      <li>
+        In Noctiv open Integrations, WooCommerce, paste the store address, key and secret and tap
+        Connect.
+      </li>
+    </ol>
+    <p>
+      Your store needs WooCommerce 3.5 or newer and permalinks other than "Plain" (Settings,
+      Permalinks). If your host strips the Authorization header, the connection will say the store
+      refused the key; ask your host to pass it on.
+    </p>
+
+    <h2>What Noctiv reads</h2>
+    <p>
+      Order number, date, status, shipment tracking and the names of the items. Never phone numbers,
+      addresses or payment details. An order is used only when the sender's e-mail matches the
+      billing e-mail on the order.
+    </p>
+
+    <h2>Tracking</h2>
+    <p>
+      WooCommerce itself has no tracking field, so Noctiv reads it from the common Shipment Tracking
+      plugin, or from a customer note that says "Tracking number: ...". If a shipped order has no
+      tracking, Noctiv does not guess: the e-mail comes to you.
+    </p>
+
+    <h2>When it hands over to you</h2>
+    <p>
+      Order not found, cancelled, refunded, on hold, shipped without tracking, shipped more than the
+      number of days you set in Settings (default 14) ago, a refund, return or address change
+      request, or an angry or chargeback e-mail.
+    </p>
+
+    <h2>Disconnect</h2>
+    <p>
+      In Integrations tap Disconnect and delete keys. We delete the saved key. Only you can revoke a
+      key in WooCommerce, so also delete it under WooCommerce, Settings, Advanced, REST API.
+    </p>
+  </div>
+</section>
