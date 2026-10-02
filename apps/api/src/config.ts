@@ -38,6 +38,10 @@ export const apiEnvSchema = z
       .regex(/^pri_[a-z0-9]+$/, 'a Paddle price id (pri_…)')
       .optional(),
     /** Google Calendar for Bookings (PLAN.md §29.2): an OAuth client of type "Web application". */
+    /** Noctiv's Shopify app (Partner Dashboard) and where merchants install it from (listing or install link). */
+    SHOPIFY_APP_CLIENT_ID: z.string().min(4).optional(),
+    SHOPIFY_APP_CLIENT_SECRET: z.string().min(8).optional(),
+    SHOPIFY_INSTALL_URL: z.url().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
     /** Development and tests only: a fake Google Calendar (no network). */
@@ -58,6 +62,10 @@ export const apiEnvSchema = z
   .refine((e) => !(e.NODE_ENV === 'production' && e.CALENDAR_FAKE), {
     path: ['CALENDAR_FAKE'],
     message: 'must not be set in production',
+  })
+  .refine((e) => Boolean(e.SHOPIFY_APP_CLIENT_ID) === Boolean(e.SHOPIFY_APP_CLIENT_SECRET), {
+    path: ['SHOPIFY_APP_CLIENT_SECRET'],
+    message: 'set both SHOPIFY_APP_CLIENT_ID and SHOPIFY_APP_CLIENT_SECRET, or neither',
   })
   .refine((e) => Boolean(e.GOOGLE_OAUTH_CLIENT_ID) === Boolean(e.GOOGLE_OAUTH_CLIENT_SECRET), {
     path: ['GOOGLE_OAUTH_CLIENT_SECRET'],

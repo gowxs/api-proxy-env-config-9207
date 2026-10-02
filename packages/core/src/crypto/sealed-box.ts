@@ -135,6 +135,11 @@ export function credentialsAssociatedData(tenantId: string, connectionId: string
   return `noctiv:email_credentials:v1:${tenantId}:${connectionId}`;
 }
 
+/** Additional data binding Shopify tokens to the store they belong to. */
+export function shopifyCredentialsAssociatedData(shopDomain: string): string {
+  return `noctiv:shopify_credentials:v1:${shopDomain}`;
+}
+
 /** Additional data binding a calendar refresh token to its row (Bookings, PLAN.md §29.2). */
 export function calendarCredentialsAssociatedData(tenantId: string, connectionId: string): string {
   return `noctiv:calendar_credentials:v1:${tenantId}:${connectionId}`;

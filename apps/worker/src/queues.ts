@@ -17,4 +17,6 @@ export const QUEUES = {
   calendarDisconnect: 'calendar.disconnect',
   bookingsConfirm: 'bookings.confirm',
   bookingsCancel: 'bookings.cancel',
+  shopifyTest: 'shopify.test',
+  shopifyDisconnect: 'shopify.disconnect',
 } as const;

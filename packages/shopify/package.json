@@ -1,0 +1,17 @@
+{
+  "name": "@noctiv/shopify",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shopify connection for order lookup: OAuth (authorization code grant, expiring offline tokens), the read-only Admin API client and sealed credentials. Order logic lives in @noctiv/orders.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noctiv/core": "workspace:*",
+    "@noctiv/orders": "workspace:*"
+  }
+}

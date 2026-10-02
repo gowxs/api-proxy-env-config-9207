@@ -2,7 +2,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Logger } from '@noctiv/core';
 import { withTenant } from '@noctiv/db';
 import type { Sql } from 'postgres';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import { AuthError, type AuthUser, type VerifyToken } from './auth.ts';
 import { registerRateLimits } from './rate-limit.ts';
 import { waitlistRoutes } from './routes/waitlist.ts';
@@ -19,6 +19,7 @@ import { assistantRoutes } from './routes/assistant.ts';
 import { documentRoutes } from './routes/documents.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { bookingPageRoutes } from './routes/booking-page.ts';
+import { shopifyRoutes, type ShopifyAppDeps } from './routes/shopify.ts';
 import type { GoogleCalendarApi } from '@noctiv/bookings';
 import { HttpError, webRoutes } from './routes/web.ts';
 import { healthRoutes, readWorkerHealth, type WorkerHealth } from './routes/health.ts';
@@ -73,6 +74,8 @@ export interface AppDeps {
   google?: GoogleCalendarApi;
   /** How long a booking waits for the worker's confirmation (default 8 s). */
   bookingWaitMs?: number;
+  /** Noctiv's Shopify app (order lookup). Without it the Shopify routes are off. */
+  shopify?: ShopifyAppDeps;
 }
 
 /** Membership check within the tenant's own RLS context. */
@@ -164,6 +167,12 @@ export function buildApp(
     ...(deps.paddle ? { paddle: deps.paddle } : {}),
     requireMember: full.requireMember,
   });
+  if (!deps.shopify || !deps.actionSecret)
+    app.get('/v1/tenants/:tenantId/shopify', async (req) => {
+      const { tenantId } = z.object({ tenantId: z.uuid() }).parse(req.params);
+      await full.requireMember(tenantId, req.user!.userId);
+      return { configured: false, installUrl: null, staleDays: 14, connection: null };
+    });
   deps.devRoutes?.(app);
   if (deps.actionSecret) {
     actionRoutes(app, {
@@ -191,6 +200,14 @@ export function buildApp(
       ...(deps.google ? { google: deps.google } : {}),
       ...(deps.bookingWaitMs !== undefined ? { waitMs: deps.bookingWaitMs } : {}),
     });
+    if (deps.shopify)
+      shopifyRoutes(app, {
+        ...full,
+        appUrl: deps.appUrl ?? 'https://app.noctiv.io',
+        publicApiUrl: publicApiUrl(deps),
+        secret: deps.actionSecret,
+        shopify: deps.shopify,
+      });
     weeklyReportRoutes(app, {
       sql: deps.sql,
       secret: deps.actionSecret,

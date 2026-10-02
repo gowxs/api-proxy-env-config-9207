@@ -86,5 +86,10 @@ export function verifyActionToken(token: string, secret: string, now = new Date(
 
 /** For logs: action URLs carry a bearer-like token. */
 export function redactActionPath(url: string): string {
-  return url.replace(/\/actions\/[^/?#]+/g, '/actions/[REDACTED]');
+  return (
+    url
+      .replace(/\/actions\/[^/?#]+/g, '/actions/[REDACTED]')
+      // Shopify install: the query holds a one-time authorization code, the signed state and Shopify's signature.
+      .replace(/^(\/shopify\/[^?#]*)\?[^#]*/, '$1?[REDACTED]')
+  );
 }

@@ -189,6 +189,8 @@ export async function seedTenant(
     await tx`insert into public.booking_settings (tenant_id, form_id) values (${tenantId}, ${formId})`;
     await tx`insert into public.calendar_connections (tenant_id, provider, account_email, credentials_ciphertext, credentials_key_id)
              values (${tenantId}, 'google', ${`calendar-${label}@example.test`}, ${Buffer.from(`sealed-cal-${label}`)}, 'k1')`;
+    await tx`insert into public.shopify_connections (tenant_id, shop_domain, credentials_ciphertext, credentials_key_id)
+             values (${tenantId}, ${`shop-${label.toLowerCase()}-${randomUUID().slice(0, 8)}.myshopify.com`}, ${Buffer.from(`sealed-shop-${label}`)}, 'k1')`;
     await tx`insert into public.calendar_busy (tenant_id, starts_at, ends_at)
              values (${tenantId}, now() + interval '2 days', now() + interval '2 days 1 hour')`;
     await tx`insert into public.bookings (id, tenant_id, lead_id, thread_id, name, email, starts_at, ends_at, status)

@@ -56,9 +56,15 @@ importers:
       '@noctiv/mail':
         specifier: workspace:*
         version: link:../../packages/mail
+      '@noctiv/orders':
+        specifier: workspace:*
+        version: link:../../packages/orders
       '@noctiv/quotes':
         specifier: workspace:*
         version: link:../../packages/quotes
+      '@noctiv/shopify':
+        specifier: workspace:*
+        version: link:../../packages/shopify
       fastify:
         specifier: ^5.12.5
         version: 5.12.5
@@ -147,9 +153,15 @@ importers:
       '@noctiv/mail':
         specifier: workspace:*
         version: link:../../packages/mail
+      '@noctiv/orders':
+        specifier: workspace:*
+        version: link:../../packages/orders
       '@noctiv/quotes':
         specifier: workspace:*
         version: link:../../packages/quotes
+      '@noctiv/shopify':
+        specifier: workspace:*
+        version: link:../../packages/shopify
       age-encryption:
         specifier: 0.3.1
         version: 0.3.1
@@ -317,6 +329,8 @@ importers:
         specifier: ^8.0.2
         version: 8.0.2
 
+  packages/orders: {}
+
   packages/quotes:
     dependencies:
       '@expo-google-fonts/manrope':
@@ -335,6 +349,15 @@ importers:
       '@types/pdfkit':
         specifier: ^0.17.6
         version: 0.17.6
+
+  packages/shopify:
+    dependencies:
+      '@noctiv/core':
+        specifier: workspace:*
+        version: link:../core
+      '@noctiv/orders':
+        specifier: workspace:*
+        version: link:../orders
 
 packages:
 

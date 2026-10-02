@@ -125,6 +125,7 @@ export function buildClassificationPrompt(
     `category: one of ${CATEGORIES.join(', ')}.`,
     '- quote_request: asks what specific products or services would cost, often with quantities ("price for 20 candles and gift wrapping?").',
     '- meeting_request: mainly asks to meet, book an appointment, a call or a visit, or when they can come by ("can we have a call next week?").',
+    '- order_status: asks where an order or parcel is, whether it has shipped, its tracking or delivery status ("where is my order #1234?"). A request for a refund, return, cancellation or change of address is refund, complaint or support, not order_status.',
     '- complaint: dissatisfaction with a product, service or experience.',
     '- refund: asks for money back, a return or a chargeback.',
     '- legal_contract: contracts, terms, legal threats, GDPR/data requests, lawyers.',
@@ -156,6 +157,8 @@ export function buildGenerationPrompt(input: {
   inboundLanguage: string;
   /** Owner's choice in Settings; "short" when not given. */
   replyStyle?: ReplyStyle;
+  /** Extra numbered rules for a special kind of reply (e.g. an order-status answer). */
+  extraRules?: string[];
   nonce?: string;
   /**
    * The customer's words for the parts a separate quote does not cover
@@ -210,6 +213,7 @@ export function buildGenerationPrompt(input: {
             '. If the excerpts do not answer them, set action to "escalate".',
         ]
       : []),
+    ...(input.extraRules ?? []),
     'Output a single JSON object with exactly these keys: intent, language, reply, sources, confidence, action, escalate_reason ' +
       '(null unless action is "escalate"), conflicts.',
   ].join('\n');

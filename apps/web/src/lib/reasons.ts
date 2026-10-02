@@ -33,6 +33,19 @@ const REASONS: Record<string, string> = {
   quote_empty: 'Nothing matched your price list',
   partial_answer_check: 'Also answers a question outside the price list: check that part',
   invoice_over_limit: 'Invoice total above your automatic-send limit',
+  order_needs_check: 'Order answer: check before sending',
+  order_payment_not_paid: 'The order is not marked as paid',
+  order_not_found: 'No order found for that number or e-mail address',
+  order_ambiguous: 'Several orders could match',
+  order_identity_mismatch:
+    'The sender is not the e-mail address on that order (nothing was shared)',
+  order_cancelled_or_refunded: 'The order is cancelled or refunded',
+  order_partially_fulfilled: 'The order is partly shipped or in an unusual state',
+  order_fulfilled_no_tracking: 'The order is shipped but has no tracking',
+  order_shipment_stale: 'No shipping update for a long time',
+  order_change_request: 'The customer asks for a change, return or refund',
+  order_chargeback: 'The customer mentions a chargeback or dispute',
+  order_lookup_unavailable: 'The shop could not be asked',
 };
 
 /** What the fact check found without a source (packages/core claims). */

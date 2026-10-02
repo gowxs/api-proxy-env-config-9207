@@ -1,0 +1,23 @@
+# Template for the Shopify CLI / Partner Dashboard. Replace the placeholders, then `shopify app deploy`.
+name = "Noctiv"
+client_id = "REPLACE_WITH_CLIENT_ID"
+application_url = "https://api.noctiv.example/shopify/app"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders"
+use_legacy_install_flow = true
+
+[auth]
+redirect_urls = ["https://api.noctiv.example/shopify/callback"]
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "https://api.noctiv.example/shopify/webhooks"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "https://api.noctiv.example/shopify/webhooks"

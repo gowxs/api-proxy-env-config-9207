@@ -37,6 +37,7 @@ interface Tenant {
   retention_days: number;
   reply_signature: string | null;
   reply_style?: 'short' | 'detailed';
+  shopify_stale_days?: number;
   email_template: string;
 }
 
@@ -44,6 +45,7 @@ const SECTIONS = [
   { id: 'business', label: 'Business' },
   { id: 'mailboxes', label: 'Mailboxes' },
   { id: 'reply-mode', label: 'Reply mode' },
+  { id: 'shopify', label: 'Shopify' },
   { id: 'email-design', label: 'E-mail design' },
   { id: 'billing', label: 'Billing' },
   { id: 'account', label: 'Account' },
@@ -130,6 +132,7 @@ function SettingsForm({
           retentionDays: form.retention_days,
           replySignature: form.reply_signature || null,
           replyStyle: form.reply_style ?? 'short',
+          shopifyStaleDays: form.shopify_stale_days ?? 14,
         },
       });
       await reload();
@@ -338,6 +341,37 @@ function SettingsForm({
               </Field>
             </div>
             {saveRow('reply-mode')}
+          </Card>
+        </form>
+      </Section>
+
+      <Section id="shopify" title="Shopify order lookup">
+        <form onSubmit={submit('shopify')}>
+          <Card>
+            <p className="text-sm text-neutral-600">
+              “Where is my order?” is answered from your Shopify store (read-only) when the sender
+              is the customer on the order. Everything unusual comes to you instead.
+            </p>
+            <Link
+              className="inline-flex min-h-11 items-center text-sm text-indigo-700"
+              href="/integrations"
+            >
+              Connect or manage your store →
+            </Link>
+            <Field
+              label="Ask me when an order has had no shipping update for (days)"
+              hint="Also applies to orders that were never shipped. Default 14."
+            >
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                max={90}
+                value={form.shopify_stale_days ?? 14}
+                onChange={(e) => set('shopify_stale_days', Number(e.target.value))}
+              />
+            </Field>
+            {saveRow('shopify')}
           </Card>
         </form>
       </Section>

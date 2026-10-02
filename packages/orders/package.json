@@ -1,0 +1,13 @@
+{
+  "name": "@noctiv/orders",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Order-status lookup (WISMO) logic that does not care which shop platform the order came from: order-number parsing, identity check, escalation rules, the minimal facts. No model, no network.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

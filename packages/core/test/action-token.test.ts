@@ -59,5 +59,13 @@ describe('action link tokens', () => {
   it('redacts tokens in URLs', () => {
     expect(redactActionPath('/actions/v1.abc.def?x=1')).toBe('/actions/[REDACTED]?x=1');
     expect(redactActionPath('/healthz')).toBe('/healthz');
+    // Shopify install: one-time code, state and signature are not logged.
+    expect(
+      redactActionPath('/shopify/callback?shop=a.myshopify.com&code=abc&hmac=def&state=s'),
+    ).toBe('/shopify/callback?[REDACTED]');
+    expect(redactActionPath('/shopify/app?shop=a.myshopify.com&hmac=def')).toBe(
+      '/shopify/app?[REDACTED]',
+    );
+    expect(redactActionPath('/shopify/webhooks')).toBe('/shopify/webhooks');
   });
 });

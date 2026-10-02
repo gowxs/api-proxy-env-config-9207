@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { AppPage } from '@/components/shell';
 import { Badge, Card, ErrorText, Loading, useAction, useLoad } from '@/components/ui';
+import { ShopifyCard, type ShopifyStatus } from '@/components/shopify-card';
 import { api } from '@/lib/api';
-import { useTenantId } from '@/lib/session';
+import { useSession, useTenantId } from '@/lib/session';
 
 type Soon = 'xero' | 'quickbooks' | 'zoho_books' | 'shopify' | 'woocommerce';
 
@@ -55,13 +57,19 @@ const SOON: { id: Soon; name: string; line: string }[] = [
 export default function IntegrationsPage() {
   return (
     <AppPage title="Integrations">
-      <Integrations />
+      <Suspense fallback={<Loading />}>
+        <Integrations />
+      </Suspense>
     </AppPage>
   );
 }
 
 function Integrations() {
   const tenantId = useTenantId();
+  const { tenant } = useSession();
+  const params = useSearchParams();
+  const shopify = useLoad(() => api<ShopifyStatus>(`/v1/tenants/${tenantId}/shopify`), [tenantId]);
+  const shopifyOn = Boolean(shopify.data?.configured);
   const t = useLoad(
     () => api<{ integrations_notify: Soon[] }>(`/v1/tenants/${tenantId}`),
     [tenantId],
@@ -100,6 +108,16 @@ function Integrations() {
       </p>
 
       <h2 className="text-sm font-semibold text-neutral-700">Available now</h2>
+      {shopify.data?.configured && (
+        <ShopifyCard
+          tenantId={tenantId}
+          businessName={tenant?.name ?? 'your business'}
+          status={shopify.data}
+          claim={params.get('claim')}
+          returned={params.get('reason')}
+          reload={() => shopify.reload()}
+        />
+      )}
       {NOW.map((c) => (
         <Card
           key={c.title}
@@ -122,7 +140,7 @@ function Integrations() {
       {!t.data && !t.error ? (
         <Loading />
       ) : (
-        SOON.map((c) => (
+        SOON.filter((c) => !(c.id === 'shopify' && shopifyOn)).map((c) => (
           <Card key={c.id} title={c.name} action={<Badge>Coming soon</Badge>}>
             <p className="text-sm text-neutral-600">{c.line}</p>
             <label className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-medium">

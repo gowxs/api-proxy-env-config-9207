@@ -38,6 +38,8 @@ import { setLeadStage } from './leads.ts';
 import { bankDomainFor } from '@noctiv/documents';
 import { handleBankEmail } from './bank.ts';
 import { draftQuote } from './quote.ts';
+import type { OrdersDeps } from '../shopify/connection.ts';
+import { answerOrderEmail, isOrderEmail } from './wismo.ts';
 
 export interface PipelineDeps {
   sql: Sql;
@@ -48,6 +50,8 @@ export interface PipelineDeps {
   quotes?: { secret: string; publicApiUrl: string };
   /** Bookings (beta): the booking page and link secret. Without it meeting requests get normal replies. */
   bookings?: BookingDeps;
+  /** Order lookup (WISMO) for the business's shop platform. Without it order e-mails get normal replies. */
+  orders?: OrdersDeps;
 }
 
 export type ProcessOutcome =
@@ -83,6 +87,10 @@ export interface Loaded {
     quotesEnabled: boolean;
     documentsEnabled: boolean;
     bookingsEnabled: boolean;
+    /** A working shop connection (Shopify) exists. */
+    ordersConnected: boolean;
+    /** Days without a shipping update before an order e-mail goes to the owner. */
+    orderStaleDays: number;
   };
   thread: { status: string };
   /** Sender domains the owner confirmed as their bank's notifications. */
@@ -119,6 +127,8 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       quotes_enabled: boolean;
       documents_enabled: boolean;
       bookings_enabled: boolean;
+      shopify_connected: boolean;
+      shopify_stale_days: number;
       thread_status: string;
       entitled: boolean;
       backlog: boolean;
@@ -128,6 +138,8 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
            m.from_address, m.from_name, m.reply_to, m.subject, m.body_text, m.loop_headers, m.html_hidden_text,
            c.is_test_mailbox, t.name as tenant_name, t.mode, t.notify_full_text,
            t.reply_style, t.max_ai_replies_per_sender_24h, t.max_replies_per_hour, t.quotes_enabled, t.documents_enabled, t.bookings_enabled,
+           t.shopify_stale_days,
+           exists (select 1 from public.shopify_connections sc where sc.status = 'connected') as shopify_connected,
            th.status as thread_status,
            app.billing_entitled(t.billing_status, t.trial_ends_at) as entitled,
            coalesce(m.received_at < t.billing_resumed_at, false) as backlog
@@ -172,6 +184,8 @@ async function load(tx: TransactionSql, messageId: string): Promise<Loaded | und
       quotesEnabled: row.quotes_enabled,
       documentsEnabled: row.documents_enabled,
       bookingsEnabled: row.bookings_enabled,
+      ordersConnected: row.shopify_connected,
+      orderStaleDays: row.shopify_stale_days,
     },
     bankDomains: banks.map((b) => b.domain),
     thread: { status: row.thread_status },
@@ -362,6 +376,22 @@ export async function processMessage(
       embedTokens,
       null,
     );
+  }
+
+  // 4a. Order lookup (WISMO, Shopify): a question about an order is answered from the store's
+  //     own data, or handed to the owner. Code decides; the model only words the answer.
+  //     Without a connection an order question is handled like any other.
+  if (deps.orders && l.tenant.ordersConnected && isOrderEmail(classification, m.subject, body)) {
+    const o = await answerOrderEmail(deps, tenantId, l, leadId, {
+      classification,
+      body,
+      origin,
+      budgetState: budget.state,
+      usage,
+      llmCalls,
+      embedTokens,
+    });
+    return o.outcome;
   }
 
   // 4b. Quotes (beta): a price request for items on the confirmed price list gets a quote.
@@ -625,7 +655,7 @@ export async function generateGrounded(
   };
 }
 
-async function writeProcessing(
+export async function writeProcessing(
   tx: TransactionSql,
   messageId: string,
   status: 'drafted' | 'escalated',
@@ -636,11 +666,13 @@ async function writeProcessing(
   retrieved: string[],
   usage: TokenUsage,
   report: GuardReport | null = null,
+  orderLookup?: unknown,
 ) {
   await tx`
     update public.message_processing
     set status = ${status}, final_action = ${finalAction}, downgrade_reasons = ${reasons},
         guard_report = ${report ? tx.json(report as never) : null},
+        order_lookup = ${orderLookup ? tx.json(orderLookup as never) : null},
         classification = ${classification ? tx.json(classification) : null},
         model_output = ${guarded?.generation ? tx.json(guarded.generation) : guarded ? tx.json({ invalid: true, error: guarded.validationError }) : null},
         confidence = ${guarded?.generation?.confidence ?? null},
@@ -696,7 +728,7 @@ export async function notifyOwner(
  * manually". Hard-list cases carry no draft; uncertain ones keep the
  * generated reply as an "AI suggestion, unverified" (Q16).
  */
-async function escalate(
+export async function escalate(
   deps: PipelineDeps,
   tenantId: string,
   l: Loaded,
@@ -710,6 +742,12 @@ async function escalate(
     acknowledgement?: { text: string; envelope: GuardedReply['envelope'] };
     /** The excerpts the model was shown (uncertain escalations after generation). */
     knowledge?: Knowledge;
+    /** A suggested reply the owner may use (kept as an unverified suggestion), when not taken from `guarded`. */
+    suggestion?: { text: string; envelope: GuardedReply['envelope'] };
+    /** What the order card shows (Shopify order lookup). */
+    orderLookup?: unknown;
+    /** Guard report when the excerpts were not retrieved from the knowledge base. */
+    guardReport?: unknown;
   },
   usage: TokenUsage,
   llmCalls: number,
@@ -719,13 +757,17 @@ async function escalate(
   const m = l.message;
   await withTenant(deps.sql, tenantId, async (tx) => {
     let suggestionId: string | null = null;
-    const suggestion =
-      e.category === 'uncertain' && guarded?.decision.keepSuggestion ? guarded.replyText : null;
-    if (suggestion && guarded) {
+    const suggestion = e.suggestion
+      ? e.suggestion.text
+      : e.category === 'uncertain' && guarded?.decision.keepSuggestion
+        ? guarded.replyText
+        : null;
+    const suggestionEnvelope = e.suggestion?.envelope ?? guarded?.envelope;
+    if (suggestion && suggestionEnvelope) {
       const [draft] = await tx<{ id: string }[]>`
         insert into public.drafts (tenant_id, thread_id, source_message_id, kind, to_address, subject, body, source_chunk_ids, status)
-        values (${tenantId}, ${m.threadId}, ${m.id}, 'reply', ${guarded.envelope.to}, ${guarded.envelope.subject}, ${suggestion},
-                ${guarded.citedChunkIds}::uuid[], 'suggestion')
+        values (${tenantId}, ${m.threadId}, ${m.id}, 'reply', ${suggestionEnvelope.to}, ${suggestionEnvelope.subject}, ${suggestion},
+                ${e.suggestion ? [] : (guarded?.citedChunkIds ?? [])}::uuid[], 'suggestion')
         returning id`;
       suggestionId = draft!.id;
     }
@@ -759,7 +801,12 @@ async function escalate(
       guarded,
       e.knowledge?.chunks.map((c) => c.id) ?? [],
       usage,
-      e.knowledge && guarded ? guardReport(e.knowledge, guarded) : null,
+      e.guardReport
+        ? (e.guardReport as GuardReport)
+        : e.knowledge && guarded
+          ? guardReport(e.knowledge, guarded)
+          : null,
+      e.orderLookup,
     );
     await recordUsage(tx, { tenantId, usage, llmCalls, embedTokens });
     await setLeadStage(tx, tenantId, leadId, 'escalated', e.reasons[0] ?? 'escalated');

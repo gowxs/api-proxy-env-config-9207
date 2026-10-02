@@ -31,6 +31,9 @@ import { hostname } from 'node:os';
 import { deliverNotifications } from './notify/delivery.ts';
 import { createSystemTransport, EmailChannel } from './notify/email-channel.ts';
 import { QUEUES } from './queues.ts';
+import { createShopifyClient } from '@noctiv/shopify';
+import { shopifyDisconnectHandler, shopifyTestHandler } from './jobs/shopify.ts';
+import { openConnection, shopifyOrders } from './shopify/connection.ts';
 import { createFakeGoogleCalendar, createGoogleCalendar, signFormLink } from '@noctiv/bookings';
 import {
   bookingCancelHandler,
@@ -74,6 +77,16 @@ const google = config.CALENDAR_FAKE
         clientSecret: config.GOOGLE_OAUTH_CLIENT_SECRET,
       })
     : undefined;
+const shopify = createShopifyClient();
+const shopifyConn = {
+  sql: db.sql,
+  keys,
+  shopify,
+  app:
+    config.SHOPIFY_APP_CLIENT_ID && config.SHOPIFY_APP_CLIENT_SECRET
+      ? { clientId: config.SHOPIFY_APP_CLIENT_ID, clientSecret: config.SHOPIFY_APP_CLIENT_SECRET }
+      : null,
+};
 const bookings = {
   sql: db.sql,
   keys,
@@ -118,7 +131,10 @@ const runner = new JobRunner({
       logger,
       ...(quotes ? { quotes } : {}),
       bookings,
+      orders: shopifyOrders(shopifyConn),
     }),
+    [QUEUES.shopifyTest]: shopifyTestHandler(shopifyConn),
+    [QUEUES.shopifyDisconnect]: shopifyDisconnectHandler(shopifyConn),
     [QUEUES.quotesImport]: quotesImportHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsPrefill]: documentsPrefillHandler({ sql: db.sql, llm: providers.llm }),
     [QUEUES.documentsAutomation]: documentsAutomationHandler({ sql: db.sql }),
@@ -251,6 +267,13 @@ const calendarScan = () =>
     logger.error({ err: String(e) }, 'calendar sync scan failed'),
   );
 const calendarTimer = setInterval(() => void calendarScan(), 2 * 60_000);
+// Expiring Shopify tokens: a store not used for a week is renewed so its 90-day refresh token stays alive.
+const renewShopifyTokens = async () => {
+  const due = await db.sql<
+    { tenant_id: string }[]
+  >`select tenant_id from app.shopify_due_renewal(50)`;
+  for (const d of due) await openConnection(shopifyConn, d.tenant_id).catch(() => undefined);
+};
 // Hourly: queue/upload housekeeping, budget-state reset on a new UTC day,
 // old health checks removed, the
 // retention purge (idempotent; content past retention_days is removed) and
@@ -265,6 +288,7 @@ const hourly = () =>
     db.sql`select app.purge_expired_quote_text()`,
     db.sql`select app.purge_expired_document_prefill()`,
     queuePaymentReminders(db.sql, logger),
+    renewShopifyTokens(),
   ]).catch((e: unknown) => logger.error({ err: String(e) }, 'hourly jobs failed'));
 const housekeepingTimer = setInterval(() => void hourly(), 60 * 60_000);
 void hourly();

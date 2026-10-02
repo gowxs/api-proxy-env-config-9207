@@ -79,6 +79,25 @@
         your calendar can decrypt it. When you disconnect, we revoke it with Google and delete it.
       </p>
 
+      <h2>Shopify order lookup</h2>
+      <p>
+        Order lookup (beta): if you connect a Shopify store, Noctiv can answer "Where is my order?"
+        e-mails. It asks Shopify live, read-only (the <code>read_orders</code> permission, nothing
+        is ever written to your store), and only when a customer writes about an order. It uses only
+        the order number, date, payment and delivery status, carrier, tracking number and link,
+        expected delivery and the names of the shipped items. It never reads payment details or full
+        addresses. An order is used only if the sender's e-mail matches the e-mail on the order;
+        otherwise nothing about it is revealed.
+      </p>
+      <p>
+        What we store: the access Shopify grants, encrypted per store (only the background service
+        can decrypt it), a short summary of what was found for each message (deleted with that
+        message under your retention period), and an access-log entry without personal data each
+        time an order was looked up. Order data itself is not copied into our database. You can
+        disconnect at any time in Integrations (we revoke and delete the access) or by uninstalling
+        the app in Shopify.
+      </p>
+
       <h2>Why</h2>
       <ul>
         <li>To provide the service you signed up for (contract, Art. 6(1)(b) GDPR).</li>

@@ -6,6 +6,8 @@ export const CATEGORIES = [
   'quote_request',
   /** Asks to meet, book an appointment, a call or a visit (Bookings beta; else like sales_inquiry). */
   'meeting_request',
+  /** Asks where an order or parcel is, whether it shipped, its tracking (Shopify order lookup; else like support). */
+  'order_status',
   'product_question',
   'support',
   'complaint',

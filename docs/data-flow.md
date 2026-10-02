@@ -46,21 +46,23 @@ Customer ──email──▶ Tenant's mailbox (Gmail / Yahoo / …)
 
 ## What is stored
 
-| Data                                                         | Where                                                   | Kept                                                                                 |
-| ------------------------------------------------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Email text, subject, sender name (inbound and outbound)      | `messages`                                              | `retention_days` (default 90), then removed                                          |
-| Model classification and output (summaries, reply text)      | `message_processing`                                    | removed with the email text                                                          |
-| Draft text                                                   | `drafts`                                                | `retention_days`, then removed                                                       |
-| Escalation summaries                                         | `escalations`                                           | `retention_days`, then removed                                                       |
-| Notification contents (subject, summary)                     | `notifications`                                         | deleted once delivered, after ≤ 30 days                                              |
-| Message-IDs, addresses, statuses, timestamps, token counts   | `messages`, `threads`, `outbound_emails`, `usage_daily` | until the tenant is deleted (needed for deduplication, threading, leads and billing) |
-| Leads (customer email, name, stage, owner notes)             | `leads`, `lead_events`                                  | until the owner changes them or the tenant is deleted                                |
-| Knowledge base (the tenant's own business texts)             | `kb_sources`, `kb_chunks`                               | until the owner deletes a source or the tenant                                       |
-| Mailbox credentials (sealed)                                 | `email_connections`                                     | until the mailbox or tenant is deleted                                               |
-| Health checks                                                | `connection_health_checks`                              | 30 days                                                                              |
-| Finished jobs / dead jobs                                    | `jobs`                                                  | 7 days / 30 days (connection tests: 1 hour)                                          |
-| Audit log (who approved, changed settings; no email content) | `audit_log`                                             | until the tenant is deleted                                                          |
-| Application logs                                             | Hetzner VPS                                             | no email bodies, passwords, tokens or action links (redacted)                        |
+| Data                                                                   | Where                                                   | Kept                                                                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Email text, subject, sender name (inbound and outbound)                | `messages`                                              | `retention_days` (default 90), then removed                                          |
+| Model classification and output (summaries, reply text)                | `message_processing`                                    | removed with the email text                                                          |
+| Draft text                                                             | `drafts`                                                | `retention_days`, then removed                                                       |
+| Escalation summaries                                                   | `escalations`                                           | `retention_days`, then removed                                                       |
+| Notification contents (subject, summary)                               | `notifications`                                         | deleted once delivered, after ≤ 30 days                                              |
+| Message-IDs, addresses, statuses, timestamps, token counts             | `messages`, `threads`, `outbound_emails`, `usage_daily` | until the tenant is deleted (needed for deduplication, threading, leads and billing) |
+| Leads (customer email, name, stage, owner notes)                       | `leads`, `lead_events`                                  | until the owner changes them or the tenant is deleted                                |
+| Knowledge base (the tenant's own business texts)                       | `kb_sources`, `kb_chunks`                               | until the owner deletes a source or the tenant                                       |
+| Mailbox credentials (sealed)                                           | `email_connections`                                     | until the mailbox or tenant is deleted                                               |
+| Health checks                                                          | `connection_health_checks`                              | 30 days                                                                              |
+| Finished jobs / dead jobs                                              | `jobs`                                                  | 7 days / 30 days (connection tests: 1 hour)                                          |
+| Shopify access token (sealed per shop, expiring)                       | `shopify_connections`                                   | until disconnect, uninstall, `shop/redact` or tenant delete                          |
+| Order summary found for a message (status, number; no address/payment) | `message_processing.order_lookup`                       | with the message retention purge (nulled)                                            |
+| Audit log (who approved, changed settings; no email content)           | `audit_log`                                             | until the tenant is deleted                                                          |
+| Application logs                                                       | Hetzner VPS                                             | no email bodies, passwords, tokens or action links (redacted)                        |
 
 The retention purge runs hourly and is idempotent. The retention period is a per-tenant
 setting (1–3650 days).
@@ -87,3 +89,15 @@ or delete the tenant. Per-customer erasure (all messages of one address) is a fo
 The worker reads the owner's Sent folder read-only (EXAMINE). A message is stored only if it references a conversation Noctiv already holds (`In-Reply-To`/`References` match a stored message or one of ours); everything else, including its Message-ID, is dropped. Noctiv's own sent copies are recognised by Message-ID and skipped. The first run records a position and imports no history. `messages.seen` mirrors the provider's `\Seen` flag for recent inbound mail; nothing is ever written back. Stored text, subject and attachment names of these messages fall under the normal retention purge.
 
 An owner reply that threads onto a conversation also resolves that conversation's open escalations up to the reply (`resolved_by = 'owner_replied'`), supersedes waiting reply and follow-up drafts created before it, and sets the thread to `awaiting_customer`. Newer customer messages and their escalations are untouched; unthreaded Sent mail changes nothing.
+
+## Shopify order lookup (WISMO)
+
+Read-only (`read_orders`). When a customer message looks like an order question, the worker parses the order number
+(else uses the sender e-mail), asks Shopify's GraphQL Admin API live, and a deterministic engine (`packages/orders`)
+decides: reply, or escalate. An order is used only if the sender e-mail equals the order e-mail; otherwise nothing from the
+order is revealed. The model receives only the minimal facts (number, date, payment/fulfillment status, carrier, tracking,
+expected delivery, item names) and only words them; the claim detector checks the draft against those facts.
+Not requested or stored: payment details, addresses, order contents beyond item names. Order data is not persisted except
+the per-message summary above. The OAuth token is sealed (X25519 + AES-GCM, bound to the shop domain), only the worker
+opens it and renews it under a row lock. Each lookup writes an `audit_log` row (`shopify.order_lookup`, no PII).
+Uninstall, disconnect and the compliance webhooks delete the token and summaries.

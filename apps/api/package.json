@@ -9,13 +9,15 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@noctiv/bookings": "workspace:*",
     "@noctiv/core": "workspace:*",
     "@noctiv/db": "workspace:*",
     "@noctiv/documents": "workspace:*",
     "@noctiv/kb": "workspace:*",
     "@noctiv/mail": "workspace:*",
-    "@noctiv/bookings": "workspace:*",
+    "@noctiv/orders": "workspace:*",
     "@noctiv/quotes": "workspace:*",
+    "@noctiv/shopify": "workspace:*",
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
     "postgres": "^3.4.9",

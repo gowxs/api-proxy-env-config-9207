@@ -43,6 +43,23 @@ interface Message {
   /** 'owner': written in the owner's own mail client. */
   sent_by: 'noctiv' | 'owner' | null;
   attachment_meta: { filename: string | null; contentType: string; size: number }[] | null;
+  /** What the order lookup found, or why it went to the owner (Shopify). */
+  order_lookup?: OrderLookup | null;
+}
+interface OrderLookup {
+  platform?: 'shopify' | 'woocommerce';
+  result: 'found' | 'escalated';
+  reason?: string;
+  orderName?: string;
+  payment?: string;
+  fulfillment?: string;
+  cancelled?: boolean;
+  carrier?: string | null;
+  trackingNumber?: string | null;
+  trackingUrl?: string | null;
+  shippedOn?: string | null;
+  deliveredOn?: string | null;
+  checkedAt: string;
 }
 interface Draft {
   id: string;
@@ -278,6 +295,69 @@ function webmailUrl(mailbox: string, provider: string | undefined, id: string | 
   return `https://mail.google.com/mail/u/${encodeURIComponent(mailbox)}/#search/${q}`;
 }
 
+const PAYMENT_TEXT: Record<string, string> = {
+  paid: 'Paid',
+  pending: 'Payment pending',
+  authorized: 'Payment authorised',
+  partially_paid: 'Partly paid',
+  refunded: 'Refunded',
+  partially_refunded: 'Partly refunded',
+  voided: 'Payment voided',
+};
+const SHIP_TEXT: Record<string, string> = { shipped: 'Shipped', not_shipped: 'Not shipped yet' };
+
+/** The facts the reply was based on, so the owner can see them (no addresses, no payment details). */
+function OrderCard({ o }: { o: OrderLookup }) {
+  const shop = o.platform === 'woocommerce' ? 'WooCommerce' : 'Shopify';
+  const found = o.result === 'found';
+  const https = o.trackingUrl && /^https:\/\//.test(o.trackingUrl) ? o.trackingUrl : null;
+  return (
+    <div
+      className={`mt-2 rounded-lg p-3 text-sm ${found ? 'bg-green-50 ring-1 ring-green-200' : 'bg-amber-50 ring-1 ring-amber-200'}`}
+    >
+      <p className="font-semibold">
+        {found ? `Order found in ${shop}` : `Order lookup in ${shop}`}
+        {o.orderName ? ` · ${o.orderName}` : ''}
+      </p>
+      {o.reason && <p className="text-neutral-700">{reasonText(o.reason)}</p>}
+      {o.orderName && o.payment && (
+        <p className="text-neutral-700">
+          {[
+            o.cancelled ? 'Cancelled' : null,
+            PAYMENT_TEXT[o.payment] ?? null,
+            SHIP_TEXT[o.fulfillment ?? ''] ?? o.fulfillment ?? null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
+      {(o.carrier || o.trackingNumber) && (
+        <p className="break-words text-neutral-700">
+          {[o.carrier, o.trackingNumber].filter(Boolean).join(' · ')}
+          {o.deliveredOn
+            ? ` · delivered ${o.deliveredOn}`
+            : o.shippedOn
+              ? ` · shipped ${o.shippedOn}`
+              : ''}
+        </p>
+      )}
+      {https && (
+        <a
+          className="inline-flex min-h-11 items-center text-indigo-700"
+          href={https}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open tracking
+        </a>
+      )}
+      <p className="text-xs text-neutral-500">
+        Checked live {fmt(o.checkedAt)}; nothing is stored beyond this summary.
+      </p>
+    </div>
+  );
+}
+
 function MessageItem({ m, mailbox, provider }: { m: Message; mailbox: string; provider?: string }) {
   const inbound = m.direction === 'inbound';
   const link = webmailUrl(mailbox, provider, m.message_id_header);
@@ -310,6 +390,7 @@ function MessageItem({ m, mailbox, provider }: { m: Message; mailbox: string; pr
       ) : (
         <p className="text-sm italic text-neutral-500">Text deleted after the retention period.</p>
       )}
+      {m.order_lookup && <OrderCard o={m.order_lookup} />}
       {files.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-1 text-xs text-neutral-600">
           {files.map((f, i) => (

@@ -43,6 +43,9 @@ export const workerEnvSchema = z
       .optional(),
     /** Plan limit the digest measures the database size against (Supabase free plan: 500). */
     DB_SIZE_LIMIT_MB: z.coerce.number().int().min(1).default(500),
+    /** Noctiv's Shopify app (Partner Dashboard): needed to renew the expiring tokens of connected stores. */
+    SHOPIFY_APP_CLIENT_ID: z.string().min(4).optional(),
+    SHOPIFY_APP_CLIENT_SECRET: z.string().min(8).optional(),
     /** Admin alerts (disconnects, budget). Without it admin notifications fail as 'no_recipient'. */
     ADMIN_EMAIL: z.email().optional(),
     /** Public base URLs used in notification links. */

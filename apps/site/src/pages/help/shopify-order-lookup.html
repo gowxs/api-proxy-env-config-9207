@@ -1,0 +1,53 @@
+<script type="application/json" id="page">
+  {
+    "title": "Connect Shopify for order lookups · Noctiv Help",
+    "description": "How Noctiv answers 'Where is my order?' e-mails from your Shopify store: what it reads, when it hands over to you, and how to disconnect.",
+    "crumb": "Shopify order lookup",
+    "draft": true
+  }
+</script>
+<section class="page-head night">
+  <div class="wrap" data-new>
+    {{crumbs}}
+    <h1>Connect Shopify for order lookups.</h1>
+    <p class="lead">
+      Noctiv can answer "Where is my order?" from your live Shopify data. It only reads. It never
+      changes anything in your store.
+    </p>
+  </div>
+  <hr class="dawn-line" />
+</section>
+
+<section class="section">
+  <div class="wrap prose" data-new>
+    <h2 style="margin-top: 0; padding-top: 0; border-top: 0">Connect (on your phone is fine)</h2>
+    <ol>
+      <li>Open Integrations in Noctiv and tap Connect Shopify.</li>
+      <li>Shopify asks you to approve one permission: read orders. Tap Install.</li>
+      <li>You come back to Noctiv. Sign in and confirm which business the store belongs to.</li>
+      <li>Tap Test connection. It should say it can read your orders.</li>
+    </ol>
+
+    <h2>What Noctiv reads</h2>
+    <p>
+      Order number, date, payment and delivery status, carrier, tracking number and link, expected
+      delivery and the names of the shipped items. Never payment details or full addresses.
+    </p>
+
+    <h2>When it answers and when it hands over to you</h2>
+    <p>
+      Noctiv answers only when the sender's e-mail matches the e-mail on the order. If it does not
+      match, nothing about the order is revealed and the customer is asked for the order number and
+      checkout e-mail. It hands over to you when the order is not found, cancelled, refunded, partly
+      shipped, shipped without tracking, shipped more than the number of days you set in Settings
+      (default 14), when the customer asks for a refund, return or address change, or sounds angry
+      or mentions a chargeback. It never guesses.
+    </p>
+
+    <h2>Disconnect</h2>
+    <p>
+      In Integrations tap Disconnect and delete token. We revoke the access at Shopify and delete
+      it. Uninstalling the app in Shopify does the same.
+    </p>
+  </div>
+</section>
