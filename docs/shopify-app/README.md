@@ -99,3 +99,14 @@ the OAuth flow for any request that names a valid `*.myshopify.com` store: it on
 state + nonce cookie) and stores, links and reveals nothing (`signed: false` in the log). If an `hmac` is present it must be correct.
 `/shopify/callback` always requires Shopify's signature, and the pending install can only be linked by a signed-in owner with the signed claim.
 Shopify's authorization-code-grant page only requires the HMAC check on the callback; it does not say whether the install start is signed.
+
+### When Shopify lands on the store admin instead of the consent screen
+
+`redirect_to_authorize` is logged with `authorize` (the exact host, path and parameters Shopify was sent to, state masked), `referer`
+(where the merchant came from, without its query) and `secFetch`. If no `shopify callback` line follows, Shopify did not send the merchant to
+the callback. Things to check, in this order:
+
+1. Is the app already installed on the store? (Store admin → Settings → Apps and sales channels.) Uninstall it and start again.
+2. Does the Dev Dashboard version (active) hold exactly `application_url`, `redirect_urls` and `scopes = read_orders` from the log's `authorize` line?
+3. Is the store in the same organization as the app, and does the staff account you are logged in as own the store (not a collaborator without app permission)?
+4. Is a distribution method needed for this app to be installed on this store? The Dev Dashboard decides; Noctiv does not pick it.

@@ -256,12 +256,42 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
             `<!doctype html><meta charset="utf-8"><title>Noctiv</title><p>Opening Noctiv…</p><script>window.top.location.href=${JSON.stringify(`${publicBase}/shopify/app/start?${query}`)}</script>`,
           );
       }
+      const authorize = new URL(
+        authorizeUrl({ shop, clientId: creds.clientId, redirectUri, state }),
+      );
+      const ref = (() => {
+        try {
+          const r = new URL(String(req.headers.referer ?? ''));
+          return `${r.host}${r.pathname}`;
+        } catch {
+          return null;
+        }
+      })();
       outcome(req, 'app', 302, 'redirect_to_authorize', {
         shop,
         signed,
         ...extra,
         redirectUri,
         embeddedParam: req.query.embedded ?? null,
+        // Exactly what Shopify is sent to (the client id is public; the state is never logged).
+        authorize: {
+          host: authorize.host,
+          path: authorize.pathname,
+          params: Object.fromEntries(
+            [...authorize.searchParams].map(([k, v]) => [
+              k,
+              k === 'state' ? `<${v.length} chars>` : v,
+            ]),
+          ),
+        },
+        // Where the merchant came from, to tell a Dev Dashboard install from a pasted link.
+        referer: ref,
+        secFetch: {
+          site: req.headers['sec-fetch-site'] ?? null,
+          mode: req.headers['sec-fetch-mode'] ?? null,
+          dest: req.headers['sec-fetch-dest'] ?? null,
+        },
+        queryNames: Object.keys(req.query).sort(),
       });
       return reply
         .code(302)
@@ -269,7 +299,7 @@ export function shopifyRoutes(app: FastifyInstance, deps: ShopifyRouteDeps): voi
           'set-cookie',
           `${COOKIE}=${nonce}; HttpOnly; SameSite=Lax; Path=${cookiePath}; Max-Age=600${secureCookie}`,
         )
-        .header('location', authorizeUrl({ shop, clientId: creds.clientId, redirectUri, state }))
+        .header('location', authorize.toString())
         .send();
     };
   app.get<{ Querystring: Record<string, string> }>('/shopify/app', startInstall(true));

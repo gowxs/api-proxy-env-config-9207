@@ -854,3 +854,42 @@ describe('starting the install with only ?shop= (the Dev Dashboard "Install app"
     expect(await rows()).toEqual(before);
   });
 });
+
+describe('the log shows exactly where Shopify was sent', () => {
+  const shop = 'noctiv-nvojutjr.myshopify.com';
+  it('logs the authorize host, path and parameters (state masked) and where the merchant came from', async () => {
+    const r = await hit({
+      method: 'GET',
+      url: `/shopify/app?${qs({ shop })}`,
+      headers: {
+        referer:
+          'https://admin.shopify.com/store/noctiv-nvojutjr/oauth/install?client_id=abc&secret=nope',
+        'sec-fetch-site': 'cross-site',
+        'sec-fetch-dest': 'document',
+      },
+    });
+    const state = new URL(String(r.headers.location)).searchParams.get('state')!;
+    const line = logs
+      .join('')
+      .split('\n')
+      .filter((l) => l.includes('"redirect_to_authorize"'))
+      .pop()!;
+    const j = JSON.parse(line).shopify;
+    expect(j.authorize).toEqual({
+      host: shop,
+      path: '/admin/oauth/authorize',
+      params: {
+        client_id: APP.clientId,
+        scope: 'read_orders',
+        redirect_uri: `${API_URL}/shopify/callback`,
+        state: `<${state.length} chars>`,
+      },
+    });
+    expect(j.referer).toBe('admin.shopify.com/store/noctiv-nvojutjr/oauth/install'); // no query
+    expect(j.secFetch).toMatchObject({ site: 'cross-site', dest: 'document' });
+    expect(j.queryNames).toEqual(['shop']);
+    expect(line).not.toContain(state);
+    expect(line).not.toContain('secret=nope');
+    expect(line).not.toContain(APP.clientSecret);
+  });
+});
